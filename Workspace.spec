@@ -92,10 +92,10 @@ typedef structure {
 funcdef create_workspace(WorkspaceName workspace,WorkspacePerm permission,UserMetadata metadata) returns (WorkspaceMeta);
 
 /* This function receives a list of objects, names, and types and stores the objects in the workspace */
-funcdef save_objects(list<tuple<WorkspacePath,ObjectName,ObjectData,ObjectType>>) returns (list<ObjectMeta>);
+funcdef save_objects(list<tuple<WorkspacePath,ObjectName,ObjectData,ObjectType,UserMetadata>> objects,bool overwrite) returns (list<ObjectMeta>);
 
 /* This function creates a node in shock that the user can upload to and links this node to a workspace */
-funcdef create_upload_node(list<tuple<WorkspacePath,ObjectName,ObjectType>>) returns (string node_id);
+funcdef create_upload_node(list<tuple<WorkspacePath,ObjectName,ObjectType>> objects,bool overwrite) returns (list<string> output);
 
 /********** DATA RETRIEVAL FUNCTIONS ********************/
 
@@ -111,11 +111,14 @@ funcdef list_workspace_contents(WorkspacePath directory,bool includeSubDirectori
 /* This function lists the contents of the specified workspace (e.g. ls) */
 funcdef list_workspace_hierarchical_contents(WorkspacePath directory,bool includeSubDirectories,bool excludeObjects,bool Recursive) returns (mapping<WorkspacePath,list<ObjectMeta>> output);
 
-/* This function lists all workspace volumes accessible by user
-funcdef list_workspaces() returns (list<WorkspaceMeta> output);
+/* This function lists all workspace volumes accessible by user */
+funcdef list_workspaces(bool owned_only,bool no_public) returns (list<WorkspaceMeta> output);
 
 /* Provides a list of all objects in all workspaces whose name or workspace or path match the input query */
-funcdef search_workspaces(list<string> queries) returns (list<ObjectMeta> output);
+funcdef search_for_workspaces(mapping<string,string> query) returns (list<WorkspaceMeta> output);
+
+/* Provides a list of all objects in all workspaces whose name or workspace or path match the input query */
+funcdef search_for_workspace_objects(mapping<string,string> query) returns (list<ObjectMeta> output);
 
 /********** REORGANIZATION FUNCTIONS *******************/
 
@@ -123,10 +126,10 @@ funcdef search_workspaces(list<string> queries) returns (list<ObjectMeta> output
 funcdef create_workspace_directory(WorkspacePath directory,UserMetadata metadata) returns (ObjectMeta output);
 
 /* This function copies an object to a new workspace */
-funcdef copy_objects(list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>>) returns (list<ObjectMeta>);
+funcdef copy_objects(list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>> objects,bool overwrite,bool recursive) returns (list<ObjectMeta> output);
 
 /* This function copies an object to a new workspace */
-funcdef move_objects(list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>>) returns (list<ObjectMeta>);
+funcdef move_objects(list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>> objects,bool overwrite,bool recursive) returns (list<ObjectMeta> output);
 
 /********** DELETION FUNCTIONS *******************/
 

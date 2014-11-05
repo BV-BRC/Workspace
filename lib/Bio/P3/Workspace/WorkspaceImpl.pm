@@ -169,7 +169,7 @@ sub _get_db_ws {
 		}
 	}
 	my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
-	my $object = $cursor->next
+	my $object = $cursor->next;
 	if (!defined($object)) {
 		$self->_error("Workspace not found!");
 	}
@@ -177,10 +177,10 @@ sub _get_db_ws {
 }
 
 sub _get_db_object {
-	my ($self,$query) = @_;
+	my ($self,$query,$throwerror) = @_;
 	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
-	my $object = $cursor->next
-	if (!defined($object)) {
+	my $object = $cursor->next;
+	if (!defined($object) && $throwerror == 1) {
 		$self->_error("Object not found!");
 	}
 	return $object;
@@ -191,6 +191,10 @@ sub _generate_ws_meta {
 }
 
 sub _generate_object_meta {
+	my ($self,$obj) = @_;
+}
+
+sub _retrieve_object_data {
 	my ($self,$obj) = @_;
 }
 
@@ -274,9 +278,16 @@ sub _count_directory_contents {
 	my ($self,$query) = @_;
 }
 
+sub _get_directory_contents {
+	my ($self,$query) = @_;
+}
+
 sub _create_new_object {
-	my ($self,$ws,$obj) = @_;
-	if ($data->{directory} == 1) {
+	my ($self,$ws,$obj,$data) = @_;
+	if ($obj->{directory} eq "Type") {
+    	$obj->{directory} = 1;
+    }
+	if ($obj->{directory} == 1) {
 		if (-d $self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name}) {
 	    	$self->_error("Workspace directory /".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name}." already exists!");
 	    }
@@ -287,12 +298,173 @@ sub _create_new_object {
 	    }
 	    File::Path::mkpath ($self->_db_path()."/".$user."/".$ws->{name}."/".$path);
 	}
+	$self->_validate_object_type($obj->{type});
     my $uuid = Data::UUID->new()->create_str();
     $obj->{uuid} = $uuid;
     $obj->{createdate} = DateTime->now()->datetime();
     $obj->{owner} = $self->_getUsername();
     $self->_mongodb()->get_collection('objects')->insert($obj);
+    if (defined($data)) {
+    	my $JSON = JSON::XS->new->utf8(1);
+		open (my $fh,">",$self->_db_path()."/".$user."/".$ws->{name}."/".$path."/".$obj->{name});
+		print $fh $JSON->encode($data);
+		close($fh);
+    }
     return $obj;
+}
+
+sub _move_object {
+	my ($self,$object,$ws) = @_;
+	$self->_updateDB("objects",{uuid => $object->{uuid}},{
+		'$set' => {
+			workspace_uuid => $ws->{uuid},
+			workspace_owner => $ws->{owner},
+			path => $object->{path},
+			name => $object->{name},
+		}
+	});
+	$object->{workspace_uuid} = $ws->{uuid};
+	$object->{workspace_owner} = $ws->{owner};
+	if ($object->{directory} == 1) {
+	    File::Path::mkpath ($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$object->{path}."/".$object->{name});
+	} else {
+	    File::Path::mkpath ($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$object->{path});
+	}
+	return $object;
+}
+
+sub _copy_or_move_objects {
+	my ($self,$objects, $overwrite, $recursive,$move) = @_;
+	my $output = [];
+	my $workspaces = {};
+    my $wshash = {};
+    my $destinations;
+    my $objdest;
+    for (my $i=0; $i < @{$objects}; $i++) {
+    	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
+    	if (!defined($workspaces->{$user}->{$workspace})) {
+    		$workspaces->{$user}->{$workspace} = $self->_get_db_ws({
+    			name => $workspace,
+    			owner => $user
+    		});
+    		$wshash->{$workspaces->{$user}->{$workspace}->{uuid}} = $workspaces->{$user}->{$workspace};
+    		$self->_check_ws_permissions($workspaces->{$user}->{$workspace},"r",1);
+    	}
+    	my $obj = $self->_get_db_object({
+	    	workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+	    	path => $path,
+	    	name => $objects->[$i]->[1]
+	    },1);
+	    my ($duser,$dworkspace,$dpath) = $self->_parse_ws_path($objects->[$i]->[2]);
+	    if (!defined($workspaces->{$duser}->{$dworkspace})) {
+    		$workspaces->{$duser}->{$dworkspace} = $self->_get_db_ws({
+    			name => $dworkspace,
+    			owner => $duser
+    		});
+    		$wshash->{$workspaces->{$duser}->{$dworkspace}->{uuid}} = $workspaces->{$duser}->{$dworkspace};
+    		$self->_check_ws_permissions($workspaces->{$duser}->{$dworkspace},"w",1);
+    	}
+    	if ($obj->{directory} == 1 && $recursive == 1) {
+	    	my $subobjs = $self->_get_directory_contents($obj,1);
+	    	for (my $j=0; $j < @{$subobjs}; $j++) {
+	    		my $partialpath = substr($subobjs->[$j]->{path},length($obj->{path}."/".$obj->{name}));
+	    		my $newdest = [$duser,$dworkspace,$dpath."/".$objects->[$i]->[3].$partialpath,$subobjs->[$j]->{name}];
+	    		if (defined($objdest->{$subobjs->[$j]->{uuid}})) {
+	    			if (join("/",@{$objdest->{$subobjs->[$j]->{uuid}}}) ne $duser."/".$dworkspace."/".$dpath."/".$objects->[$i]->[3].$partialpath."/".$subobjs->[$j]->{name}) {
+	    				$self->_error("Attempting to copy the same object to two different locations!");
+	    			}
+	    		} else {
+	    			$objdest->{$subobjs->[$j]->{uuid}} = $newdest;
+	    		}
+	    		if (defined($destinations->{$duser}->{$dworkspace}->{$dpath."/".$objects->[$i]->[3].$partialpath}->{$subobjs->[$j]->{name}})) {
+	    			my $curruid = $destinations->{$duser}->{$dworkspace}->{$dpath."/".$objects->[$i]->[3].$partialpath}->{$subobjs->[$j]->{name}}->{uuid};
+	    			if ($curruid ne $subobjs->[$j]->{uuid}) {
+	    				$self->_error("Attempting to copy two different objects to the same location!");
+	    			}
+	    		} else {
+	    			$destinations->{$duser}->{$dworkspace}->{$dpath."/".$objects->[$i]->[3].$partialpath}->{$subobjs->[$j]->{name}} = $subobjs->[$j];
+	    		}
+	    	}
+	    }
+    	if (defined($objdest->{$subobjs->[$j]->{uuid}})) {
+    		if (join("/",@{$objdest->{$subobjs->[$j]->{uuid}}}) ne $duser."/".$dworkspace."/".$dpath."/".$objects->[$i]->[3]) {
+    			$self->_error("Attempting to copy the same object to two different locations!");
+    		}
+    	} else {
+    		$objdest->{$subobjs->[$j]->{uuid}} = [$duser,$dworkspace,$dpath,$objects->[$i]->[3]];
+    	}
+    	if (defined($destinations->{$duser}->{$dworkspace}->{$dpath}->{$objects->[$i]->[3]})) {
+    		my $curruid = $destinations->{$duser}->{$dworkspace}->{$dpath}->{$objects->[$i]->[3]}->{uuid};
+    		if ($curruid ne $obj->{uuid}) {
+    			$self->_error("Attempting to copy two different objects to the same location!");
+    		}
+    	} else {
+    		$destinations->{$duser}->{$dworkspace}->{$dpath}->{$objects->[$i]->[3]} = $obj;
+    	}
+    }	
+    #Checking all destinations for objects and ensuring that they are not directories
+	my $delete = [];
+    foreach my $user (keys(%{$destinations})) {
+    	foreach my $workspace (keys(%{$destinations->{$user}})) {
+    		foreach my $path (keys(%{$destinations->{$user}->{$workspace}})) {
+    			foreach my $name (keys(%{$destinations->{$user}->{$workspace}->{$path}})) {
+    				my $obj = $self->_get_db_object({
+				    	workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+				    	path => $path,
+				    	name => $name
+				    },0);
+				    if (defined($obj)) {
+			    		if ($obj->{directory} == 1) {
+			    			$self->_error("Cannot overwrite directory /".$user."/".$workspace."/".$path."/".$name." on copy!");
+			    		} elsif ($overwrite == 0) {
+			    			$self->_error("Overwriting object /".$user."/".$workspace."/".$path."/".$name." and overwrite flag is not set!");
+			    		}
+			    		push(@{$delete},$obj);
+			    	}
+    			}
+    		}	
+    	}
+    }
+    #Deleting all overwritten objects
+    for (my $i=0; $i < @{$delete}; $i++) {
+    	$self->_delete_object($delete->[$i]);
+    }
+    #Copying over objects
+    foreach my $user (keys(%{$destinations})) {
+    	foreach my $workspace (keys(%{$destinations->{$user}})) {
+    		my $paths = [sort(keys(%{$destinations->{$user}->{$workspace}}))];
+    		foreach my $path (@{$paths}) {
+    			foreach my $name (keys(%{$destinations->{$user}->{$workspace}->{$path}})) {
+    				my $sobj = $destinations->{$user}->{$workspace}->{$path}->{$name};
+    				if ($move == 1) {
+    					$sobj->{path} = $path;
+    					$sobj->{name} = $name;
+    					$sobj = $self->_move_object($sobj,$workspaces->{$user}->{$workspace});
+    				} else {
+    					$sobj = $self->_create_new_object($workspaces->{$user}->{$workspace},{
+				    		directory => $sobj->{directory},
+							workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+							workspace_owner => $workspaces->{$user}->{$workspace}->{owner},
+							path => $path,
+							name => $name,
+							type => $sobj->{type},
+							metadata => $sobj->{metadata},
+							autometadata => $sobj->{autometadata}
+				    	});
+    				}
+			    	if ($sobj->{directory} == 0) {
+			    		if ($move == 1) {
+			    			move($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
+			    		} else {
+			    			copy($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
+			    		}
+			    	}
+			    	push(@{$output},$self->_generate_object_meta($sobj,$workspaces->{$user}->{$workspace}));
+    			}
+    		}
+    	}
+    }
+    return $output;
 }
 
 #END_HEADER
@@ -488,7 +660,7 @@ sub create_workspace
 
 =head2 save_objects
 
-  $return = $obj->save_objects($arg_1)
+  $return = $obj->save_objects($objects, $overwrite)
 
 =over 4
 
@@ -497,17 +669,21 @@ sub create_workspace
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectData
 	3: an ObjectType
+	4: a UserMetadata
+$overwrite is a bool
 $return is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
 	id has a value which is a string
 ObjectType is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -528,7 +704,6 @@ Username is a string
 WorkspaceID is a string
 WorkspaceName is a string
 ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 </pre>
@@ -537,17 +712,21 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectData
 	3: an ObjectType
+	4: a UserMetadata
+$overwrite is a bool
 $return is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
 	id has a value which is a string
 ObjectType is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -568,7 +747,6 @@ Username is a string
 WorkspaceID is a string
 WorkspaceName is a string
 ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 
@@ -587,10 +765,11 @@ This function receives a list of objects, names, and types and stores the object
 sub save_objects
 {
     my $self = shift;
-    my($arg_1) = @_;
+    my($objects, $overwrite) = @_;
 
     my @_bad_arguments;
-    (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"arg_1\" (value was \"$arg_1\")");
+    (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"objects\" (value was \"$objects\")");
+    (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument \"overwrite\" (value was \"$overwrite\")");
     if (@_bad_arguments) {
 	my $msg = "Invalid arguments passed to save_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
@@ -600,6 +779,48 @@ sub save_objects
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($return);
     #BEGIN save_objects
+    $self->_setContext($ctx);
+    my $workspaces = {};
+    my $delete = [];
+    for (my $i=0; $i < @{$objects}; $i++) {
+    	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
+    	if (!defined($workspaces->{$user}->{$workspace})) {
+    		$workspaces->{$user}->{$workspace} = $self->_get_db_ws({
+    			name => $workspace,
+    			owner => $user
+    		});
+    		$self->_check_ws_permissions($workspaces->{$user}->{$workspace},"w",1);
+    	}
+    	my $obj = $self->_get_db_object({
+	    	workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+	    	path => $workspace,
+	    	name => $objects->[$i]->[1]
+	    },0);
+    	if (defined($obj)) {
+    		if ($obj->{directory} == 1) {
+    			$self->_error("Cannot overwrite directory /".$user."/".$workspace."/".$workspace."/".$objects->[$i]->[1]." on save!");
+    		} elsif ($overwrite == 0) {
+    			$self->_error("Overwriting object /".$user."/".$workspace."/".$workspace."/".$objects->[$i]->[1]." and overwrite flag is not set!");
+    		}
+    		push(@{$delete},$obj);
+    	}
+    }
+    for (my $i=0; $i < @{$delete}; $i++) {
+    	$self->_delete_object($delete->[$i]);
+    }
+    for (my $i=0; $i < @{$objects}; $i++) {
+    	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
+    	my $obj = $self->_create_new_object($workspaces->{$user}->{$workspace},{
+    		directory => 0,
+			workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+			workspace_owner => $workspaces->{$user}->{$workspace}->{owner},
+			path => $path,
+			name => $objects->[$i]->[1],
+			type => $objects->[$i]->[3],
+			metadata => $objects->[$i]->[4],
+    	},$objects->[$i]->[2]);
+    	push(@{$output},$self->_generate_object_meta($obj,$workspaces->{$user}->{$workspace}))
+    }
     #END save_objects
     my @_bad_returns;
     (ref($return) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
@@ -616,7 +837,7 @@ sub save_objects
 
 =head2 create_upload_node
 
-  $node_id = $obj->create_upload_node($arg_1)
+  $output = $obj->create_upload_node($objects, $overwrite)
 
 =over 4
 
@@ -625,14 +846,16 @@ sub save_objects
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 3 items:
+$objects is a reference to a list where each element is a reference to a list containing 3 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectType
-$node_id is a string
+$overwrite is a bool
+$output is a reference to a list where each element is a string
 WorkspacePath is a string
 ObjectName is a string
 ObjectType is a string
+bool is an int
 
 </pre>
 
@@ -640,14 +863,16 @@ ObjectType is a string
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 3 items:
+$objects is a reference to a list where each element is a reference to a list containing 3 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectType
-$node_id is a string
+$overwrite is a bool
+$output is a reference to a list where each element is a string
 WorkspacePath is a string
 ObjectName is a string
 ObjectType is a string
+bool is an int
 
 
 =end text
@@ -665,10 +890,11 @@ This function creates a node in shock that the user can upload to and links this
 sub create_upload_node
 {
     my $self = shift;
-    my($arg_1) = @_;
+    my($objects, $overwrite) = @_;
 
     my @_bad_arguments;
-    (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"arg_1\" (value was \"$arg_1\")");
+    (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"objects\" (value was \"$objects\")");
+    (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument \"overwrite\" (value was \"$overwrite\")");
     if (@_bad_arguments) {
 	my $msg = "Invalid arguments passed to create_upload_node:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
@@ -676,17 +902,17 @@ sub create_upload_node
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
-    my($node_id);
+    my($output);
     #BEGIN create_upload_node
     #END create_upload_node
     my @_bad_returns;
-    (!ref($node_id)) or push(@_bad_returns, "Invalid type for return variable \"node_id\" (value was \"$node_id\")");
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
 	my $msg = "Invalid returns passed to create_upload_node:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
 							       method_name => 'create_upload_node');
     }
-    return($node_id);
+    return($output);
 }
 
 
@@ -808,6 +1034,29 @@ sub get_objects
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN get_objects
+	$self->_setContext($ctx);
+    my $workspaces = {};
+    for (my $i=0; $i < @{$objects}; $i++) {
+    	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
+    	if (!defined($workspaces->{$user}->{$workspace})) {
+    		$workspaces->{$user}->{$workspace} = $self->_get_db_ws({
+    			name => $workspace,
+    			owner => $user
+    		});
+    		$workspaces->{$user}->{$workspace}->{currperm} = $self->_check_ws_permissions($workspaces->{$user}->{$workspace},"r",0);
+    	}
+    	if ($workspaces->{$user}->{$workspace}->{currperm} == 1) {
+	    	my $obj = $self->_get_db_object({
+	    		workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+	    		path => $path,
+	    		name => $objects->[$i]->[1]
+	    	});
+	    	push(@{$output},{
+	    		info => $self->_generate_object_meta($obj,$workspaces->{$user}->{$workspace}),
+    			data => $self->_retrieve_object_data($obj,$workspaces->{$user}->{$workspace})
+	    	});
+    	}
+    }
     #END get_objects
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -934,6 +1183,24 @@ sub get_objects_by_reference
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN get_objects_by_reference
+    $self->_setContext($ctx);
+    my $query = {uuid => {'$in' => $objects}};
+	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
+	my $wscache = {};
+	while (my $object = $cursor->next) {
+		if (!defined($wscache->{$object->{workspace_uuid}})) {
+			$wscache->{$object->{workspace_uuid}} = $self->_get_db_ws({
+		    	uuid => $object->{workspace_uuid}
+		    });
+			$wscache->{$object->{workspace_uuid}}->{currperm} = $self->_check_ws_permissions($wscache->{$object->{workspace_uuid}},"r",0);
+		}
+		if ($wscache->{$object->{workspace_uuid}} == 1) {
+			push(@{$output},{
+				info => $self->_generate_object_meta($object,$wscache->{$object->{workspace_uuid}}))
+				data => $self->_retrieve_object_data($object,$wscache->{$object->{workspace_uuid}});
+			});
+		}
+	}
     #END get_objects_by_reference
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -1061,6 +1328,34 @@ sub list_workspace_contents
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN list_workspace_contents
+    $self->_setContext($ctx);
+    ($user,$workspace,$path) = $self->_parse_ws_path($directory);
+    my $ws = $self->_get_db_ws({
+    	owner => $user,
+    	name => $workspace
+    });
+    $self->_check_ws_permissions($ws,"r",1);
+    my $query = {
+   		workspace_uuid => $ws->{uuid},
+   		path => $path
+   	};
+   	if ($includeSubDirectories == 0) {
+   		$query->{directory} = 0;
+   	}
+   	if ($excludeObjects == 1) {
+   		$query->{directory} = 1;
+   	}
+   	if ($Recursive == 1) {
+   		if ($path eq "") {
+   			delete $query->{path};
+   		} else {
+   			$query->{path} = qr/^$path/;
+   		}	
+   	}
+   	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
+	while (my $object = $cursor->next) {
+		push(@{$output},$self->_generate_object_meta($object,$ws));
+	}
     #END list_workspace_contents
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -1188,6 +1483,38 @@ sub list_workspace_hierarchical_contents
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN list_workspace_hierarchical_contents
+    $self->_setContext($ctx);
+    ($user,$workspace,$path) = $self->_parse_ws_path($directory);
+    my $ws = $self->_get_db_ws({
+    	owner => $user,
+    	name => $workspace
+    });
+    $self->_check_ws_permissions($ws,"r",1);
+    my $query = {
+   		workspace_uuid => $ws->{uuid},
+   		path => $path
+   	};
+   	if ($includeSubDirectories == 0) {
+   		$query->{directory} = 0;
+   	}
+   	if ($excludeObjects == 1) {
+   		$query->{directory} = 1;
+   	}
+   	if ($Recursive == 1) {
+   		if ($path eq "") {
+   			delete $query->{path};
+   		} else {
+   			$query->{path} = qr/^$path/;
+   		}	
+   	}
+   	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
+	while (my $object = $cursor->next) {
+		my $objpath = "/".$ws->{owner}."/".$ws->{name}."/".$object->{path};
+		if (length($object->{path}) == 0) {
+			$objpath = "/".$ws->{owner}."/".$ws->{name};
+		}
+		push(@{$output->{$objpath}},$self->_generate_object_meta($object,$ws));
+	}
     #END list_workspace_hierarchical_contents
     my @_bad_returns;
     (ref($output) eq 'HASH') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -1202,9 +1529,9 @@ sub list_workspace_hierarchical_contents
 
 
 
-=head2 search_workspaces
+=head2 list_workspaces
 
-  $output = $obj->search_workspaces($queries)
+  $output = $obj->list_workspaces($owned_only, $no_public)
 
 =over 4
 
@@ -1213,7 +1540,222 @@ sub list_workspace_hierarchical_contents
 =begin html
 
 <pre>
-$queries is a reference to a list where each element is a string
+$owned_only is a bool
+$no_public is a bool
+$output is a reference to a list where each element is a WorkspaceMeta
+bool is an int
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$owned_only is a bool
+$no_public is a bool
+$output is a reference to a list where each element is a WorkspaceMeta
+bool is an int
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+
+=end text
+
+
+
+=item Description
+
+This function lists all workspace volumes accessible by user
+
+=back
+
+=cut
+
+sub list_workspaces
+{
+    my $self = shift;
+    my($owned_only, $no_public) = @_;
+
+    my @_bad_arguments;
+    (!ref($owned_only)) or push(@_bad_arguments, "Invalid type for argument \"owned_only\" (value was \"$owned_only\")");
+    (!ref($no_public)) or push(@_bad_arguments, "Invalid type for argument \"no_public\" (value was \"$no_public\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to list_workspaces:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'list_workspaces');
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN list_workspaces
+    my $query = {
+    	owner => $self->_getUsername()
+    };
+    if ($owned_only == 0) {
+    	if ($no_public == 0) {
+    		$query = { '$or' => [ {owner => $self->_getUsername()},{global_permission => {'$ne' => "n"} },{"permissions.".$self->_escape_username($self->_getUsername()) => {'$exists' => 1 } } ] };
+    	} else {
+    		$query = { '$or' => [ {owner => $self->_getUsername()},{"permissions.".$self->_escape_username($self->_getUsername()) => {'$exists' => 1 } } ] };
+    	}
+    }
+    my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
+	while (my $object = $cursor->next) {
+		push(@{$output},$self->_generate_ws_meta($object));
+	}
+    #END list_workspaces
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to list_workspaces:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'list_workspaces');
+    }
+    return($output);
+}
+
+
+
+
+=head2 search_for_workspaces
+
+  $output = $obj->search_for_workspaces($query)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$query is a reference to a hash where the key is a string and the value is a string
+$output is a reference to a list where each element is a WorkspaceMeta
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$query is a reference to a hash where the key is a string and the value is a string
+$output is a reference to a list where each element is a WorkspaceMeta
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+
+=end text
+
+
+
+=item Description
+
+Provides a list of all objects in all workspaces whose name or workspace or path match the input query
+
+=back
+
+=cut
+
+sub search_for_workspaces
+{
+    my $self = shift;
+    my($query) = @_;
+
+    my @_bad_arguments;
+    (ref($query) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"query\" (value was \"$query\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to search_for_workspaces:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'search_for_workspaces');
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN search_for_workspaces
+    #END search_for_workspaces
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to search_for_workspaces:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'search_for_workspaces');
+    }
+    return($output);
+}
+
+
+
+
+=head2 search_for_workspace_objects
+
+  $output = $obj->search_for_workspace_objects($query)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$query is a reference to a hash where the key is a string and the value is a string
 $output is a reference to a list where each element is an ObjectMeta
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
@@ -1247,7 +1789,7 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$queries is a reference to a list where each element is a string
+$query is a reference to a hash where the key is a string and the value is a string
 $output is a reference to a list where each element is an ObjectMeta
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
@@ -1282,38 +1824,35 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =item Description
 
-This function lists all workspace volumes accessible by user
-funcdef list_workspaces() returns (list<WorkspaceMeta> output);
-
-/* Provides a list of all objects in all workspaces whose name or workspace or path match the input query
+Provides a list of all objects in all workspaces whose name or workspace or path match the input query
 
 =back
 
 =cut
 
-sub search_workspaces
+sub search_for_workspace_objects
 {
     my $self = shift;
-    my($queries) = @_;
+    my($query) = @_;
 
     my @_bad_arguments;
-    (ref($queries) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"queries\" (value was \"$queries\")");
+    (ref($query) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"query\" (value was \"$query\")");
     if (@_bad_arguments) {
-	my $msg = "Invalid arguments passed to search_workspaces:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	my $msg = "Invalid arguments passed to search_for_workspace_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-							       method_name => 'search_workspaces');
+							       method_name => 'search_for_workspace_objects');
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
-    #BEGIN search_workspaces
-    #END search_workspaces
+    #BEGIN search_for_workspace_objects
+    #END search_for_workspace_objects
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
-	my $msg = "Invalid returns passed to search_workspaces:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	my $msg = "Invalid returns passed to search_for_workspace_objects:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-							       method_name => 'search_workspaces');
+							       method_name => 'search_for_workspace_objects');
     }
     return($output);
 }
@@ -1441,8 +1980,9 @@ sub create_workspace_directory
 		path => $path,
 		name => $name,
 		metadata => $metadata,
+		type => "Directory"
     });
-    $output = $self->_generate_object_meta($obj);
+    $output = $self->_generate_object_meta($obj,$ws);
     #END create_workspace_directory
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -1459,7 +1999,7 @@ sub create_workspace_directory
 
 =head2 copy_objects
 
-  $return = $obj->copy_objects($arg_1)
+  $output = $obj->copy_objects($objects, $overwrite, $recursive)
 
 =over 4
 
@@ -1468,14 +2008,17 @@ sub create_workspace_directory
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1506,14 +2049,17 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1554,10 +2100,12 @@ This function copies an object to a new workspace
 sub copy_objects
 {
     my $self = shift;
-    my($arg_1) = @_;
+    my($objects, $overwrite, $recursive) = @_;
 
     my @_bad_arguments;
-    (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"arg_1\" (value was \"$arg_1\")");
+    (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"objects\" (value was \"$objects\")");
+    (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument \"overwrite\" (value was \"$overwrite\")");
+    (!ref($recursive)) or push(@_bad_arguments, "Invalid type for argument \"recursive\" (value was \"$recursive\")");
     if (@_bad_arguments) {
 	my $msg = "Invalid arguments passed to copy_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
@@ -1565,17 +2113,19 @@ sub copy_objects
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
-    my($return);
+    my($output);
     #BEGIN copy_objects
+    $self->_setContext($ctx);
+    $output = $self->_copy_or_move_objects($objects,$overwrite,$recursive,0);
     #END copy_objects
     my @_bad_returns;
-    (ref($return) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
 	my $msg = "Invalid returns passed to copy_objects:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
 							       method_name => 'copy_objects');
     }
-    return($return);
+    return($output);
 }
 
 
@@ -1583,7 +2133,7 @@ sub copy_objects
 
 =head2 move_objects
 
-  $return = $obj->move_objects($arg_1)
+  $output = $obj->move_objects($objects, $overwrite, $recursive)
 
 =over 4
 
@@ -1592,14 +2142,17 @@ sub copy_objects
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1630,14 +2183,17 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1678,10 +2234,12 @@ This function copies an object to a new workspace
 sub move_objects
 {
     my $self = shift;
-    my($arg_1) = @_;
+    my($objects, $overwrite, $recursive) = @_;
 
     my @_bad_arguments;
-    (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"arg_1\" (value was \"$arg_1\")");
+    (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument \"objects\" (value was \"$objects\")");
+    (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument \"overwrite\" (value was \"$overwrite\")");
+    (!ref($recursive)) or push(@_bad_arguments, "Invalid type for argument \"recursive\" (value was \"$recursive\")");
     if (@_bad_arguments) {
 	my $msg = "Invalid arguments passed to move_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
@@ -1689,17 +2247,19 @@ sub move_objects
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
-    my($return);
+    my($output);
     #BEGIN move_objects
+    $self->_setContext($ctx);
+    $output = $self->_copy_or_move_objects($objects,$overwrite,$recursive,1);
     #END move_objects
     my @_bad_returns;
-    (ref($return) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
 	my $msg = "Invalid returns passed to move_objects:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
 							       method_name => 'move_objects');
     }
-    return($return);
+    return($output);
 }
 
 
@@ -1928,7 +2488,7 @@ sub delete_objects
     #BEGIN delete_objects
     $self->_setContext($ctx);
     my $workspaces = {};
-    my $objects = {};
+    my $objhash = {};
     for (my $i=0; $i < @{$objects}; $i++) {
     	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
     	if (!defined($workspaces->{$user}->{$workspace})) {
@@ -1938,37 +2498,37 @@ sub delete_objects
     		});
     		$self->_check_ws_permissions($workspaces->{$user}->{$workspace},"w");
     	}    	
-    	$objects->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]} = $self->_get_db_object({
+    	$objhash->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]} = $self->_get_db_object({
     		workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
     		path => $path,
     		name => $objects->[$i]->[1]
     	});
-    	push(@{$output},$self->_generate_object_meta($objects->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]}));
-    	if ($objects->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]}->{directory} == 1) {
+    	push(@{$output},$self->_generate_object_meta($objhash->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]},$workspaces->{$user}->{$workspace}));
+    	if ($objhash->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]}->{directory} == 1) {
     		if ($delete_directories == 0) {
     			$self->_error("Object list includes directories, and delete_directories flag was not set!");
     		} elsif ($force == 0 && $self->_count_directory_contents({
-    			object => $objects->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]}
+    			object => $objhash->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]}
     		}) > 0) {
     			$self->_error("Deleting a non-empty directory, and force flag was not set!");
     		}
     	}
     }
-    foreach my $user (keys(%{$objects})) {
-    	foreach my $workspace (keys(%{$objects->{$user}})) {
-    		foreach my $path (keys(%{$objects->{$user}->{$workspace}})) {
-    			foreach my $object (keys(%{$objects->{$user}->{$workspace}->{$path}})) {
-    				if ($objects->{$user}->{$workspace}->{$path}->{$object}->{directory} == 1) {
+    foreach my $user (keys(%{$objhash})) {
+    	foreach my $workspace (keys(%{$objhash->{$user}})) {
+    		foreach my $path (keys(%{$objhash->{$user}->{$workspace}})) {
+    			foreach my $object (keys(%{$objhash->{$user}->{$workspace}->{$path}})) {
+    				if ($objhash->{$user}->{$workspace}->{$path}->{$object}->{directory} == 1) {
     					if ($self->_delete_directory({
-    						uuid => $objects->{$user}->{$workspace}->{$path}->{$object}->{uuid}
+    						uuid => $objhash->{$user}->{$workspace}->{$path}->{$object}->{uuid}
     					}) == 1) {
-    						rmtree($self->_db_path()."/".$user."/".$workspace."/".$path."/".$objects->[$i]);
+    						rmtree($self->_db_path()."/".$user."/".$workspace."/".$path."/".$object);
     					}
     				} else {
     					if ($self->_delete_object({
-    						uuid => $objects->{$user}->{$workspace}->{$path}->{$object}->{uuid}
+    						uuid => $objhash->{$user}->{$workspace}->{$path}->{$object}->{uuid}
     					}) == 1) {
-    						unlink($self->_db_path()."/".$user."/".$workspace."/".$path."/".$objects->[$i]);	
+    						unlink($self->_db_path()."/".$user."/".$workspace."/".$path."/".$object);	
     					}
     				}
     			}
@@ -2121,7 +2681,7 @@ sub delete_workspace_directory
     $self->_delete_directory({
     	uuid => $obj->{uuid}
     });
-    $output = $self->_generate_object_meta($obj);
+    $output = $self->_generate_object_meta($obj,$ws);
     #END delete_workspace_directory
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");

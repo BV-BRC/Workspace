@@ -170,14 +170,14 @@ class Workspace(object):
                           [workspace, permission, metadata])
         return resp[0]
 
-    def save_objects(self, arg_1):
+    def save_objects(self, objects, overwrite):
         resp = self._call('Workspace.save_objects',
-                          [arg_1])
+                          [objects, overwrite])
         return resp[0]
 
-    def create_upload_node(self, arg_1):
+    def create_upload_node(self, objects, overwrite):
         resp = self._call('Workspace.create_upload_node',
-                          [arg_1])
+                          [objects, overwrite])
         return resp[0]
 
     def get_objects(self, objects):
@@ -200,9 +200,19 @@ class Workspace(object):
                           [directory, includeSubDirectories, excludeObjects, Recursive])
         return resp[0]
 
-    def search_workspaces(self, queries):
-        resp = self._call('Workspace.search_workspaces',
-                          [queries])
+    def list_workspaces(self, owned_only, no_public):
+        resp = self._call('Workspace.list_workspaces',
+                          [owned_only, no_public])
+        return resp[0]
+
+    def search_for_workspaces(self, query):
+        resp = self._call('Workspace.search_for_workspaces',
+                          [query])
+        return resp[0]
+
+    def search_for_workspace_objects(self, query):
+        resp = self._call('Workspace.search_for_workspace_objects',
+                          [query])
         return resp[0]
 
     def create_workspace_directory(self, directory, metadata):
@@ -210,14 +220,14 @@ class Workspace(object):
                           [directory, metadata])
         return resp[0]
 
-    def copy_objects(self, arg_1):
+    def copy_objects(self, objects, overwrite, recursive):
         resp = self._call('Workspace.copy_objects',
-                          [arg_1])
+                          [objects, overwrite, recursive])
         return resp[0]
 
-    def move_objects(self, arg_1):
+    def move_objects(self, objects, overwrite, recursive):
         resp = self._call('Workspace.move_objects',
-                          [arg_1])
+                          [objects, overwrite, recursive])
         return resp[0]
 
     def delete_workspace(self, workspace):

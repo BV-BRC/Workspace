@@ -40,7 +40,7 @@ class Workspace:
         # return the results
         return [returnVal]
 
-    def save_objects(self, ctx, arg_1):
+    def save_objects(self, ctx, objects, overwrite):
         # ctx is the context object
         # return variables are: returnVal
         #BEGIN save_objects
@@ -53,18 +53,18 @@ class Workspace:
         # return the results
         return [returnVal]
 
-    def create_upload_node(self, ctx, arg_1):
+    def create_upload_node(self, ctx, objects, overwrite):
         # ctx is the context object
-        # return variables are: node_id
+        # return variables are: output
         #BEGIN create_upload_node
         #END create_upload_node
 
         # At some point might do deeper type checking...
-        if not isinstance(node_id, basestring):
+        if not isinstance(output, list):
             raise ValueError('Method create_upload_node return value ' +
-                             'node_id is not type basestring as required.')
+                             'output is not type list as required.')
         # return the results
-        return [node_id]
+        return [output]
 
     def get_objects(self, ctx, objects):
         # ctx is the context object
@@ -118,15 +118,41 @@ class Workspace:
         # return the results
         return [output]
 
-    def search_workspaces(self, ctx, queries):
+    def list_workspaces(self, ctx, owned_only, no_public):
         # ctx is the context object
         # return variables are: output
-        #BEGIN search_workspaces
-        #END search_workspaces
+        #BEGIN list_workspaces
+        #END list_workspaces
 
         # At some point might do deeper type checking...
         if not isinstance(output, list):
-            raise ValueError('Method search_workspaces return value ' +
+            raise ValueError('Method list_workspaces return value ' +
+                             'output is not type list as required.')
+        # return the results
+        return [output]
+
+    def search_for_workspaces(self, ctx, query):
+        # ctx is the context object
+        # return variables are: output
+        #BEGIN search_for_workspaces
+        #END search_for_workspaces
+
+        # At some point might do deeper type checking...
+        if not isinstance(output, list):
+            raise ValueError('Method search_for_workspaces return value ' +
+                             'output is not type list as required.')
+        # return the results
+        return [output]
+
+    def search_for_workspace_objects(self, ctx, query):
+        # ctx is the context object
+        # return variables are: output
+        #BEGIN search_for_workspace_objects
+        #END search_for_workspace_objects
+
+        # At some point might do deeper type checking...
+        if not isinstance(output, list):
+            raise ValueError('Method search_for_workspace_objects return value ' +
                              'output is not type list as required.')
         # return the results
         return [output]
@@ -144,31 +170,31 @@ class Workspace:
         # return the results
         return [output]
 
-    def copy_objects(self, ctx, arg_1):
+    def copy_objects(self, ctx, objects, overwrite, recursive):
         # ctx is the context object
-        # return variables are: returnVal
+        # return variables are: output
         #BEGIN copy_objects
         #END copy_objects
 
         # At some point might do deeper type checking...
-        if not isinstance(returnVal, list):
+        if not isinstance(output, list):
             raise ValueError('Method copy_objects return value ' +
-                             'returnVal is not type list as required.')
+                             'output is not type list as required.')
         # return the results
-        return [returnVal]
+        return [output]
 
-    def move_objects(self, ctx, arg_1):
+    def move_objects(self, ctx, objects, overwrite, recursive):
         # ctx is the context object
-        # return variables are: returnVal
+        # return variables are: output
         #BEGIN move_objects
         #END move_objects
 
         # At some point might do deeper type checking...
-        if not isinstance(returnVal, list):
+        if not isinstance(output, list):
             raise ValueError('Method move_objects return value ' +
-                             'returnVal is not type list as required.')
+                             'output is not type list as required.')
         # return the results
-        return [returnVal]
+        return [output]
 
     def delete_workspace(self, ctx, workspace):
         # ctx is the context object

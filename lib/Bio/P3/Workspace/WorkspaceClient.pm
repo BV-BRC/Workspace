@@ -230,7 +230,7 @@ sub create_workspace
 
 =head2 save_objects
 
-  $return = $obj->save_objects($arg_1)
+  $return = $obj->save_objects($objects, $overwrite)
 
 =over 4
 
@@ -239,17 +239,21 @@ sub create_workspace
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectData
 	3: an ObjectType
+	4: a UserMetadata
+$overwrite is a bool
 $return is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
 	id has a value which is a string
 ObjectType is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -270,7 +274,6 @@ Username is a string
 WorkspaceID is a string
 WorkspaceName is a string
 ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 </pre>
@@ -279,17 +282,21 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectData
 	3: an ObjectType
+	4: a UserMetadata
+$overwrite is a bool
 $return is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
 	id has a value which is a string
 ObjectType is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -310,7 +317,6 @@ Username is a string
 WorkspaceID is a string
 WorkspaceName is a string
 ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 
@@ -330,16 +336,17 @@ sub save_objects
 
 # Authentication: required
 
-    if ((my $n = @args) != 1)
+    if ((my $n = @args) != 2)
     {
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function save_objects (received $n, expecting 1)");
+							       "Invalid argument count for function save_objects (received $n, expecting 2)");
     }
     {
-	my($arg_1) = @args;
+	my($objects, $overwrite) = @args;
 
 	my @_bad_arguments;
-        (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"arg_1\" (value was \"$arg_1\")");
+        (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"objects\" (value was \"$objects\")");
+        (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument 2 \"overwrite\" (value was \"$overwrite\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to save_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
@@ -373,7 +380,7 @@ sub save_objects
 
 =head2 create_upload_node
 
-  $node_id = $obj->create_upload_node($arg_1)
+  $output = $obj->create_upload_node($objects, $overwrite)
 
 =over 4
 
@@ -382,14 +389,16 @@ sub save_objects
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 3 items:
+$objects is a reference to a list where each element is a reference to a list containing 3 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectType
-$node_id is a string
+$overwrite is a bool
+$output is a reference to a list where each element is a string
 WorkspacePath is a string
 ObjectName is a string
 ObjectType is a string
+bool is an int
 
 </pre>
 
@@ -397,14 +406,16 @@ ObjectType is a string
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 3 items:
+$objects is a reference to a list where each element is a reference to a list containing 3 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectType
-$node_id is a string
+$overwrite is a bool
+$output is a reference to a list where each element is a string
 WorkspacePath is a string
 ObjectName is a string
 ObjectType is a string
+bool is an int
 
 
 =end text
@@ -423,16 +434,17 @@ sub create_upload_node
 
 # Authentication: required
 
-    if ((my $n = @args) != 1)
+    if ((my $n = @args) != 2)
     {
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function create_upload_node (received $n, expecting 1)");
+							       "Invalid argument count for function create_upload_node (received $n, expecting 2)");
     }
     {
-	my($arg_1) = @args;
+	my($objects, $overwrite) = @args;
 
 	my @_bad_arguments;
-        (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"arg_1\" (value was \"$arg_1\")");
+        (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"objects\" (value was \"$objects\")");
+        (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument 2 \"overwrite\" (value was \"$overwrite\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to create_upload_node:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
@@ -1034,9 +1046,9 @@ sub list_workspace_hierarchical_contents
 
 
 
-=head2 search_workspaces
+=head2 list_workspaces
 
-  $output = $obj->search_workspaces($queries)
+  $output = $obj->list_workspaces($owned_only, $no_public)
 
 =over 4
 
@@ -1045,7 +1057,238 @@ sub list_workspace_hierarchical_contents
 =begin html
 
 <pre>
-$queries is a reference to a list where each element is a string
+$owned_only is a bool
+$no_public is a bool
+$output is a reference to a list where each element is a WorkspaceMeta
+bool is an int
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$owned_only is a bool
+$no_public is a bool
+$output is a reference to a list where each element is a WorkspaceMeta
+bool is an int
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+
+=end text
+
+=item Description
+
+This function lists all workspace volumes accessible by user
+
+=back
+
+=cut
+
+sub list_workspaces
+{
+    my($self, @args) = @_;
+
+# Authentication: required
+
+    if ((my $n = @args) != 2)
+    {
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
+							       "Invalid argument count for function list_workspaces (received $n, expecting 2)");
+    }
+    {
+	my($owned_only, $no_public) = @args;
+
+	my @_bad_arguments;
+        (!ref($owned_only)) or push(@_bad_arguments, "Invalid type for argument 1 \"owned_only\" (value was \"$owned_only\")");
+        (!ref($no_public)) or push(@_bad_arguments, "Invalid type for argument 2 \"no_public\" (value was \"$no_public\")");
+        if (@_bad_arguments) {
+	    my $msg = "Invalid arguments passed to list_workspaces:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+								   method_name => 'list_workspaces');
+	}
+    }
+
+    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+	method => "Workspace.list_workspaces",
+	params => \@args,
+    });
+    if ($result) {
+	if ($result->is_error) {
+	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
+					       code => $result->content->{error}->{code},
+					       method_name => 'list_workspaces',
+					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
+					      );
+	} else {
+	    return wantarray ? @{$result->result} : $result->result->[0];
+	}
+    } else {
+        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method list_workspaces",
+					    status_line => $self->{client}->status_line,
+					    method_name => 'list_workspaces',
+				       );
+    }
+}
+
+
+
+=head2 search_for_workspaces
+
+  $output = $obj->search_for_workspaces($query)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$query is a reference to a hash where the key is a string and the value is a string
+$output is a reference to a list where each element is a WorkspaceMeta
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$query is a reference to a hash where the key is a string and the value is a string
+$output is a reference to a list where each element is a WorkspaceMeta
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceID is a string
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+
+=end text
+
+=item Description
+
+Provides a list of all objects in all workspaces whose name or workspace or path match the input query
+
+=back
+
+=cut
+
+sub search_for_workspaces
+{
+    my($self, @args) = @_;
+
+# Authentication: required
+
+    if ((my $n = @args) != 1)
+    {
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
+							       "Invalid argument count for function search_for_workspaces (received $n, expecting 1)");
+    }
+    {
+	my($query) = @args;
+
+	my @_bad_arguments;
+        (ref($query) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"query\" (value was \"$query\")");
+        if (@_bad_arguments) {
+	    my $msg = "Invalid arguments passed to search_for_workspaces:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+								   method_name => 'search_for_workspaces');
+	}
+    }
+
+    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+	method => "Workspace.search_for_workspaces",
+	params => \@args,
+    });
+    if ($result) {
+	if ($result->is_error) {
+	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
+					       code => $result->content->{error}->{code},
+					       method_name => 'search_for_workspaces',
+					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
+					      );
+	} else {
+	    return wantarray ? @{$result->result} : $result->result->[0];
+	}
+    } else {
+        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method search_for_workspaces",
+					    status_line => $self->{client}->status_line,
+					    method_name => 'search_for_workspaces',
+				       );
+    }
+}
+
+
+
+=head2 search_for_workspace_objects
+
+  $output = $obj->search_for_workspace_objects($query)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$query is a reference to a hash where the key is a string and the value is a string
 $output is a reference to a list where each element is an ObjectMeta
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
@@ -1079,7 +1322,7 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$queries is a reference to a list where each element is a string
+$query is a reference to a hash where the key is a string and the value is a string
 $output is a reference to a list where each element is an ObjectMeta
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
@@ -1112,16 +1355,13 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =item Description
 
-This function lists all workspace volumes accessible by user
-funcdef list_workspaces() returns (list<WorkspaceMeta> output);
-
-/* Provides a list of all objects in all workspaces whose name or workspace or path match the input query
+Provides a list of all objects in all workspaces whose name or workspace or path match the input query
 
 =back
 
 =cut
 
-sub search_workspaces
+sub search_for_workspace_objects
 {
     my($self, @args) = @_;
 
@@ -1130,38 +1370,38 @@ sub search_workspaces
     if ((my $n = @args) != 1)
     {
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function search_workspaces (received $n, expecting 1)");
+							       "Invalid argument count for function search_for_workspace_objects (received $n, expecting 1)");
     }
     {
-	my($queries) = @args;
+	my($query) = @args;
 
 	my @_bad_arguments;
-        (ref($queries) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"queries\" (value was \"$queries\")");
+        (ref($query) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"query\" (value was \"$query\")");
         if (@_bad_arguments) {
-	    my $msg = "Invalid arguments passed to search_workspaces:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	    my $msg = "Invalid arguments passed to search_for_workspace_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'search_workspaces');
+								   method_name => 'search_for_workspace_objects');
 	}
     }
 
     my $result = $self->{client}->call($self->{url}, $self->{headers}, {
-	method => "Workspace.search_workspaces",
+	method => "Workspace.search_for_workspace_objects",
 	params => \@args,
     });
     if ($result) {
 	if ($result->is_error) {
 	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
 					       code => $result->content->{error}->{code},
-					       method_name => 'search_workspaces',
+					       method_name => 'search_for_workspace_objects',
 					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
 					      );
 	} else {
 	    return wantarray ? @{$result->result} : $result->result->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method search_workspaces",
+        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method search_for_workspace_objects",
 					    status_line => $self->{client}->status_line,
-					    method_name => 'search_workspaces',
+					    method_name => 'search_for_workspace_objects',
 				       );
     }
 }
@@ -1304,7 +1544,7 @@ sub create_workspace_directory
 
 =head2 copy_objects
 
-  $return = $obj->copy_objects($arg_1)
+  $output = $obj->copy_objects($objects, $overwrite, $recursive)
 
 =over 4
 
@@ -1313,14 +1553,17 @@ sub create_workspace_directory
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1351,14 +1594,17 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1400,16 +1646,18 @@ sub copy_objects
 
 # Authentication: required
 
-    if ((my $n = @args) != 1)
+    if ((my $n = @args) != 3)
     {
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function copy_objects (received $n, expecting 1)");
+							       "Invalid argument count for function copy_objects (received $n, expecting 3)");
     }
     {
-	my($arg_1) = @args;
+	my($objects, $overwrite, $recursive) = @args;
 
 	my @_bad_arguments;
-        (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"arg_1\" (value was \"$arg_1\")");
+        (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"objects\" (value was \"$objects\")");
+        (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument 2 \"overwrite\" (value was \"$overwrite\")");
+        (!ref($recursive)) or push(@_bad_arguments, "Invalid type for argument 3 \"recursive\" (value was \"$recursive\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to copy_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
@@ -1443,7 +1691,7 @@ sub copy_objects
 
 =head2 move_objects
 
-  $return = $obj->move_objects($arg_1)
+  $output = $obj->move_objects($objects, $overwrite, $recursive)
 
 =over 4
 
@@ -1452,14 +1700,17 @@ sub copy_objects
 =begin html
 
 <pre>
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1490,14 +1741,17 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 
 =begin text
 
-$arg_1 is a reference to a list where each element is a reference to a list containing 4 items:
+$objects is a reference to a list where each element is a reference to a list containing 4 items:
 	0: (source) a WorkspacePath
 	1: (origname) an ObjectName
 	2: (destination) a WorkspacePath
 	3: (newname) an ObjectName
-$return is a reference to a list where each element is an ObjectMeta
+$overwrite is a bool
+$recursive is a bool
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectID
 	1: an ObjectName
@@ -1539,16 +1793,18 @@ sub move_objects
 
 # Authentication: required
 
-    if ((my $n = @args) != 1)
+    if ((my $n = @args) != 3)
     {
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function move_objects (received $n, expecting 1)");
+							       "Invalid argument count for function move_objects (received $n, expecting 3)");
     }
     {
-	my($arg_1) = @args;
+	my($objects, $overwrite, $recursive) = @args;
 
 	my @_bad_arguments;
-        (ref($arg_1) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"arg_1\" (value was \"$arg_1\")");
+        (ref($objects) eq 'ARRAY') or push(@_bad_arguments, "Invalid type for argument 1 \"objects\" (value was \"$objects\")");
+        (!ref($overwrite)) or push(@_bad_arguments, "Invalid type for argument 2 \"overwrite\" (value was \"$overwrite\")");
+        (!ref($recursive)) or push(@_bad_arguments, "Invalid type for argument 3 \"recursive\" (value was \"$recursive\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to move_objects:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
