@@ -89,10 +89,10 @@ typedef structure {
 /********** DATA LOAD FUNCTIONS ********************/
 
 /* This function creates a new workspace volume - returns metadata of created workspace */
-funcdef create_workspace(WorkspaceName workspace,WorkspacePerm permission,UserMetadata metadata) returns (WorkspaceMeta);
+funcdef create_workspace(WorkspaceName workspace,WorkspacePerm permission,UserMetadata metadata) returns (WorkspaceMeta output);
 
 /* This function receives a list of objects, names, and types and stores the objects in the workspace */
-funcdef save_objects(list<tuple<WorkspacePath,ObjectName,ObjectData,ObjectType,UserMetadata>> objects,bool overwrite) returns (list<ObjectMeta>);
+funcdef save_objects(list<tuple<WorkspacePath,ObjectName,ObjectData,ObjectType,UserMetadata>> objects,bool overwrite) returns (list<ObjectMeta> output);
 
 /* This function creates a node in shock that the user can upload to and links this node to a workspace */
 funcdef create_upload_node(list<tuple<WorkspacePath,ObjectName,ObjectType>> objects,bool overwrite) returns (list<string> output);

@@ -29,29 +29,29 @@ class Workspace:
 
     def create_workspace(self, ctx, workspace, permission, metadata):
         # ctx is the context object
-        # return variables are: returnVal
+        # return variables are: output
         #BEGIN create_workspace
         #END create_workspace
 
         # At some point might do deeper type checking...
-        if not isinstance(returnVal, list):
+        if not isinstance(output, list):
             raise ValueError('Method create_workspace return value ' +
-                             'returnVal is not type list as required.')
+                             'output is not type list as required.')
         # return the results
-        return [returnVal]
+        return [output]
 
     def save_objects(self, ctx, objects, overwrite):
         # ctx is the context object
-        # return variables are: returnVal
+        # return variables are: output
         #BEGIN save_objects
         #END save_objects
 
         # At some point might do deeper type checking...
-        if not isinstance(returnVal, list):
+        if not isinstance(output, list):
             raise ValueError('Method save_objects return value ' +
-                             'returnVal is not type list as required.')
+                             'output is not type list as required.')
         # return the results
-        return [returnVal]
+        return [output]
 
     def create_upload_node(self, ctx, objects, overwrite):
         # ctx is the context object

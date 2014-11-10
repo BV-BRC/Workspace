@@ -16,6 +16,9 @@ Workspace
 =cut
 
 #BEGIN_HEADER
+use File::Path;
+use Data::UUID;
+
 sub _authentication {
 	my($self) = @_;
 	if (defined($self->_getContext->{_override}->{_authentication})) {
@@ -41,15 +44,13 @@ sub _getUsername {
 
 sub _authenticate {
 	my ($self,$auth) = @_;
-	require "Bio/KBase/AuthToken";
+	require "Bio/KBase/AuthToken.pm";
 	my $token = Bio::KBase::AuthToken->new(
 		token => $auth,
 	);
 	if ($token->validate()) {
-		return {
-			authentication => $auth,
-			user => $token->user_id
-		};
+		$self->_getContext()->{_override}->{_authentication} = $auth;
+		$self->_getContext()->{_override}->{_currentUser} = $token->user_id;
 	} else {
 		$self->_error("Invalid authorization token:".$auth,'_setContext');
 	}
@@ -60,22 +61,12 @@ sub _getContext {
 	if (!defined($Bio::P3::Workspace::Server::CallContext)) {
 		$Bio::P3::Workspace::Server::CallContext = {};
 	}
+	if (!defined($Bio::P3::Workspace::Server::CallContext->{_current_method})) {
+		my @calldata = caller(1);
+		my $temp = [split(/:/,$calldata[3])];
+		$Bio::P3::Workspace::Server::CallContext->{_current_method} = pop(@{$temp});
+	}
 	return $Bio::P3::Workspace::Server::CallContext;
-}
-
-sub _setContext {
-	my ($self,$context,$params) = @_;
-    my @calldata = caller(1);
-	my $temp = [split(/:/,$calldata[3])];
-	$self->_getContext()->{_current_method} = pop(@{$temp});
-    if (defined($params->{auth}) && length($params->{auth}) > 0) {
-		if (!defined($self->_getContext()->{_override}) || $self->_getContext()->{_override}->{_authentication} ne $params->{auth}) {
-			my $output = $self->_authenticate($params->{auth});
-			$self->_getContext()->{_override}->{_authentication} = $output->{authentication};
-			$self->_getContext()->{_override}->{_currentUser} = $output->{user};
-		}
-    }
-	return $params;
 }
 
 sub _current_method {
@@ -124,6 +115,11 @@ sub _shockurl {
 	return $self->{_params}->{"shock-url"};
 }
 
+sub _url {
+	my $self = shift;
+	return $self->{_params}->{"url"};
+}
+
 sub _error {
 	my($self,$msg) = @_;
 	$msg = "_ERROR_".$msg."_ERROR_";
@@ -158,12 +154,12 @@ sub _get_db_ws {
 	if (defined($query->{raw_id})) {
 		my $id = $query->{raw_id};
 		delete $query->{raw_id};
-		if ($id =~ m/^\/([^\/])\/([^\/])\/*$/) {
+		if ($id =~ m/^\/([^\/]+)\/([^\/]+)\/*$/) {
 			$query->{owner} = $1;
 			$query->{name} = $2;
 		} elsif ($id =~ m/^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/) {
 			$query->{uuid} = $id;
-		} elsif ($id =~ m/([^\/])\/*$/) {
+		} elsif ($id =~ m/([^\/]+)\/*$/) {
 			$query->{owner} = $self->_getUsername();
 			$query->{name} = $1;
 		}
@@ -188,34 +184,76 @@ sub _get_db_object {
 
 sub _generate_ws_meta {
 	my ($self,$ws) = @_;
+	my $numobj = $self->_mongodb()->get_collection('objects')->count({
+		workspace_uuid => $ws->{uuid},
+		directory => 0
+	});
+	my $numdir = $self->_mongodb()->get_collection('objects')->count({
+		workspace_uuid => $ws->{uuid},
+		directory => 1
+	});
+	return [$ws->{uuid},$ws->{name},$ws->{owner},$ws->{creation_date},$numobj,$self->_get_ws_permission($ws),$ws->{global_permission},$numdir,$ws->{metadata}];
 }
 
 sub _generate_object_meta {
-	my ($self,$obj) = @_;
+	my ($self,$obj,$ws) = @_;
+	return [$obj->{uuid},$obj->{name},$obj->{type},$obj->{creation_date},$self->_url()."/objects/".$obj->{uuid},$obj->{owner},$obj->{workspace_uuid},$ws->{name},"/".$ws->{owner}."/".$ws->{name}."/".$ws->{path},$obj->{size},$obj->{metadata},$obj->{autometadata}];
 }
 
 sub _retrieve_object_data {
-	my ($self,$obj) = @_;
+	my ($self,$obj,$ws) = @_;
+	if ($obj->{directory} == 1) {
+		return {};
+	}
+	my $filename = "/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name};
+	open (my $fh,"<",$filename);
+	my $data;
+	while (my $line = <$fh>) {
+		$data .= $line;	
+	}
+	my $JSON = JSON::XS->new->utf8(1);
+	if ($data =~ m/^[\{\[].+[\}\]]$/) {
+		$data = $JSON->encode($data);
+	}
+	close($fh);
+	return $data;
 }
 
 sub _validate_workspace_permission {
 	my ($self,$input) = @_;
+	if ($input !~ m/^[awron]$/) {
+		$self->_error("Input permissions invalid!");
+	}
+	return $input;
 }
 
 sub _validate_workspace_name {
 	my ($self,$input) = @_;
+	if ($input =~ m/[:\/]/) {
+		$self->_error("Workspace contains forbidden characters!");
+	}
+	return $input;
+}
+
+sub _validate_object_type {
+	my ($self,$type) = @_;
+	my $types = {
+		String => 1,Genome => 1,Unspecified => 1
+	};
+	if (!defined($types->{$type})) {
+		$self->_error("Invalid type submitted!");
+	}
+	return $type;
 }
 
 sub _escape_username {
 	my ($self,$input) = @_;
+	return $input;
 }
 
 sub _unescape_username {
 	my ($self,$input) = @_;
-}
-
-sub _validate_workspace_path {
-	my ($self,$input) = @_;
+	return $input;
 }
 
 sub _get_ws_permission {
@@ -259,55 +297,176 @@ sub _check_ws_permissions {
 }
 
 sub _parse_ws_path {
-	my ($self,$path) = @_;
+	my ($self,$input) = @_;
+	#Three classes of paths are accepted:
+	#/<Username>/<Workspace name>/<Path>
+	#<Workspace name>/<Path> (in this case, the currently logged user is assumed to be the owner of the workspace)
+	#/<Username>/<Workspace name>/<Path>
+	my ($user,$workspace,$path);
+	if ($input =~ m/^\/([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
+		$user = $1;
+		$workspace = $2;
+		$path = $3;
+	} elsif ($input =~ m/^([A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12})\/(.+)\/*$/) {
+		my $ws = $self->_get_db_ws({
+	    	uuid => $1,
+	    });
+	    $user = $ws->{owner};
+	    $workspace = $ws->{name};
+	} elsif ($input =~ m/^([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
+		$user = $self->_getUsername();
+		$workspace = $1;
+		$path = $2;
+	}
+	return ($user,$workspace,$path);
 }
 
 sub _parse_directory_name {
 	my ($self,$path) = @_;
+	my $array = [split(/\//,$path)];
+	my $name = pop(@{$array});
+	return (join("/",@{$array}),$name);
 }
 
 sub _delete_object {
-	my ($self,$query) = @_;
-}
-
-sub _delete_directory {
-	my ($self,$query) = @_;
+	my ($self,$obj,$ws,$deletefile,$recursivedelete) = @_;
+	if ($obj->{directory} == 1 && $recursivedelete == 1) {
+		my $objs = $self->_get_directory_contents($obj,$ws,0);
+		for (my $i=0; $i < @{$objs}; $i++) {
+			$self->_delete_object($objs->[$i],$ws,0,1);
+		}
+		if ($deletefile) {
+			rmtree($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
+		}
+	} elsif ($obj->{directory} == 0) {
+		$self->_mongodb()->get_collection('objects')->remove({uuid => $ws->{uuid}});
+		if ($deletefile) {
+			unlink($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
+		}
+	}
 }
 
 sub _count_directory_contents {
-	my ($self,$query) = @_;
+	my ($self,$obj,$recursive) = @_;
+	if ($recursive == 1) {
+		my $path = "^".$obj->{path}."/".$obj->{name};
+		return $self->_mongodb()->get_collection('objects')->count({
+			workspace_uuid => $obj->{workspace_uuid},
+			path => qr/$path/
+		});
+	}
+	return $self->_mongodb()->get_collection('objects')->count({
+		workspace_uuid => $obj->{workspace_uuid},
+		path => $obj->{path}."/".$obj->{name}
+	});
 }
 
 sub _get_directory_contents {
-	my ($self,$query) = @_;
+	my ($self,$obj,$ws,$recursive) = @_;
+	my $query = {};
+	if ($recursive == 1) {
+		my $path = "^".$obj->{path}."/".$obj->{name};
+		$query = {
+			workspace_uuid => $obj->{workspace_uuid},
+			path => qr/$path/
+		};
+	} else {
+		$query = {
+			workspace_uuid => $obj->{workspace_uuid},
+			path => $obj->{path}."/".$obj->{name}
+		};
+	}
+	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
+	my $output = [];
+	while (my $object = $cursor->next) {
+		push(@{$output},{
+			info => $self->_generate_object_meta($object,$ws),
+			data => $self->_retrieve_object_data($object,$ws)
+		});
+	}
+	return $output;
+}
+
+sub _ensure_path_exists {
+	my ($self,$ws,$path,$create,$throwerror) = @_;
+	if (!-d $self->_db_path()."/".$ws->{owner}."/".$ws->{name}) {
+		if (defined($throwerror) && $throwerror == 1) {
+			$self->_error("Workspace directory /".$ws->{owner}."/".$ws->{name}." does not exist!");
+		}
+		if (defined($create) && $create == 1) {
+			$self->_error("Cannot create directory! Workspace directory /".$ws->{owner}."/".$ws->{name}." does not exist!");
+		}
+		return 0;
+	}
+	if (length($path) == 0) {
+		return 1;
+	}
+	my $array = [split(/\//,$path)];
+	my $name = pop(@{$array});
+	my $count = $self->_mongodb()->get_collection('objects')->count({
+		workspace_uuid => $ws->{workspace_uuid},
+		path => join("/",@{$array}),
+		name => $name
+	});
+	if ($count == 0) {
+		if ($create == 1) {
+			$self->_create_new_object($ws,{
+				directory => 1,
+				workspace_uuid => $ws->{uuid},
+				workspace_owner => $ws->{owner},
+				path => join("/",@{$array}),
+				name => $name,
+				metadata => {},
+				type => "Directory"
+			});
+			#Now we just return, because this step automatically checks all subdirectories
+			return 1;
+		} elsif ($throwerror == 1) {
+			$self->_error("Workspace subdirectory /".$ws->{owner}."/".$ws->{name}."/".$path." does not exist!");
+		}
+		return 0;
+	}
+	if (@{$array} > 0) {
+		return $self->_ensure_path_exists($ws,join("/",@{$array}),$create,$throwerror);
+	}
+	return 1;
 }
 
 sub _create_new_object {
 	my ($self,$ws,$obj,$data) = @_;
-	if ($obj->{directory} eq "Type") {
+	if ($obj->{type} eq "Directory") {
     	$obj->{directory} = 1;
     }
 	if ($obj->{directory} == 1) {
 		if (-d $self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name}) {
 	    	$self->_error("Workspace directory /".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name}." already exists!");
 	    }
-	    File::Path::mkpath ($self->_db_path()."/".$user."/".$ws->{name}."/".$path."/".$obj->{name});
+	    File::Path::mkpath ($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
 	} else {
 		if (-e $self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name}) {
 	    	$self->_error("Workspace object /".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name}." already exists!");
 	    }
-	    File::Path::mkpath ($self->_db_path()."/".$user."/".$ws->{name}."/".$path);
+	    File::Path::mkpath ($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path});
 	}
 	$self->_validate_object_type($obj->{type});
+	$self->_ensure_path_exists($ws,$obj->{path});
     my $uuid = Data::UUID->new()->create_str();
     $obj->{uuid} = $uuid;
-    $obj->{createdate} = DateTime->now()->datetime();
+    $obj->{creation_date} = DateTime->now()->datetime();
     $obj->{owner} = $self->_getUsername();
+    $obj->{autometadata} = {};
+    if (!defined($obj->{metadata})) {
+    	$obj->{metadata} = {};
+    }
     $self->_mongodb()->get_collection('objects')->insert($obj);
     if (defined($data)) {
     	my $JSON = JSON::XS->new->utf8(1);
-		open (my $fh,">",$self->_db_path()."/".$user."/".$ws->{name}."/".$path."/".$obj->{name});
-		print $fh $JSON->encode($data);
+		open (my $fh,">",$self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
+		if (ref($data) ne 'ARRAY' && ref($data) ne 'HASH') {
+			print $fh $data;
+		} else {
+			print $fh $JSON->encode($data);
+		}
 		close($fh);
     }
     return $obj;
@@ -315,6 +474,7 @@ sub _create_new_object {
 
 sub _move_object {
 	my ($self,$object,$ws) = @_;
+	$self->_ensure_path_exists($ws,$object->{path});
 	$self->_updateDB("objects",{uuid => $object->{uuid}},{
 		'$set' => {
 			workspace_uuid => $ws->{uuid},
@@ -365,7 +525,7 @@ sub _copy_or_move_objects {
     		$self->_check_ws_permissions($workspaces->{$duser}->{$dworkspace},"w",1);
     	}
     	if ($obj->{directory} == 1 && $recursive == 1) {
-	    	my $subobjs = $self->_get_directory_contents($obj,1);
+	    	my $subobjs = $self->_get_directory_contents($obj,$workspaces->{$user}->{$workspace},1);
 	    	for (my $j=0; $j < @{$subobjs}; $j++) {
 	    		my $partialpath = substr($subobjs->[$j]->{path},length($obj->{path}."/".$obj->{name}));
 	    		my $newdest = [$duser,$dworkspace,$dpath."/".$objects->[$i]->[3].$partialpath,$subobjs->[$j]->{name}];
@@ -386,12 +546,12 @@ sub _copy_or_move_objects {
 	    		}
 	    	}
 	    }
-    	if (defined($objdest->{$subobjs->[$j]->{uuid}})) {
-    		if (join("/",@{$objdest->{$subobjs->[$j]->{uuid}}}) ne $duser."/".$dworkspace."/".$dpath."/".$objects->[$i]->[3]) {
+    	if (defined($objdest->{$obj->{uuid}})) {
+    		if (join("/",@{$objdest->{$obj->{uuid}}}) ne $duser."/".$dworkspace."/".$dpath."/".$objects->[$i]->[3]) {
     			$self->_error("Attempting to copy the same object to two different locations!");
     		}
     	} else {
-    		$objdest->{$subobjs->[$j]->{uuid}} = [$duser,$dworkspace,$dpath,$objects->[$i]->[3]];
+    		$objdest->{$obj->{uuid}} = [$duser,$dworkspace,$dpath,$objects->[$i]->[3]];
     	}
     	if (defined($destinations->{$duser}->{$dworkspace}->{$dpath}->{$objects->[$i]->[3]})) {
     		my $curruid = $destinations->{$duser}->{$dworkspace}->{$dpath}->{$objects->[$i]->[3]}->{uuid};
@@ -404,6 +564,7 @@ sub _copy_or_move_objects {
     }	
     #Checking all destinations for objects and ensuring that they are not directories
 	my $delete = [];
+	my $deletews = [];
     foreach my $user (keys(%{$destinations})) {
     	foreach my $workspace (keys(%{$destinations->{$user}})) {
     		foreach my $path (keys(%{$destinations->{$user}->{$workspace}})) {
@@ -414,20 +575,25 @@ sub _copy_or_move_objects {
 				    	name => $name
 				    },0);
 				    if (defined($obj)) {
-			    		if ($obj->{directory} == 1) {
-			    			$self->_error("Cannot overwrite directory /".$user."/".$workspace."/".$path."/".$name." on copy!");
+			    		if ($obj->{directory} == 1 && $destinations->{$user}->{$workspace}->{$path}->{$name}->{directory} == 0) {
+			    			$self->_error("Cannot overwrite directory /".$user."/".$workspace."/".$path."/".$name." with non-directory on copy!");
 			    		} elsif ($overwrite == 0) {
 			    			$self->_error("Overwriting object /".$user."/".$workspace."/".$path."/".$name." and overwrite flag is not set!");
 			    		}
-			    		push(@{$delete},$obj);
+			    		if ($obj->{directory} == 0) {
+			    			push(@{$delete},$obj);
+			    			push(@{$deletews},$workspaces->{$user}->{$workspace});
+			    		} else {
+			    			$destinations->{$user}->{$workspace}->{$path}->{$name}->{nocopy} = 1;
+			    		}
 			    	}
     			}
-    		}	
+    		}
     	}
     }
     #Deleting all overwritten objects
     for (my $i=0; $i < @{$delete}; $i++) {
-    	$self->_delete_object($delete->[$i]);
+    	$self->_delete_object($delete->[$i],$deletews->[$i],1,1);
     }
     #Copying over objects
     foreach my $user (keys(%{$destinations})) {
@@ -435,32 +601,34 @@ sub _copy_or_move_objects {
     		my $paths = [sort(keys(%{$destinations->{$user}->{$workspace}}))];
     		foreach my $path (@{$paths}) {
     			foreach my $name (keys(%{$destinations->{$user}->{$workspace}->{$path}})) {
-    				my $sobj = $destinations->{$user}->{$workspace}->{$path}->{$name};
-    				if ($move == 1) {
-    					$sobj->{path} = $path;
-    					$sobj->{name} = $name;
-    					$sobj = $self->_move_object($sobj,$workspaces->{$user}->{$workspace});
-    				} else {
-    					$sobj = $self->_create_new_object($workspaces->{$user}->{$workspace},{
-				    		directory => $sobj->{directory},
-							workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
-							workspace_owner => $workspaces->{$user}->{$workspace}->{owner},
-							path => $path,
-							name => $name,
-							type => $sobj->{type},
-							metadata => $sobj->{metadata},
-							autometadata => $sobj->{autometadata}
-				    	});
-    				}
-			    	if ($sobj->{directory} == 0) {
-			    		if ($move == 1) {
-			    			move($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
-			    		} else {
-			    			copy($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
-			    		}
-			    	}
-			    	push(@{$output},$self->_generate_object_meta($sobj,$workspaces->{$user}->{$workspace}));
-    			}
+					if (!defined($destinations->{$user}->{$workspace}->{$path}->{$name}->{nocopy})) {
+	    				my $sobj = $destinations->{$user}->{$workspace}->{$path}->{$name};
+	    				if ($move == 1) {
+	    					$sobj->{path} = $path;
+	    					$sobj->{name} = $name;
+	    					$sobj = $self->_move_object($sobj,$workspaces->{$user}->{$workspace});
+	    				} else {
+	    					$sobj = $self->_create_new_object($workspaces->{$user}->{$workspace},{
+					    		directory => $sobj->{directory},
+								workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+								workspace_owner => $workspaces->{$user}->{$workspace}->{owner},
+								path => $path,
+								name => $name,
+								type => $sobj->{type},
+								metadata => $sobj->{metadata},
+								autometadata => $sobj->{autometadata}
+					    	});
+	    				}
+				    	if ($sobj->{directory} == 0) {
+				    		if ($move == 1) {
+				    			move($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
+				    		} else {
+				    			copy($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
+				    		}
+				    	}
+				    	push(@{$output},$self->_generate_object_meta($sobj,$workspaces->{$user}->{$workspace}));
+					}
+				}
     		}
     	}
     }
@@ -484,6 +652,7 @@ sub new
     	mongodb-host
     	mongodb-user
     	mongodb-pwd
+    	url
     )];
     if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 		my $service = $ENV{KB_SERVICE_NAME};
@@ -506,6 +675,7 @@ sub new
 		"mongodb-database" => "P3Workspace",
 		"mongodb-user" => undef,
 		"mongodb-pwd" => undef,
+		url => "http://kbase.us/services/P3workspace"
 	});
 	my $config = {
 		host => $params->{"mongodb-host"},
@@ -513,9 +683,9 @@ sub new
 		auto_connect => 1,
 		auto_reconnect => 1
 	};
-	if(defined $user && defined $pwd) {
-		$config->{username} = $user;
-		$config->{password} = $pwd;
+	if(defined $params->{"mongodb-user"} && defined $params->{"mongodb-pwd"}) {
+		$config->{username} = $params->{"mongodb-user"};
+		$config->{password} = $params->{"mongodb-pwd"};
 	}
 	my $conn = MongoDB::Connection->new(%$config);
 	if (!defined($conn)) {
@@ -538,7 +708,7 @@ sub new
 
 =head2 create_workspace
 
-  $return = $obj->create_workspace($workspace, $permission, $metadata)
+  $output = $obj->create_workspace($workspace, $permission, $metadata)
 
 =over 4
 
@@ -550,7 +720,7 @@ sub new
 $workspace is a WorkspaceName
 $permission is a WorkspacePerm
 $metadata is a UserMetadata
-$return is a WorkspaceMeta
+$output is a WorkspaceMeta
 WorkspaceName is a string
 WorkspacePerm is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
@@ -577,7 +747,7 @@ Timestamp is a string
 $workspace is a WorkspaceName
 $permission is a WorkspacePerm
 $metadata is a UserMetadata
-$return is a WorkspaceMeta
+$output is a WorkspaceMeta
 WorkspaceName is a string
 WorkspacePerm is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
@@ -624,9 +794,8 @@ sub create_workspace
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
-    my($return);
+    my($output);
     #BEGIN create_workspace
-    $self->_setContext($ctx,$input);
     $workspace = $self->_validate_workspace_name($workspace);
     $permission = $self->_validate_workspace_permission($permission);
     if (-d $self->_db_path()."/".$self->_getUsername()."/".$workspace) {
@@ -636,7 +805,7 @@ sub create_workspace
     File::Path::mkpath ($self->_db_path()."/".$self->_getUsername()."/".$workspace);
     my $uuid = Data::UUID->new()->create_str();
     $self->_mongodb()->get_collection('workspaces')->insert({
-		moddate => DateTime->now()->datetime(),
+		creation_date => DateTime->now()->datetime(),
 		uuid => $uuid,
 		name => $workspace,
 		owner => $self->_getUsername(),
@@ -644,15 +813,20 @@ sub create_workspace
 		metadata => $metadata,
 		permissions => {}
 	});
+	my $ws = $self->_get_db_ws({
+		name => $workspace,
+		owner => $self->_getUsername()
+	});
+	$output = $self->_generate_ws_meta($ws);
     #END create_workspace
     my @_bad_returns;
-    (ref($return) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
 	my $msg = "Invalid returns passed to create_workspace:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
 							       method_name => 'create_workspace');
     }
-    return($return);
+    return($output);
 }
 
 
@@ -660,7 +834,7 @@ sub create_workspace
 
 =head2 save_objects
 
-  $return = $obj->save_objects($objects, $overwrite)
+  $output = $obj->save_objects($objects, $overwrite)
 
 =over 4
 
@@ -676,7 +850,7 @@ $objects is a reference to a list where each element is a reference to a list co
 	3: an ObjectType
 	4: a UserMetadata
 $overwrite is a bool
-$return is a reference to a list where each element is an ObjectMeta
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
@@ -719,7 +893,7 @@ $objects is a reference to a list where each element is a reference to a list co
 	3: an ObjectType
 	4: a UserMetadata
 $overwrite is a bool
-$return is a reference to a list where each element is an ObjectMeta
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
@@ -777,11 +951,11 @@ sub save_objects
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
-    my($return);
+    my($output);
     #BEGIN save_objects
-    $self->_setContext($ctx);
     my $workspaces = {};
     my $delete = [];
+    my $deletews = [];
     for (my $i=0; $i < @{$objects}; $i++) {
     	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
     	if (!defined($workspaces->{$user}->{$workspace})) {
@@ -803,10 +977,11 @@ sub save_objects
     			$self->_error("Overwriting object /".$user."/".$workspace."/".$workspace."/".$objects->[$i]->[1]." and overwrite flag is not set!");
     		}
     		push(@{$delete},$obj);
+    		push(@{$deletews},$workspaces->{$user}->{$workspace});
     	}
     }
     for (my $i=0; $i < @{$delete}; $i++) {
-    	$self->_delete_object($delete->[$i]);
+    	$self->_delete_object($delete->[$i],$deletews,1,0);
     }
     for (my $i=0; $i < @{$objects}; $i++) {
     	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
@@ -818,18 +993,19 @@ sub save_objects
 			name => $objects->[$i]->[1],
 			type => $objects->[$i]->[3],
 			metadata => $objects->[$i]->[4],
+			size => 0
     	},$objects->[$i]->[2]);
     	push(@{$output},$self->_generate_object_meta($obj,$workspaces->{$user}->{$workspace}))
     }
     #END save_objects
     my @_bad_returns;
-    (ref($return) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"return\" (value was \"$return\")");
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
 	my $msg = "Invalid returns passed to save_objects:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
 							       method_name => 'save_objects');
     }
-    return($return);
+    return($output);
 }
 
 
@@ -1034,7 +1210,6 @@ sub get_objects
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN get_objects
-	$self->_setContext($ctx);
     my $workspaces = {};
     for (my $i=0; $i < @{$objects}; $i++) {
     	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
@@ -1183,7 +1358,6 @@ sub get_objects_by_reference
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN get_objects_by_reference
-    $self->_setContext($ctx);
     my $query = {uuid => {'$in' => $objects}};
 	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
 	my $wscache = {};
@@ -1196,8 +1370,8 @@ sub get_objects_by_reference
 		}
 		if ($wscache->{$object->{workspace_uuid}} == 1) {
 			push(@{$output},{
-				info => $self->_generate_object_meta($object,$wscache->{$object->{workspace_uuid}}))
-				data => $self->_retrieve_object_data($object,$wscache->{$object->{workspace_uuid}});
+				info => $self->_generate_object_meta($object,$wscache->{$object->{workspace_uuid}}),
+				data => $self->_retrieve_object_data($object,$wscache->{$object->{workspace_uuid}})
 			});
 		}
 	}
@@ -1328,8 +1502,7 @@ sub list_workspace_contents
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN list_workspace_contents
-    $self->_setContext($ctx);
-    ($user,$workspace,$path) = $self->_parse_ws_path($directory);
+    my ($user,$workspace,$path) = $self->_parse_ws_path($directory);
     my $ws = $self->_get_db_ws({
     	owner => $user,
     	name => $workspace
@@ -1483,8 +1656,7 @@ sub list_workspace_hierarchical_contents
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN list_workspace_hierarchical_contents
-    $self->_setContext($ctx);
-    ($user,$workspace,$path) = $self->_parse_ws_path($directory);
+    my ($user,$workspace,$path) = $self->_parse_ws_path($directory);
     my $ws = $self->_get_db_ws({
     	owner => $user,
     	name => $workspace
@@ -1965,8 +2137,7 @@ sub create_workspace_directory
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN create_workspace_directory
-    $self->_setContext($ctx);
-    ($user,$workspace,$path) = $self->_parse_ws_path($directory);
+    my ($user,$workspace,$path) = $self->_parse_ws_path($directory);
     my $ws = $self->_get_db_ws({
     	owner => $user,
     	name => $workspace
@@ -2115,7 +2286,6 @@ sub copy_objects
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN copy_objects
-    $self->_setContext($ctx);
     $output = $self->_copy_or_move_objects($objects,$overwrite,$recursive,0);
     #END copy_objects
     my @_bad_returns;
@@ -2249,7 +2419,6 @@ sub move_objects
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN move_objects
-    $self->_setContext($ctx);
     $output = $self->_copy_or_move_objects($objects,$overwrite,$recursive,1);
     #END move_objects
     my @_bad_returns;
@@ -2349,7 +2518,6 @@ sub delete_workspace
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN delete_workspace
-    $self->_setContext($ctx,$input);
     my $ws = $self->_get_db_ws({
     	raw_id => $workspace
     });
@@ -2486,7 +2654,6 @@ sub delete_objects
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN delete_objects
-    $self->_setContext($ctx);
     my $workspaces = {};
     my $objhash = {};
     for (my $i=0; $i < @{$objects}; $i++) {
@@ -2507,30 +2674,17 @@ sub delete_objects
     	if ($objhash->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]}->{directory} == 1) {
     		if ($delete_directories == 0) {
     			$self->_error("Object list includes directories, and delete_directories flag was not set!");
-    		} elsif ($force == 0 && $self->_count_directory_contents({
-    			object => $objhash->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]}
-    		}) > 0) {
+    		} elsif ($force == 0 && $self->_count_directory_contents($objhash->{$user}->{$workspace}->{$path}->{$objects->[$i]->[1]},0) > 0) {
     			$self->_error("Deleting a non-empty directory, and force flag was not set!");
     		}
     	}
     }
     foreach my $user (keys(%{$objhash})) {
     	foreach my $workspace (keys(%{$objhash->{$user}})) {
-    		foreach my $path (keys(%{$objhash->{$user}->{$workspace}})) {
+    		my $paths = [reverse(sort(keys(%{$objhash->{$user}->{$workspace}})))];
+    		foreach my $path (@{$paths}) {
     			foreach my $object (keys(%{$objhash->{$user}->{$workspace}->{$path}})) {
-    				if ($objhash->{$user}->{$workspace}->{$path}->{$object}->{directory} == 1) {
-    					if ($self->_delete_directory({
-    						uuid => $objhash->{$user}->{$workspace}->{$path}->{$object}->{uuid}
-    					}) == 1) {
-    						rmtree($self->_db_path()."/".$user."/".$workspace."/".$path."/".$object);
-    					}
-    				} else {
-    					if ($self->_delete_object({
-    						uuid => $objhash->{$user}->{$workspace}->{$path}->{$object}->{uuid}
-    					}) == 1) {
-    						unlink($self->_db_path()."/".$user."/".$workspace."/".$path."/".$object);	
-    					}
-    				}
+    				$self->_delete_object($objhash->{$user}->{$workspace}->{$path}->{$object},$workspaces->{$user}->{$workspace},1,1);
     			}
     		}
     	}
@@ -2656,7 +2810,6 @@ sub delete_workspace_directory
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN delete_workspace_directory
-    $self->_setContext($ctx);
     my ($user,$workspace,$path) = $self->_parse_ws_path($directory);
     my $ws = $self->_get_db_ws({
     	name => $workspace,
@@ -2672,15 +2825,10 @@ sub delete_workspace_directory
     if ($obj->{directory} == 0) {
     	$self->_error("Specified object is not a directory!");
     }
-    if ($force == 0 && $self->_count_directory_contents({
-    	object => $obj
-    }) > 0) {
+    if ($force == 0 && $self->_count_directory_contents($obj,0) > 0) {
     	$self->_error("Deleting a non-empty directory, and force flag was not set!");
     }
-    rmtree($self->_db_path()."/".$ws->{user}."/".$ws->{name}."/".$ws->{path}."/".$name);
-    $self->_delete_directory({
-    	uuid => $obj->{uuid}
-    });
+    $self->_delete_directory($obj);
     $output = $self->_generate_object_meta($obj,$ws);
     #END delete_workspace_directory
     my @_bad_returns;
@@ -2783,7 +2931,6 @@ sub reset_global_permission
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN reset_global_permission
-    $self->_setContext($ctx);
     my $ws = $self->_get_db_ws({
     	raw_id => $workspace
     });
@@ -2897,9 +3044,8 @@ sub set_workspace_permissions
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN set_workspace_permissions
-    $self->_setContext($ctx);
     my $ws = $self->_get_db_ws({
-    	raw_id => $workspaces->[$i]
+    	raw_id => $workspace
     });
     $self->_check_ws_permissions($ws,"a",1);
     for (my $i=0; $i < @{$permissions}; $i++) {

@@ -111,7 +111,7 @@ sub new
 
 =head2 create_workspace
 
-  $return = $obj->create_workspace($workspace, $permission, $metadata)
+  $output = $obj->create_workspace($workspace, $permission, $metadata)
 
 =over 4
 
@@ -123,7 +123,7 @@ sub new
 $workspace is a WorkspaceName
 $permission is a WorkspacePerm
 $metadata is a UserMetadata
-$return is a WorkspaceMeta
+$output is a WorkspaceMeta
 WorkspaceName is a string
 WorkspacePerm is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
@@ -150,7 +150,7 @@ Timestamp is a string
 $workspace is a WorkspaceName
 $permission is a WorkspacePerm
 $metadata is a UserMetadata
-$return is a WorkspaceMeta
+$output is a WorkspaceMeta
 WorkspaceName is a string
 WorkspacePerm is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
@@ -230,7 +230,7 @@ sub create_workspace
 
 =head2 save_objects
 
-  $return = $obj->save_objects($objects, $overwrite)
+  $output = $obj->save_objects($objects, $overwrite)
 
 =over 4
 
@@ -246,7 +246,7 @@ $objects is a reference to a list where each element is a reference to a list co
 	3: an ObjectType
 	4: a UserMetadata
 $overwrite is a bool
-$return is a reference to a list where each element is an ObjectMeta
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
@@ -289,7 +289,7 @@ $objects is a reference to a list where each element is a reference to a list co
 	3: an ObjectType
 	4: a UserMetadata
 $overwrite is a bool
-$return is a reference to a list where each element is an ObjectMeta
+$output is a reference to a list where each element is an ObjectMeta
 WorkspacePath is a string
 ObjectName is a string
 ObjectData is a reference to a hash where the following keys are defined:
