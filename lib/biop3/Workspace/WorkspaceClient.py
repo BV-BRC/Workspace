@@ -165,97 +165,97 @@ class Workspace(object):
             raise ServerError('Unknown', 0, 'An unknown server error occurred')
         return resp['result']
 
-    def create_workspace(self, workspace, permission, metadata):
+    def create_workspace(self, input):
         resp = self._call('Workspace.create_workspace',
-                          [workspace, permission, metadata])
+                          [input])
         return resp[0]
 
-    def save_objects(self, objects, overwrite):
+    def save_objects(self, input):
         resp = self._call('Workspace.save_objects',
-                          [objects, overwrite])
+                          [input])
         return resp[0]
 
-    def create_upload_node(self, objects, overwrite):
+    def create_upload_node(self, input):
         resp = self._call('Workspace.create_upload_node',
-                          [objects, overwrite])
+                          [input])
         return resp[0]
 
-    def get_objects(self, objects):
+    def get_objects(self, input):
         resp = self._call('Workspace.get_objects',
-                          [objects])
+                          [input])
         return resp[0]
 
-    def get_objects_by_reference(self, objects):
+    def get_objects_by_reference(self, input):
         resp = self._call('Workspace.get_objects_by_reference',
-                          [objects])
+                          [input])
         return resp[0]
 
-    def list_workspace_contents(self, directory, includeSubDirectories, excludeObjects, Recursive):
+    def list_workspace_contents(self, input):
         resp = self._call('Workspace.list_workspace_contents',
-                          [directory, includeSubDirectories, excludeObjects, Recursive])
+                          [input])
         return resp[0]
 
-    def list_workspace_hierarchical_contents(self, directory, includeSubDirectories, excludeObjects, Recursive):
+    def list_workspace_hierarchical_contents(self, input):
         resp = self._call('Workspace.list_workspace_hierarchical_contents',
-                          [directory, includeSubDirectories, excludeObjects, Recursive])
+                          [input])
         return resp[0]
 
-    def list_workspaces(self, owned_only, no_public):
+    def list_workspaces(self, input):
         resp = self._call('Workspace.list_workspaces',
-                          [owned_only, no_public])
+                          [input])
         return resp[0]
 
-    def search_for_workspaces(self, query):
+    def search_for_workspaces(self, input):
         resp = self._call('Workspace.search_for_workspaces',
-                          [query])
+                          [input])
         return resp[0]
 
-    def search_for_workspace_objects(self, query):
+    def search_for_workspace_objects(self, input):
         resp = self._call('Workspace.search_for_workspace_objects',
-                          [query])
+                          [input])
         return resp[0]
 
-    def create_workspace_directory(self, directory, metadata):
+    def create_workspace_directory(self, input):
         resp = self._call('Workspace.create_workspace_directory',
-                          [directory, metadata])
+                          [input])
         return resp[0]
 
-    def copy_objects(self, objects, overwrite, recursive):
+    def copy_objects(self, input):
         resp = self._call('Workspace.copy_objects',
-                          [objects, overwrite, recursive])
+                          [input])
         return resp[0]
 
-    def move_objects(self, objects, overwrite, recursive):
+    def move_objects(self, input):
         resp = self._call('Workspace.move_objects',
-                          [objects, overwrite, recursive])
+                          [input])
         return resp[0]
 
-    def delete_workspace(self, workspace):
+    def delete_workspace(self, input):
         resp = self._call('Workspace.delete_workspace',
-                          [workspace])
+                          [input])
         return resp[0]
 
-    def delete_objects(self, objects, delete_directories, force):
+    def delete_objects(self, input):
         resp = self._call('Workspace.delete_objects',
-                          [objects, delete_directories, force])
+                          [input])
         return resp[0]
 
-    def delete_workspace_directory(self, directory, force):
+    def delete_workspace_directory(self, input):
         resp = self._call('Workspace.delete_workspace_directory',
-                          [directory, force])
+                          [input])
         return resp[0]
 
-    def reset_global_permission(self, workspace, global_permission):
+    def reset_global_permission(self, input):
         resp = self._call('Workspace.reset_global_permission',
-                          [workspace, global_permission])
+                          [input])
         return resp[0]
 
-    def set_workspace_permissions(self, workspace, permissions):
+    def set_workspace_permissions(self, input):
         resp = self._call('Workspace.set_workspace_permissions',
-                          [workspace, permissions])
+                          [input])
         return resp[0]
 
-    def list_workspace_permissions(self, workspaces):
+    def list_workspace_permissions(self, input):
         resp = self._call('Workspace.list_workspace_permissions',
-                          [workspaces])
+                          [input])
         return resp[0]

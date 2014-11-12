@@ -266,35 +266,35 @@ class Application(object):
         self.method_authentication = dict()
         self.rpc_service.add(impl_Workspace.create_workspace,
                              name='Workspace.create_workspace',
-                             types=[basestring, basestring, dict])
+                             types=[dict])
         self.method_authentication['Workspace.create_workspace'] = 'required'
         self.rpc_service.add(impl_Workspace.save_objects,
                              name='Workspace.save_objects',
-                             types=[list, int])
+                             types=[dict])
         self.method_authentication['Workspace.save_objects'] = 'required'
         self.rpc_service.add(impl_Workspace.create_upload_node,
                              name='Workspace.create_upload_node',
-                             types=[list, int])
+                             types=[dict])
         self.method_authentication['Workspace.create_upload_node'] = 'required'
         self.rpc_service.add(impl_Workspace.get_objects,
                              name='Workspace.get_objects',
-                             types=[list])
+                             types=[dict])
         self.method_authentication['Workspace.get_objects'] = 'required'
         self.rpc_service.add(impl_Workspace.get_objects_by_reference,
                              name='Workspace.get_objects_by_reference',
-                             types=[list])
+                             types=[dict])
         self.method_authentication['Workspace.get_objects_by_reference'] = 'required'
         self.rpc_service.add(impl_Workspace.list_workspace_contents,
                              name='Workspace.list_workspace_contents',
-                             types=[basestring, int, int, int])
+                             types=[dict])
         self.method_authentication['Workspace.list_workspace_contents'] = 'required'
         self.rpc_service.add(impl_Workspace.list_workspace_hierarchical_contents,
                              name='Workspace.list_workspace_hierarchical_contents',
-                             types=[basestring, int, int, int])
+                             types=[dict])
         self.method_authentication['Workspace.list_workspace_hierarchical_contents'] = 'required'
         self.rpc_service.add(impl_Workspace.list_workspaces,
                              name='Workspace.list_workspaces',
-                             types=[int, int])
+                             types=[dict])
         self.method_authentication['Workspace.list_workspaces'] = 'required'
         self.rpc_service.add(impl_Workspace.search_for_workspaces,
                              name='Workspace.search_for_workspaces',
@@ -306,39 +306,39 @@ class Application(object):
         self.method_authentication['Workspace.search_for_workspace_objects'] = 'required'
         self.rpc_service.add(impl_Workspace.create_workspace_directory,
                              name='Workspace.create_workspace_directory',
-                             types=[basestring, dict])
+                             types=[dict])
         self.method_authentication['Workspace.create_workspace_directory'] = 'required'
         self.rpc_service.add(impl_Workspace.copy_objects,
                              name='Workspace.copy_objects',
-                             types=[list, int, int])
+                             types=[dict])
         self.method_authentication['Workspace.copy_objects'] = 'required'
         self.rpc_service.add(impl_Workspace.move_objects,
                              name='Workspace.move_objects',
-                             types=[list, int, int])
+                             types=[dict])
         self.method_authentication['Workspace.move_objects'] = 'required'
         self.rpc_service.add(impl_Workspace.delete_workspace,
                              name='Workspace.delete_workspace',
-                             types=[basestring])
+                             types=[dict])
         self.method_authentication['Workspace.delete_workspace'] = 'required'
         self.rpc_service.add(impl_Workspace.delete_objects,
                              name='Workspace.delete_objects',
-                             types=[list, int, int])
+                             types=[dict])
         self.method_authentication['Workspace.delete_objects'] = 'required'
         self.rpc_service.add(impl_Workspace.delete_workspace_directory,
                              name='Workspace.delete_workspace_directory',
-                             types=[basestring, int])
+                             types=[dict])
         self.method_authentication['Workspace.delete_workspace_directory'] = 'required'
         self.rpc_service.add(impl_Workspace.reset_global_permission,
                              name='Workspace.reset_global_permission',
-                             types=[basestring, basestring])
+                             types=[dict])
         self.method_authentication['Workspace.reset_global_permission'] = 'required'
         self.rpc_service.add(impl_Workspace.set_workspace_permissions,
                              name='Workspace.set_workspace_permissions',
-                             types=[basestring, list])
+                             types=[dict])
         self.method_authentication['Workspace.set_workspace_permissions'] = 'required'
         self.rpc_service.add(impl_Workspace.list_workspace_permissions,
                              name='Workspace.list_workspace_permissions',
-                             types=[list])
+                             types=[dict])
         self.method_authentication['Workspace.list_workspace_permissions'] = 'required'
         self.auth_client = biokbase.nexus.Client(
             config={'server': 'nexus.api.globusonline.org',
