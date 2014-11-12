@@ -93,24 +93,21 @@ typedef structure {
 		WorkspacePerm permission;
 		UserMetadata metadata;
 } create_workspace_params;
-authentication required;
-funcdef create_workspace(create_workspace_params input) returns (WorkspaceMeta output);
+funcdef create_workspace(create_workspace_params input) returns (WorkspaceMeta output) authentication required;
 
 /* This function receives a list of objects, names, and types and stores the objects in the workspace */
 typedef structure {
 		list<tuple<WorkspacePath,ObjectName,ObjectData,ObjectType,UserMetadata>> objects;
 		bool overwrite;
 } save_objects_params;
-authentication required;
-funcdef save_objects(save_objects_params input) returns (list<ObjectMeta> output);
+funcdef save_objects(save_objects_params input) returns (list<ObjectMeta> output) authentication required;
 
 /* This function creates a node in shock that the user can upload to and links this node to a workspace */
 typedef structure {
 		list<tuple<WorkspacePath,ObjectName,ObjectType>> objects;
 		bool overwrite;
 } create_upload_node_params;
-authentication required;
-funcdef create_upload_node(create_upload_node_params input) returns (list<string> output);
+funcdef create_upload_node(create_upload_node_params input) returns (list<string> output) authentication required;
 
 /********** DATA RETRIEVAL FUNCTIONS ********************/
 
@@ -118,15 +115,13 @@ funcdef create_upload_node(create_upload_node_params input) returns (list<string
 typedef structure {
 		list<tuple<WorkspacePath,ObjectName>> objects;
 } get_objects_params;
-authentication required;
-funcdef get_objects(get_objects_params input) returns (list<ObjectDataInfo> output);
+funcdef get_objects(get_objects_params input) returns (list<ObjectDataInfo> output) authentication required;
 
 /* This function retrieves a list of objects from the workspace */
 typedef structure {
 		list<ObjectID> objects;
 } get_objects_by_reference_params;
-authentication required;
-funcdef get_objects_by_reference(get_objects_by_reference_params input) returns (list<ObjectDataInfo> output);
+funcdef get_objects_by_reference(get_objects_by_reference_params input) returns (list<ObjectDataInfo> output) authentication required;
 
 /* This function lists the contents of the specified workspace (e.g. ls) */
 typedef structure {
@@ -135,8 +130,7 @@ typedef structure {
 		bool excludeObjects;
 		bool Recursive;
 } list_workspace_contents_params;
-authentication required;
-funcdef list_workspace_contents(list_workspace_contents_params input) returns (list<ObjectMeta> output);
+funcdef list_workspace_contents(list_workspace_contents_params input) returns (list<ObjectMeta> output) authentication required;
 
 /* This function lists the contents of the specified workspace (e.g. ls) */
 typedef structure {
@@ -145,31 +139,27 @@ typedef structure {
 		bool excludeObjects;
 		bool Recursive;
 } list_workspace_hierarchical_contents_params;
-authentication required;
-funcdef list_workspace_hierarchical_contents(list_workspace_hierarchical_contents_params input) returns (mapping<WorkspacePath,list<ObjectMeta>> output);
+funcdef list_workspace_hierarchical_contents(list_workspace_hierarchical_contents_params input) returns (mapping<WorkspacePath,list<ObjectMeta>> output) authentication required;
 
 /* This function lists all workspace volumes accessible by user */
 typedef structure {
 		bool owned_only;
 		bool no_public;
 } list_workspaces_params;
-authentication required;
-funcdef list_workspaces(list_workspaces_params input) returns (list<WorkspaceMeta> output);
+funcdef list_workspaces(list_workspaces_params input) returns (list<WorkspaceMeta> output) authentication required;
 
 /* Provides a list of all objects in all workspaces whose name or workspace or path match the input query */
 typedef structure {
 		mapping<string,string> workspace_query;
 } search_for_workspaces_params;
-authentication required;
-funcdef search_for_workspaces(search_for_workspaces_params input) returns (list<WorkspaceMeta> output);
+funcdef search_for_workspaces(search_for_workspaces_params input) returns (list<WorkspaceMeta> output) authentication required;
 
 /* Provides a list of all objects in all workspaces whose name or workspace or path match the input query */
 typedef structure {
 		mapping<string,string> workspace_query;
 		mapping<string,string> object_query;
 } search_for_workspace_objects_params;
-authentication required;
-funcdef search_for_workspace_objects(search_for_workspace_objects_params input) returns (list<ObjectMeta> output);
+funcdef search_for_workspace_objects(search_for_workspace_objects_params input) returns (list<ObjectMeta> output) authentication required;
 
 /********** REORGANIZATION FUNCTIONS *******************/
 
@@ -178,8 +168,7 @@ typedef structure {
 		WorkspacePath directory;
 		UserMetadata metadata;
 } create_workspace_directory_params;
-authentication required;
-funcdef create_workspace_directory(create_workspace_directory_params input) returns (ObjectMeta output);
+funcdef create_workspace_directory(create_workspace_directory_params input) returns (ObjectMeta output) authentication required;
 
 /* This function copies an object to a new workspace */
 typedef structure {
@@ -187,8 +176,7 @@ typedef structure {
 		bool overwrite;
 		bool recursive;
 } copy_objects_params;
-authentication required;
-funcdef copy_objects(copy_objects_params input) returns (list<ObjectMeta> output);
+funcdef copy_objects(copy_objects_params input) returns (list<ObjectMeta> output) authentication required;
 
 /* This function copies an object to a new workspace */
 typedef structure {
@@ -196,8 +184,7 @@ typedef structure {
 		bool overwrite;
 		bool recursive;
 } move_objects_params;
-authentication required;
-funcdef move_objects(move_objects_params input) returns (list<ObjectMeta> output);
+funcdef move_objects(move_objects_params input) returns (list<ObjectMeta> output) authentication required;
 
 /********** DELETION FUNCTIONS *******************/
 
@@ -205,8 +192,7 @@ funcdef move_objects(move_objects_params input) returns (list<ObjectMeta> output
 typedef structure {
 		WorkspaceName workspace;
 } delete_workspace_params;
-authentication required;
-funcdef delete_workspace(delete_workspace_params input) returns (WorkspaceMeta output);
+funcdef delete_workspace(delete_workspace_params input) returns (WorkspaceMeta output) authentication required;
 
 /* This function deletes an object from a workspace */
 typedef structure {
@@ -214,16 +200,14 @@ typedef structure {
 		bool delete_directories;
 		bool force;
 } delete_objects_params;
-authentication required;
-funcdef delete_objects(delete_objects_params input) returns (list<ObjectMeta> output);
+funcdef delete_objects(delete_objects_params input) returns (list<ObjectMeta> output) authentication required;
 
 /* This function creates a new workspace volume - returns metadata of created workspace */
 typedef structure {
 		WorkspacePath directory;
 		bool force;
 } delete_workspace_directory_params;
-authentication required;
-funcdef delete_workspace_directory(delete_workspace_directory_params input) returns (ObjectMeta output);
+funcdef delete_workspace_directory(delete_workspace_directory_params input) returns (ObjectMeta output) authentication required;
 
 /********** FUNCTIONS RELATED TO SHARING ********************/
 
@@ -232,22 +216,19 @@ typedef structure {
 		WorkspaceName workspace;
 		WorkspacePerm global_permission;
 } reset_global_permission_params;
-authentication required;
-funcdef reset_global_permission(reset_global_permission_params input) returns (WorkspaceMeta output);
+funcdef reset_global_permission(reset_global_permission_params input) returns (WorkspaceMeta output) authentication required;
 
 /* This function gives permissions to a workspace to new users (e.g. chmod) */
 typedef structure {
 		WorkspaceName workspace;
 		list<tuple<Username,WorkspacePerm>> permissions;
 } set_workspace_permissions_params;
-authentication required;
-funcdef set_workspace_permissions(set_workspace_permissions_params input) returns (WorkspaceMeta output);
+funcdef set_workspace_permissions(set_workspace_permissions_params input) returns (WorkspaceMeta output) authentication required;
 
 /* Provides a list of all users who have access to the workspace */
 typedef structure {
 		list<WorkspaceName> workspaces;
 } list_workspace_permissions_params;
-authentication required;
-funcdef list_workspace_permissions(list_workspace_permissions_params input) returns (mapping<string,list<tuple<Username,WorkspacePerm>>> output);
+funcdef list_workspace_permissions(list_workspace_permissions_params input) returns (mapping<string,list<tuple<Username,WorkspacePerm>>> output) authentication required;
 
 };
