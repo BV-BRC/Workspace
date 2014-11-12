@@ -5,7 +5,7 @@ use Data::Dumper;
 use Bio::P3::Workspace::WorkspaceImpl;
 use Bio::KBase::AuthToken;
 use File::Path;
-my $test_count = 17;
+my $test_count = 29;
 
 BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceImpl );
@@ -145,7 +145,7 @@ $output = $ws->list_workspace_contents({
 	excludeObjects => 1,
 	Recursive => 1
 });
-ok defined($output->[1]) && !defined($output->[2]), "Successfully listed workspace contents without objects!";
+ok defined($output->[2]) && !defined($output->[3]), "Successfully listed workspace contents without objects!";
 print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Listing objects hierarchically
@@ -176,7 +176,12 @@ $output = $ws->set_workspace_permissions({
 });
 ok defined($output), "Successfully ran set_workspace_permissions function!";
 print "set_workspace_permissions output:\n".Data::Dumper->Dump($output)."\n\n";
-
+#Listing workspace permission
+$output = $ws->list_workspace_permissions({
+	workspaces => ["/kbasetest2/TestWorkspace"]
+});
+ok defined($output->{"/kbasetest2/TestWorkspace"}->[0]), "Successfully ran list_workspace_permissions function!";
+print "list_workspace_permissions output:\n".Data::Dumper->Dump([$output])."\n\n";
 #Copying workspace object
 $ws->_authenticate($tokenone);
 $output = $ws->copy_objects({
@@ -212,7 +217,44 @@ $output = $ws->move_objects({
 });
 ok defined($output), "Successfully ran move_objects function!";
 print "move_objects output:\n".Data::Dumper->Dump($output)."\n\n";
-exit();
+#Deleting an object
+$ws->_authenticate($tokenone);
+$output = $ws->delete_objects({
+	objects => [["/kbasetest/TestWorkspace/movedir/testdir2/testdir3","testobj"]]
+});
+ok defined($output), "Successfully ran delete_objects function on object!";
+print "delete_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+$output = $ws->delete_objects({
+	objects => [["/kbasetest/TestWorkspace/movedir/testdir2","testdir3"]],
+	delete_directories => 1
+});
+ok defined($output), "Successfully ran delete_objects function on directory!";
+print "delete_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+#Deleting a directory
+$output = $ws->delete_workspace_directory({
+	directory => "/kbasetest/TestWorkspace/movedir",
+	force => 1
+});
+ok defined($output), "Successfully ran delete_workspace_directory function!";
+print "delete_workspace_directory output:\n".Data::Dumper->Dump($output)."\n\n";
+#Creating a directory
+$output = $ws->create_workspace_directory({
+	directory => "/kbasetest/TestWorkspace/emptydir"
+});
+ok defined($output), "Successfully ran create_workspace_directory function!";
+print "create_workspace_directory output:\n".Data::Dumper->Dump($output)."\n\n";
+#Getting an object
+$output = $ws->get_objects({
+	objects => [["/kbasetest/TestWorkspace/testdir/testdir2/testdir3","testobj"]]
+});
+ok defined($output->[0]->{data}), "Successfully ran get_objects function!";
+print "get_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+#Getting an object by reference
+$output = $ws->get_objects_by_reference({
+	objects => [$output->[0]->{info}->[0]]
+});
+ok defined($output->[0]->{data}), "Successfully ran get_objects_by_reference function!";
+print "get_objects_by_reference output:\n".Data::Dumper->Dump($output)."\n\n";
 #Deleting workspaces
 $ws->_authenticate($tokenone);
 $output = $ws->delete_workspace({

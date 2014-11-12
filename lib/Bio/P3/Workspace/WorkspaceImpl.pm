@@ -212,7 +212,7 @@ sub _retrieve_object_data {
 	if ($obj->{directory} == 1) {
 		return {};
 	}
-	my $filename = "/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name};
+	my $filename = $self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name};
 	open (my $fh,"<",$filename);
 	my $data;
 	while (my $line = <$fh>) {
@@ -223,6 +223,9 @@ sub _retrieve_object_data {
 		$data = $JSON->encode($data);
 	}
 	close($fh);
+	if (!defined($data)) {
+		$data = "";
+	}
 	return $data;
 }
 
@@ -350,7 +353,7 @@ sub _delete_object {
 			rmtree($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
 		}
 	} elsif ($obj->{directory} == 0) {
-		$self->_mongodb()->get_collection('objects')->remove({uuid => $ws->{uuid}});
+		$self->_mongodb()->get_collection('objects')->remove({uuid => $obj->{uuid}});
 		if ($deletefile) {
 			unlink($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
 		}
@@ -499,9 +502,9 @@ sub _create_new_object {
     	my $JSON = JSON::XS->new->utf8(1);
 		open (my $fh,">",$self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
 		if (ref($data) eq 'ARRAY' || ref($data) eq 'HASH') {
-			$data = $JSON->encode($data);
-			
+			$data = $JSON->encode($data);	
 		}
+		print $fh $data;
 		close($fh);
 		my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name});
 		$obj->{size} = $size;
@@ -513,19 +516,16 @@ sub _create_new_object {
 sub _save_object_to_db {
 	my ($self,$obj) = @_;
 	my $uuid = Data::UUID->new()->create_str();
-    $obj->{path} =~ s/\/$//;
-	my $origpath = $obj->{path};
-    $obj->{uuid} = $uuid;
+    $obj->{path} =~ s/^\/+//;
+	$obj->{path} =~ s/\/+$//;
+	$obj->{uuid} = $uuid;
     $obj->{creation_date} = DateTime->now()->datetime();
     $obj->{owner} = $self->_getUsername();
     $obj->{autometadata} = {};
     if (!defined($obj->{metadata})) {
     	$obj->{metadata} = {};
     }
-	$obj->{path} =~ s/^\///;
-	$obj->{path} =~ s/\/$//;
 	$self->_mongodb()->get_collection('objects')->insert($obj);
-	$obj->{path} = $origpath;
 	return $obj;
 }
 
@@ -537,6 +537,8 @@ sub _process_raw_object {
 sub _move_object {
 	my ($self,$object,$ws) = @_;
 	$self->_ensure_path_exists($ws,$object->{path},1);
+	$object->{path} =~ s/^\/+//;
+	$object->{path} =~ s/\/+$//;
 	$self->_updateDB("objects",{uuid => $object->{uuid}},{
 		'$set' => {
 			workspace_uuid => $ws->{uuid},
@@ -694,7 +696,6 @@ sub _copy_or_move_objects {
 	    				}
 				    	if ($sobj->{directory} == 0) {
 				    		if ($move == 1) {
-				    			print $self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name}."\n".$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name."\n\n";
 				    			move($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
 				    		} else {
 				    			copy($self->_db_path()."/".$wshash->{$sobj->{workspace_uuid}}->{owner}."/".$wshash->{$sobj->{workspace_uuid}}->{name}."/".$sobj->{path}."/".$sobj->{name},$self->_db_path()."/".$user."/".$workspace."/".$path."/".$name);
@@ -768,6 +769,8 @@ sub new
 	}
 	$self->{_mongodb} = $conn->get_database($params->{"mongodb-database"});
 	$self->{_params} = $params;
+	$self->{_params}->{"db-path"} =~ s/\/\//\//g;
+	$self->{_params}->{"db-path"} =~ s/\/$//g;
     #END_CONSTRUCTOR
 
     if ($self->can('_init_instance'))
@@ -1478,7 +1481,7 @@ sub get_objects_by_reference
 		    });
 			$wscache->{$object->{workspace_uuid}}->{currperm} = $self->_check_ws_permissions($wscache->{$object->{workspace_uuid}},"r",0);
 		}
-		if ($wscache->{$object->{workspace_uuid}} == 1) {
+		if ($wscache->{$object->{workspace_uuid}}->{currperm} == 1) {
 			push(@{$output},{
 				info => $self->_generate_object_meta($object,$wscache->{$object->{workspace_uuid}}),
 				data => $self->_retrieve_object_data($object,$wscache->{$object->{workspace_uuid}})
@@ -2297,7 +2300,7 @@ sub create_workspace_directory
     });
     $self->_check_ws_permissions($ws,"w");
     ($path,my $name) = $self->_parse_directory_name($path);
-    my $obj = $self->_create_new_object({
+    my $obj = $self->_create_new_object($ws,{
 		directory => 1,
 		workspace_uuid => $ws->{uuid},
 		workspace_owner => $ws->{owner},
@@ -3016,7 +3019,7 @@ sub delete_workspace_directory
     if ($input->{force} == 0 && $self->_count_directory_contents($obj,0) > 0) {
     	$self->_error("Deleting a non-empty directory, and force flag was not set!");
     }
-    $self->_delete_directory($obj);
+    $self->_delete_object($obj,$ws,1,1); 
     $output = $self->_generate_object_meta($obj,$ws);
     #END delete_workspace_directory
     my @_bad_returns;
