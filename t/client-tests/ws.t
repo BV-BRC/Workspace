@@ -19,7 +19,12 @@ my $url = "http://" . $cfg->param('workspace.service-host') .
 	  ":" . $cfg->param('workspace.service-port');
 
 ok(system("curl -h > /dev/null 2>&1") == 0, "curl is installed");
+ok(system("kbase-login > /dev/null 2>&1") == 0, "kbase-login is installed");
+ok(system("kbase-logout > /dev/null 2>&1") == 0, "kbase-logout is installed");
+
 ok(system("curl $url > /dev/null 2>&1") == 0, "$url is reachable");
+ok(system("kbase-login kbasetest -p @Suite525 > /dev/null 2>&1")==0, "user can log in");
+ok(system("kbase-logout > /dev/null 2>&1")==0, "kbase-logout is installed");
 
 BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceClient );
@@ -53,13 +58,16 @@ can_ok("Bio::P3::Workspace::WorkspaceClient", qw(
 # create a client
 isa_ok ($obj = Bio::P3::Workspace::WorkspaceClient->new(), Bio::P3::Workspace::WorkspaceClient);
 
-# create a workspace
-# funcdef create_workspace(WorkspaceName workspace,WorkspacePerm permission,UserMetadata metadata) returns (WorkspaceMeta output);
-$workspace = "brettin";
-$permission = "a";
-$metadata = {}; 
+# create a workspace without auth
+$create_workspace_params = {
+	workspace => "brettin",
+	permission => "a",
+	metadata => {'owner' => 'brettin'}, 
+};
 
-ok($output = $obj->create_workspace($workspace, $permission, $metadata), "create_workspace returns defined");
+ok($output = $obj->create_workspace($create_workspace_params), "create_workspace returns defined");
+
+# create a workspace with auth
 
 # add an object to a workspace
 
