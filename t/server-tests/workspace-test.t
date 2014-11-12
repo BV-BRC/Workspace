@@ -61,50 +61,169 @@ can_ok("Bio::P3::Workspace::WorkspaceImpl", qw(
 );
 
 #Creating a private workspace as "kbasetest"
-my $output = $ws->create_workspace("TestWorkspace","n",{description => "My first workspace!"});
+my $output = $ws->create_workspace({
+	workspace => "TestWorkspace",
+	permission => "n",
+	metadata => {description => "My first workspace!"}
+});
 ok defined($output), "Successfully ran create_workspace function!";
 print "create_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 
 $ws->_authenticate($tokentwo);
 
 #Creating a public workspace as "kbasetest2"
-$output = $ws->create_workspace("TestWorkspace","r",{description => "My first workspace!"});
+$output = $ws->create_workspace({
+	workspace => "TestWorkspace",
+	permission => "r",
+	metadata => {description => "My first workspace!"}
+});
 ok defined($output), "Successfully ran create_workspace function!";
 print "create_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Listing workspaces as "kbasetest2"
-$output = $ws->list_workspaces();
+$output = $ws->list_workspaces({});
 ok defined($output->[0]) && !defined($output->[1]), "Successfully ran list_workspaces function on got one workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
 $ws->_authenticate($tokenone);
 
 #Listing workspaces as "kbasetest"
-$output = $ws->list_workspaces();
+$output = $ws->list_workspaces({});
 ok defined($output->[1]), "Successfully ran list_workspaces function on got two workspaces back!";
 print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Listing workspaces as "kbasetest" but restricting to owned only
-$output = $ws->list_workspaces(1);
+$output = $ws->list_workspaces({
+	owned_only => 1
+});
 ok defined($output->[0]) && !defined($output->[1]), "Successfully ran list_workspaces unction and got one workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Listing workspaces as "kbasetest" but restricting to private only
-$output = $ws->list_workspaces(0,1);
+$output = $ws->list_workspaces({
+	owned_only => 0,
+	no_public => 1
+});
 ok defined($output->[0]) && !defined($output->[1]), "Successfully ran list_workspaces unction and got one workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Saving an object
-$output = $ws->save_objects([["/kbasetest/TestWorkspace/testdir/","testobj","my test object data","String",{"Description" => "My first object!"}]]);
+$output = $ws->save_objects({
+	objects => [["/kbasetest/TestWorkspace/testdir/testdir2/testdir3/","testobj","my test object data","String",{"Description" => "My first object!"}]]
+});
 ok defined($output->[0]), "Successfully ran save_objects action!";
-print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
+print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
+#Listing objects
+$output = $ws->list_workspace_contents({
+	directory => "/kbasetest/TestWorkspace/testdir/testdir2",
+	includeSubDirectories => 1,
+	excludeObjects => 0,
+	Recursive => 1
+});
+ok defined($output->[1]), "Successfully listed all workspace contents!";
+print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
+$output = $ws->list_workspace_contents({
+	directory => "/kbasetest/TestWorkspace",
+	includeSubDirectories => 1,
+	excludeObjects => 0,
+	Recursive => 0
+});
+ok defined($output->[0]) && !defined($output->[1]), "Successfuly listed workspace contents nonrecursively!";
+print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
+$output = $ws->list_workspace_contents({
+	directory => "/kbasetest/TestWorkspace",
+	includeSubDirectories => 0,
+	excludeObjects => 0,
+	Recursive => 1
+});
+ok defined($output->[0]) && !defined($output->[1]), "Successfully listed workspace contents without directories!";
+print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
+$output = $ws->list_workspace_contents({
+	directory => "/kbasetest/TestWorkspace",
+	includeSubDirectories => 1,
+	excludeObjects => 1,
+	Recursive => 1
+});
+ok defined($output->[1]) && !defined($output->[2]), "Successfully listed workspace contents without objects!";
+print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Listing objects hierarchically
+$output = $ws->list_workspace_hierarchical_contents({
+	directory => "/kbasetest/TestWorkspace",
+	includeSubDirectories => 1,
+	excludeObjects => 0,
+	Recursive => 1
+});
+ok defined($output->{"/kbasetest/TestWorkspace"}) && defined($output->{"/kbasetest/TestWorkspace/testdir"}), "Successfully listed workspace contents hierarchically!";
+print "list_workspace_hierarchical_contents output:\n".Data::Dumper->Dump([$output])."\n\n";
+
+#Copying workspace object
+$output = undef;
+eval {
+$output = $ws->copy_objects({
+	objects => [["/kbasetest/TestWorkspace","testdir","/kbasetest2/TestWorkspace","copydir"]],
+	recursive => 1
+});
+};
+ok !defined($output), "Copying to a read only workspace fails!";
+
+#Changing workspace permissions
+$ws->_authenticate($tokentwo);
+$output = $ws->set_workspace_permissions({
+	workspace => "TestWorkspace",
+	permissions => [["kbasetest","w"]]
+});
+ok defined($output), "Successfully ran set_workspace_permissions function!";
+print "set_workspace_permissions output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Copying workspace object
+$ws->_authenticate($tokenone);
+$output = $ws->copy_objects({
+	objects => [["/kbasetest/TestWorkspace","testdir","/kbasetest2/TestWorkspace","copydir"]],
+	recursive => 1
+});
+ok defined($output), "Successfully ran copy_objects function!";
+print "copy_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Listing contents of workspace with copied objects
+$output = $ws->list_workspace_contents({
+	directory => "/kbasetest2/TestWorkspace",
+	includeSubDirectories => 1,
+	excludeObjects => 0,
+	Recursive => 1
+});
+ok defined($output->[1]), "Successfully listed workspace contents!";
+print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Changing global workspace permissions
+$output = $ws->reset_global_permission({
+	workspace => "/kbasetest/TestWorkspace",
+	global_permission => "w"
+});
+ok defined($output), "Successfully changed global permissions!";
+print "reset_global_permission output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Moving objects
+$ws->_authenticate($tokentwo);
+$output = $ws->move_objects({
+	objects => [["/kbasetest2/TestWorkspace","copydir","/kbasetest/TestWorkspace","movedir"]],
+	recursive => 1
+});
+ok defined($output), "Successfully ran move_objects function!";
+print "move_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+exit();
 #Deleting workspaces
-$output = $ws->delete_workspace("/kbasetest/TestWorkspace");
+$ws->_authenticate($tokenone);
+$output = $ws->delete_workspace({
+	workspace => "/kbasetest/TestWorkspace"
+});
 ok defined($output), "Successfully ran delete_workspace function!";
 print "delete_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 $ws->_authenticate($tokentwo);
-$output = $ws->delete_workspace("TestWorkspace");
+$output = $ws->delete_workspace({
+	workspace => "TestWorkspace"
+});
 ok defined($output), "Successfully ran delete_workspace function!";
 print "delete_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 

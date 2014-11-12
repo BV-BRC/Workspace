@@ -27,7 +27,7 @@ class Workspace:
         #END_CONSTRUCTOR
         pass
 
-    def create_workspace(self, ctx, workspace, permission, metadata):
+    def create_workspace(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN create_workspace
@@ -40,7 +40,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def save_objects(self, ctx, objects, overwrite):
+    def save_objects(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN save_objects
@@ -53,7 +53,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def create_upload_node(self, ctx, objects, overwrite):
+    def create_upload_node(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN create_upload_node
@@ -66,7 +66,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def get_objects(self, ctx, objects):
+    def get_objects(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN get_objects
@@ -79,7 +79,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def get_objects_by_reference(self, ctx, objects):
+    def get_objects_by_reference(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN get_objects_by_reference
@@ -92,7 +92,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def list_workspace_contents(self, ctx, directory, includeSubDirectories, excludeObjects, Recursive):
+    def list_workspace_contents(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN list_workspace_contents
@@ -105,7 +105,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def list_workspace_hierarchical_contents(self, ctx, directory, includeSubDirectories, excludeObjects, Recursive):
+    def list_workspace_hierarchical_contents(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN list_workspace_hierarchical_contents
@@ -118,7 +118,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def list_workspaces(self, ctx, owned_only, no_public):
+    def list_workspaces(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN list_workspaces
@@ -131,7 +131,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def search_for_workspaces(self, ctx, query):
+    def search_for_workspaces(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN search_for_workspaces
@@ -144,7 +144,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def search_for_workspace_objects(self, ctx, query):
+    def search_for_workspace_objects(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN search_for_workspace_objects
@@ -157,7 +157,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def create_workspace_directory(self, ctx, directory, metadata):
+    def create_workspace_directory(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN create_workspace_directory
@@ -170,7 +170,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def copy_objects(self, ctx, objects, overwrite, recursive):
+    def copy_objects(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN copy_objects
@@ -183,7 +183,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def move_objects(self, ctx, objects, overwrite, recursive):
+    def move_objects(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN move_objects
@@ -196,7 +196,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def delete_workspace(self, ctx, workspace):
+    def delete_workspace(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN delete_workspace
@@ -209,7 +209,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def delete_objects(self, ctx, objects, delete_directories, force):
+    def delete_objects(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN delete_objects
@@ -222,7 +222,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def delete_workspace_directory(self, ctx, directory, force):
+    def delete_workspace_directory(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN delete_workspace_directory
@@ -235,7 +235,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def reset_global_permission(self, ctx, workspace, global_permission):
+    def reset_global_permission(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN reset_global_permission
@@ -248,7 +248,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def set_workspace_permissions(self, ctx, workspace, permissions):
+    def set_workspace_permissions(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN set_workspace_permissions
@@ -261,7 +261,7 @@ class Workspace:
         # return the results
         return [output]
 
-    def list_workspace_permissions(self, ctx, workspaces):
+    def list_workspace_permissions(self, ctx, input):
         # ctx is the context object
         # return variables are: output
         #BEGIN list_workspace_permissions

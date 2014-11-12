@@ -89,68 +89,147 @@ typedef structure {
 /********** DATA LOAD FUNCTIONS ********************/
 
 /* This function creates a new workspace volume - returns metadata of created workspace */
-funcdef create_workspace(WorkspaceName workspace,WorkspacePerm permission,UserMetadata metadata) returns (WorkspaceMeta output);
+typedef structure {
+		WorkspaceName workspace;
+		WorkspacePerm permission;
+		UserMetadata metadata;
+} create_workspace_params;
+funcdef create_workspace(create_workspace_params input) returns (WorkspaceMeta output);
 
 /* This function receives a list of objects, names, and types and stores the objects in the workspace */
-funcdef save_objects(list<tuple<WorkspacePath,ObjectName,ObjectData,ObjectType,UserMetadata>> objects,bool overwrite) returns (list<ObjectMeta> output);
+typedef structure {
+		list<tuple<WorkspacePath,ObjectName,ObjectData,ObjectType,UserMetadata>> objects;
+		bool overwrite;
+} save_objects_params;
+funcdef save_objects(save_objects_params input) returns (list<ObjectMeta> output);
 
 /* This function creates a node in shock that the user can upload to and links this node to a workspace */
-funcdef create_upload_node(list<tuple<WorkspacePath,ObjectName,ObjectType>> objects,bool overwrite) returns (list<string> output);
+typedef structure {
+		list<tuple<WorkspacePath,ObjectName,ObjectType>> objects;
+		bool overwrite;
+} create_upload_node_params;
+funcdef create_upload_node(create_upload_node_params input) returns (list<string> output);
 
 /********** DATA RETRIEVAL FUNCTIONS ********************/
 
 /* This function retrieves a list of objects from the workspace */
-funcdef get_objects(list<tuple<WorkspacePath,ObjectName>> objects) returns (list<ObjectDataInfo> output);
+typedef structure {
+		list<tuple<WorkspacePath,ObjectName>> objects;
+} get_objects_params;
+funcdef get_objects(get_objects_params input) returns (list<ObjectDataInfo> output);
 
 /* This function retrieves a list of objects from the workspace */
-funcdef get_objects_by_reference(list<ObjectID> objects) returns (list<ObjectDataInfo> output);
+typedef structure {
+		list<ObjectID> objects;
+} get_objects_by_reference_params;
+funcdef get_objects_by_reference(get_objects_by_reference_params input) returns (list<ObjectDataInfo> output);
 
 /* This function lists the contents of the specified workspace (e.g. ls) */
-funcdef list_workspace_contents(WorkspacePath directory,bool includeSubDirectories,bool excludeObjects,bool Recursive) returns (list<ObjectMeta> output);
+typedef structure {
+		WorkspacePath directory;
+		bool includeSubDirectories;
+		bool excludeObjects;
+		bool Recursive;
+} list_workspace_contents_params;
+funcdef list_workspace_contents(list_workspace_contents_params input) returns (list<ObjectMeta> output);
 
 /* This function lists the contents of the specified workspace (e.g. ls) */
-funcdef list_workspace_hierarchical_contents(WorkspacePath directory,bool includeSubDirectories,bool excludeObjects,bool Recursive) returns (mapping<WorkspacePath,list<ObjectMeta>> output);
+typedef structure {
+		WorkspacePath directory;
+		bool includeSubDirectories;
+		bool excludeObjects;
+		bool Recursive;
+} list_workspace_hierarchical_contents_params;
+funcdef list_workspace_hierarchical_contents(list_workspace_hierarchical_contents_params input) returns (mapping<WorkspacePath,list<ObjectMeta>> output);
 
 /* This function lists all workspace volumes accessible by user */
-funcdef list_workspaces(bool owned_only,bool no_public) returns (list<WorkspaceMeta> output);
+typedef structure {
+		bool owned_only;
+		bool no_public;
+} list_workspaces_params;
+funcdef list_workspaces(list_workspaces_params input) returns (list<WorkspaceMeta> output);
 
 /* Provides a list of all objects in all workspaces whose name or workspace or path match the input query */
-funcdef search_for_workspaces(mapping<string,string> query) returns (list<WorkspaceMeta> output);
+typedef structure {
+		mapping<string,string> workspace_query;
+} search_for_workspaces_params;
+funcdef search_for_workspaces(search_for_workspaces_params input) returns (list<WorkspaceMeta> output);
 
 /* Provides a list of all objects in all workspaces whose name or workspace or path match the input query */
-funcdef search_for_workspace_objects(mapping<string,string> query) returns (list<ObjectMeta> output);
+typedef structure {
+		mapping<string,string> workspace_query;
+		mapping<string,string> object_query;
+} search_for_workspace_objects_params;
+funcdef search_for_workspace_objects(search_for_workspace_objects_params input) returns (list<ObjectMeta> output);
 
 /********** REORGANIZATION FUNCTIONS *******************/
 
 /* This function creates a new workspace volume - returns metadata of created workspace */
-funcdef create_workspace_directory(WorkspacePath directory,UserMetadata metadata) returns (ObjectMeta output);
+typedef structure {
+		WorkspacePath directory;
+		UserMetadata metadata;
+} create_workspace_directory_params;
+funcdef create_workspace_directory(create_workspace_directory_params input) returns (ObjectMeta output);
 
 /* This function copies an object to a new workspace */
-funcdef copy_objects(list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>> objects,bool overwrite,bool recursive) returns (list<ObjectMeta> output);
+typedef structure {
+		list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>> objects;
+		bool overwrite;
+		bool recursive;
+} copy_objects_params;
+funcdef copy_objects(copy_objects_params input) returns (list<ObjectMeta> output);
 
 /* This function copies an object to a new workspace */
-funcdef move_objects(list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>> objects,bool overwrite,bool recursive) returns (list<ObjectMeta> output);
+typedef structure {
+		list<tuple<WorkspacePath source,ObjectName origname,WorkspacePath destination,ObjectName newname>> objects;
+		bool overwrite;
+		bool recursive;
+} move_objects_params;
+funcdef move_objects(move_objects_params input) returns (list<ObjectMeta> output);
 
 /********** DELETION FUNCTIONS *******************/
 
 /* This function deletes an entire workspace (e.g. rm -rf) - returns metadata of deleted workspace */
-funcdef delete_workspace(WorkspaceName workspace) returns (WorkspaceMeta output);
+typedef structure {
+		WorkspaceName workspace;
+} delete_workspace_params;
+funcdef delete_workspace(delete_workspace_params input) returns (WorkspaceMeta output);
 
 /* This function deletes an object from a workspace */
-funcdef delete_objects(list<tuple<WorkspacePath,ObjectName>> objects,bool delete_directories,bool force) returns (list<ObjectMeta> output);
+typedef structure {
+		list<tuple<WorkspacePath,ObjectName>> objects;
+		bool delete_directories;
+		bool force;
+} delete_objects_params;
+funcdef delete_objects(delete_objects_params input) returns (list<ObjectMeta> output);
 
 /* This function creates a new workspace volume - returns metadata of created workspace */
-funcdef delete_workspace_directory(WorkspacePath directory,bool force) returns (ObjectMeta output);
+typedef structure {
+		WorkspacePath directory;
+		bool force;
+} delete_workspace_directory_params;
+funcdef delete_workspace_directory(delete_workspace_directory_params input) returns (ObjectMeta output);
 
 /********** FUNCTIONS RELATED TO SHARING ********************/
 
 /* This function resets the global permission of a workspace to the input value */
-funcdef reset_global_permission(WorkspaceName workspace,WorkspacePerm global_permission) returns (WorkspaceMeta output);
+typedef structure {
+		WorkspaceName workspace;
+		WorkspacePerm global_permission;
+} reset_global_permission_params;
+funcdef reset_global_permission(reset_global_permission_params input) returns (WorkspaceMeta output);
 
 /* This function gives permissions to a workspace to new users (e.g. chmod) */
-funcdef set_workspace_permissions(WorkspaceName workspace,list<tuple<Username,WorkspacePerm>> permissions) returns (WorkspaceMeta output);
+typedef structure {
+		WorkspaceName workspace;
+		list<tuple<Username,WorkspacePerm>> permissions;
+} set_workspace_permissions_params;
+funcdef set_workspace_permissions(set_workspace_permissions_params input) returns (WorkspaceMeta output);
 
 /* Provides a list of all users who have access to the workspace */
-funcdef list_workspace_permissions(list<WorkspaceName> workspaces) returns (mapping<string,list<tuple<Username,WorkspacePerm>>> output);
+typedef structure {
+		list<WorkspaceName> workspaces;
+} list_workspace_permissions_params;
+funcdef list_workspace_permissions(list_workspace_permissions_params input) returns (mapping<string,list<tuple<Username,WorkspacePerm>>> output);
 
 };
