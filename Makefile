@@ -58,11 +58,11 @@ compile-typespec: Makefile
 	mkdir -p lib/javascript/$(SERVICE_NAME)
 	compile_typespec \
 		--psgi $(SERVICE_PSGI_FILE) \
-		--impl Bio::KBase::$(SERVICE_NAME)::%sImpl \
-		--service Bio::KBase::$(SERVICE_NAME)::Service \
-		--client Bio::KBase::$(SERVICE_NAME)::%sClient \
-		--py biop3/$(SERVICE_NAME_PY)/%sClient \
-		--js javascript/$(SERVICE_NAME)/%sClient \
+		--impl Bio::P3::$(SERVICE_NAME)::$(SERVICE_NAME)Impl \
+		--service Bio::P3::$(SERVICE_NAME)::Service \
+		--client Bio::P3::$(SERVICE_NAME)::$(SERVICE_NAME)Client \
+		--py biop3/$(SERVICE_NAME_PY)/$(SERVICE_NAME)Client \
+		--js javascript/$(SERVICE_NAME)/$(SERVICE_NAME)Client \
 		--url $(SERVICE_URL) \
 		$(SERVER_SPEC) lib
 	-rm -f lib/$(SERVER_MODULE)Server.py
