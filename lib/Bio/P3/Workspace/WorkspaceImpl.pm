@@ -1974,7 +1974,7 @@ sub list_workspaces
 $input is a search_for_workspaces_params
 $output is a reference to a list where each element is a WorkspaceMeta
 search_for_workspaces_params is a reference to a hash where the following keys are defined:
-	query has a value which is a reference to a hash where the key is a string and the value is a string
+	workspace_query has a value which is a reference to a hash where the key is a string and the value is a string
 WorkspaceMeta is a reference to a list containing 9 items:
 	0: a WorkspaceID
 	1: a WorkspaceName
@@ -2001,7 +2001,7 @@ UserMetadata is a reference to a hash where the key is a string and the value is
 $input is a search_for_workspaces_params
 $output is a reference to a list where each element is a WorkspaceMeta
 search_for_workspaces_params is a reference to a hash where the following keys are defined:
-	query has a value which is a reference to a hash where the key is a string and the value is a string
+	workspace_query has a value which is a reference to a hash where the key is a string and the value is a string
 WorkspaceMeta is a reference to a list containing 9 items:
 	0: a WorkspaceID
 	1: a WorkspaceName
@@ -4390,7 +4390,7 @@ Provides a list of all objects in all workspaces whose name or workspace or path
 
 <pre>
 a reference to a hash where the following keys are defined:
-query has a value which is a reference to a hash where the key is a string and the value is a string
+workspace_query has a value which is a reference to a hash where the key is a string and the value is a string
 
 </pre>
 
@@ -4399,7 +4399,7 @@ query has a value which is a reference to a hash where the key is a string and t
 =begin text
 
 a reference to a hash where the following keys are defined:
-query has a value which is a reference to a hash where the key is a string and the value is a string
+workspace_query has a value which is a reference to a hash where the key is a string and the value is a string
 
 
 =end text
