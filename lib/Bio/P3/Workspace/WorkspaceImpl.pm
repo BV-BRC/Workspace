@@ -19,6 +19,9 @@ Workspace
 use File::Path;
 use File::Copy;
 use Data::UUID;
+use Log::Log4perl qw(:easy);
+use MongoDB::Connection;
+Log::Log4perl->easy_init($DEBUG);
 
 sub _authentication {
 	my($self) = @_;
