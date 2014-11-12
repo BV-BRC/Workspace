@@ -739,12 +739,15 @@ sub new
 			$c->read($e);
 			for my $p (@{$paramlist}) {
 			  	my $v = $c->param("$service.$p");
-			    if ($v && !defined($params)) {
+			    if ($v && !defined($params->{$p})) {
 					$params->{$p} = $v;
+					if ($v eq "null") {
+						$params->{$p} = undef;
+					}
 			    }
 			}
 		}
-    }
+    }    
 	$params = $self->_validateargs($params,["db-path",],{
 		"mongodb-host" => "localhost",
 		"mongodb-database" => "P3Workspace",
