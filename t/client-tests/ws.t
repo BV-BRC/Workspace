@@ -1,7 +1,12 @@
+use strict vars;
 use Test::More;
+use Test::Exception;
 use Config::Simple;
 use JSON;
 use Data::Dumper;
+use UUID;
+
+my($cfg, $url, );
 
 if (defined $ENV{KB_DEPLOYMENT_CONFIG} && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
     $cfg = new Config::Simple($ENV{KB_DEPLOYMENT_CONFIG}) or
@@ -15,16 +20,11 @@ else {
     pass "using hardcoded Config values";
 }
 
-my $url = "http://" . $cfg->param('workspace.service-host') . 
+$url = "http://" . $cfg->param('workspace.service-host') . 
 	  ":" . $cfg->param('workspace.service-port');
 
 ok(system("curl -h > /dev/null 2>&1") == 0, "curl is installed");
-ok(system("kbase-login > /dev/null 2>&1") == 0, "kbase-login is installed");
-ok(system("kbase-logout > /dev/null 2>&1") == 0, "kbase-logout is installed");
-
 ok(system("curl $url > /dev/null 2>&1") == 0, "$url is reachable");
-ok(system("kbase-login kbasetest -p @Suite525 > /dev/null 2>&1")==0, "user can log in");
-ok(system("kbase-logout > /dev/null 2>&1")==0, "kbase-logout is installed");
 
 BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceClient );
@@ -56,22 +56,34 @@ can_ok("Bio::P3::Workspace::WorkspaceClient", qw(
 );
 
 # create a client
+my $obj;
 isa_ok ($obj = Bio::P3::Workspace::WorkspaceClient->new(), Bio::P3::Workspace::WorkspaceClient);
 
-# create a workspace without auth
-$create_workspace_params = {
-	workspace => "brettin",
+# create a random workspace name
+my($uuid, $string);
+UUID::generate($uuid);
+UUID::unparse($uuid, $string);
+my $workspace = 'brettin-' . $string;
+
+# create the create_workspace_params
+my $create_workspace_params = {
+	workspace => $workspace,
 	permission => "a",
 	metadata => {'owner' => 'brettin'}, 
 };
 
-ok($output = $obj->create_workspace($create_workspace_params), "create_workspace returns defined");
+# create a workspace
+my $output;
+ok($output = $obj->create_workspace($create_workspace_params), "auth user can call create workspace");
 
-# create a workspace with auth
+
 
 # add an object to a workspace
 
 
 # delete an object from a workspace
+
+
+# delete a workspace
 
 
