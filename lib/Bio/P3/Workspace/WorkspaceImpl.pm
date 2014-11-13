@@ -39,24 +39,33 @@ sub _getUsername {
 		if (defined($self->{_testuser})) {
 			$self->_getContext->{_override}->{_currentUser} = $self->{_testuser};
 		} else {
-			$self->_getContext->{_override}->{_currentUser} = "public";
+			$self->_authenticate();
 		}
-		
+		if ($self->_getContext->{_override}->{_currentUser}) {
+			$self->_error("Workspace functions cannot be run without an authenticated or test user!")
+		}
 	}
 	return $self->_getContext->{_override}->{_currentUser};
 }
 
 sub _authenticate {
 	my ($self,$auth) = @_;
-	require "Bio/KBase/AuthToken.pm";
-	my $token = Bio::KBase::AuthToken->new(
-		token => $auth,
-	);
-	if ($token->validate()) {
-		$self->_getContext()->{_override}->{_authentication} = $auth;
-		$self->_getContext()->{_override}->{_currentUser} = $token->user_id;
-	} else {
-		$self->_error("Invalid authorization token:".$auth,'_setContext');
+	if (!defined($auth)) {
+		if (defined($self->_getContext()->{token})) {
+			$auth = $self->_getContext()->{token};
+		}
+	}
+	if (defined($auth)) {
+		require "Bio/KBase/AuthToken.pm";
+		my $token = Bio::KBase::AuthToken->new(
+			token => $auth,
+		);
+		if ($token->validate()) {
+			$self->_getContext()->{_override}->{_authentication} = $auth;
+			$self->_getContext()->{_override}->{_currentUser} = $token->user_id;
+		} else {
+			$self->_error("Invalid authorization token:".$auth,'_setContext');
+		}
 	}
 }
 
