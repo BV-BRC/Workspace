@@ -4,7 +4,7 @@ set -e
 MODULE=workspace
 SERVICE=Workspace
 
-DEV_CONTAINER=/home/ubuntu/dev_container
+DEV_CONTAINER=/disks/p3/dev_container
 AUTO_DEPLOY_CFG=auto-deploy.cfg
 
 
@@ -21,13 +21,13 @@ perl auto-deploy $AUTO_DEPLOY_CFG -module $MODULE
 
 set +e
 echo "stopping service"
-/kb/deployment/services/$SERVICE/stop_service
+/disks/p3/deployment/services/$SERVICE/stop_service
 set -e
 
 sleep 5 
 
 echo "starting service"
-/kb/deployment/services/$SERVICE/start_service
+/disks/p3/deployment/services/$SERVICE/start_service
 
 sleep 5
 
