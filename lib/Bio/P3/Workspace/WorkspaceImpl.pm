@@ -80,6 +80,10 @@ sub _getUsername {
 		}
 
 	}
+	DEBUG "in _getUsername";
+	DEBUG ref $self->_getContext;
+	DEBUG "currentUser: " .$self->_getContext->{user_id};
+	DEBUG "override currentUser: " . $self->_getContext->{_override}->{_currentUser}; 
 	return $self->_getContext->{_override}->{_currentUser};
 }
 
@@ -143,6 +147,10 @@ sub _authenticate {
 # if the value is not already set.
 sub _getContext {
 	my ($self) = @_;
+
+	DEBUG "in _getContext";
+	DEBUG ref $Bio::P3::Workspace::Server::CallContext;
+	DEBUG join (", ", keys %{$Bio::P3::Workspace::Server::CallContext});
 
 	# If the CallContext is not defined, then define an empty one.
 	if (!defined($Bio::P3::Workspace::Server::CallContext)) {
@@ -257,6 +265,7 @@ sub _get_db_ws {
 			$query->{name} = $1;
 		}
 	}
+	DEBUG "running query with owner = $query->{owner}";
 	my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
 	my $object = $cursor->next;
 	if (!defined($object)) {
@@ -361,6 +370,7 @@ sub _unescape_username {
 sub _get_ws_permission {
 	my ($self,$wsobj) = @_;
 	my $curruser = $self->_escape_username($self->_getUsername());
+	DEBUG "curruser = $curruser";
 	if ($wsobj->{owner} eq $curruser) {
 		return "o";
 	}
@@ -811,6 +821,10 @@ sub new
     };
     bless $self, $class;
     #BEGIN_CONSTRUCTOR
+	# This fails, I do not understand why!
+	# my $ctx = $Bio::P3::Workspace::Service::CallContext or die "could not get ctx";
+	# Dumper $ctx;
+
     my $params = $args[0];
     my $paramlist = [qw(
     	shock-url
