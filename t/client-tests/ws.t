@@ -86,15 +86,15 @@ ok($output = $obj->create_workspace($create_workspace_params), "auth user can ca
 my $output;
 
 my $list_workspaces_params = {owned_only => 1, no_public => 1};
-ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list workspaces");
+ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list owned_only, no_public workspaces");
 print_output($output);
 
 $list_workspaces_params = {owned_only => 1, no_public => 0};
-ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list workspaces");
+ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list owned_only workspaces");
 print_output($output);
 
 $list_workspaces_params = {owned_only => 0, no_public => 1};
-ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list workspaces");
+ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can no_public  workspaces");
 print_output($output);
 
 $list_workspaces_params = {owned_only => 0, no_public => 0};
