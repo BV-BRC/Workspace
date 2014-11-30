@@ -1,7 +1,6 @@
 #!/bin/bash
 set -e
 
-MODULE=workspace
 SERVICE=Workspace
 
 DEV_CONTAINER=/disks/p3/dev_container
@@ -11,13 +10,13 @@ AUTO_DEPLOY_CFG=auto-deploy.cfg
 pushd $DEV_CONTAINER
 . user-env.sh
 
-pushd modules/$MODULE
+pushd modules/$SERVICE
 
 make
 
 popd
 
-perl auto-deploy $AUTO_DEPLOY_CFG -module $MODULE
+perl auto-deploy $AUTO_DEPLOY_CFG -module $SERVICE
 
 set +e
 echo "stopping service"
@@ -31,5 +30,5 @@ echo "starting service"
 
 sleep 5
 
-pushd modules/$MODULE
+pushd modules/$SERVICE
 make test
