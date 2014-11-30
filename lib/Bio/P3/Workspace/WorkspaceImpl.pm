@@ -100,7 +100,7 @@ sub _authenticate {
 
 
 	# if the zero arguement version or the one arguement version (POSSIBLE BUG)
-`	# so why the if statement? Well, if the CallContext does not contain a token
+	# so why the if statement? Well, if the CallContext does not contain a token
 	# then $auth will not be defined and this sub will return nothing (false).
 
 	# the auth value can be set in one of two ways. It was passed in, or it was
