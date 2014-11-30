@@ -76,6 +76,26 @@ my $create_workspace_params = {
 my $output;
 ok($output = $obj->create_workspace($create_workspace_params), "auth user can call create workspace");
 
+# list my workspaces
+# funcdef list_workspaces(list_workspaces_params input)
+#    returns (list<WorkspaceMeta> output)
+#    authentication required;
+my $list_workspaces_params = {};
+my $output;
+ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list workspaces");
+
+print ref($output), "\n";
+foreach my $mt (@{$output}) {
+	print "WorkspaceID: $mt->[0]\n";
+	print "WorkspaceName: $mt->[1]\n";
+	print "Username: $mt->[2]\n";
+	print "timestamp: $mt->[3]\n";
+	print "num_objects: $mt->[4]\n";
+	print "user_permission: ", ref($mt->[5]), "\n";
+	print "global_permission: ", ref($mt->[6]), "\n";
+	print "num_directories: $mt->[7]\n";
+	print "UserMetadata: $mt->[8]\n";
+}
 
 
 # add an object to a workspace
