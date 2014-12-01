@@ -195,6 +195,9 @@ sub _validateargs {
 			}
 		}
 	}
+
+	#     $input = $self->_validateargs($input,["workspace"],{});
+	#     from line 2804
 	if (defined($args->{_error})) {
 		$self->_error("Mandatory arguments ".join("; ",@{$args->{_error}})." missing.");
 	}
@@ -2801,7 +2804,7 @@ sub delete_workspace
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN delete_workspace
-    $input = $self->_validateargs($input,["workspace"],{});
+    $input = $self->_validateargs($input,["WorkspaceName"],{});
     my $ws = $self->_get_db_ws({
     	raw_id => $input->{workspace}
     });
