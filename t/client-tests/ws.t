@@ -59,18 +59,18 @@ can_ok("Bio::P3::Workspace::WorkspaceClient", qw(
 my $obj;
 isa_ok ($obj = Bio::P3::Workspace::WorkspaceClient->new(), Bio::P3::Workspace::WorkspaceClient);
 
-# create a workspace for each permission value
+# create a workspace for each permission value and then delete it
 my $perms = {'w' => 'write', 'r' => 'read', 'a' => 'admin', 'n' => 'none' };
 foreach my $perm (sort keys %$perms) {
 
 	my $create_workspace_params = {
-        	workspace => new_uuid(),
+        	workspace => new_uuid("brettin"),
         	permission => $perm,
         	metadata => {'owner' => 'brettin'},
 	};
 
 	my $output;
-	ok($output = $obj->create_workspace($create_workspace_params), "can create workspace with $perm permission");
+	ok($output = $obj->create_workspace($create_workspace_params), "can create workspace with perm=$perm");
 
 	my $list_workspaces_params = {owned_only => 1, no_public => 1};
 	ok($output = $obj->list_workspaces($list_workspaces_params), "can list owned_only, no_public workspaces perm=$perm");
@@ -95,8 +95,28 @@ foreach my $perm (sort keys %$perms) {
 }
 
 
+# create_workspace_directory
+# create a workspace for each permission value and then delete it
+my $perms = {'w' => 'write', 'r' => 'read', 'a' => 'admin', 'n' => 'none' };
+foreach my $perm (sort keys %$perms) {
+	my $cws_params = {
+		workspace => new_uuid("brettin"),
+		permission => $perm,
+		metadata => {'owner' => 'brettin'},
+	};
+	my $cwsd_params = {
+# TODO: make user brettin a variable
+                WorkspacePath => "brettin" . "/" . $cws_params->{workspace} . "/" . new_uuid("dir"),
+                UserMetadata => {'owner' => 'brettin'},
+	};
+	my $delete_workspace_params = {
+		'WorkspaceName' => $cws_params->{'workspace'}
+	};
 
-
+	ok(my $ws = $obj->create_workspace($cws_params), "can create workspace");
+	ok(my $dir = $obj->create_workspace_directory($cwsd_params), "can create worksapce directory");;
+	ok(my $delete = $obj->delete_workspace($delete_workspace_params), "can delete workspace");
+}
 
 
 # add an object to a workspace
@@ -113,12 +133,16 @@ foreach my $perm (sort keys %$perms) {
 done_testing();
 
 sub new_uuid {
+	my $prefix = shift if @_;
 
-	# create a random workspace name
 	my($uuid, $string);
 	UUID::generate($uuid);
 	UUID::unparse($uuid, $string);
-	return 'brettin-' . $string;
+
+	my $return = $string;
+	$return = $prefix . '-' . $string if defined $prefix;
+
+	return $return;
 }
 
 
