@@ -227,6 +227,7 @@ sub _url {
 sub _error {
 	my($self,$msg) = @_;
 	$msg = "_ERROR_".$msg."_ERROR_";
+	DEBUG "_error: _current_method: " . $self->_current_method();
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,method_name => $self->_current_method());
 }
 
@@ -268,7 +269,12 @@ sub _get_db_ws {
 			$query->{name} = $1;
 		}
 	}
-	DEBUG "running query with owner = $query->{owner}";
+	DEBUG "_get_db_ws: received query: $query";
+	DEBUG "_get_db_ws: " . JSON->new()->pretty->encode($query);
+	DEBUG "_get_db_ws: parsing owner,name,and/or uuid where raw_id = $query->{raw_id}";
+	DEBUG "_get_db_ws: running query with owner = $query->{owner}";
+	DEBUG "_get_db_ws: running query with name = $query->{name}";
+
 	my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
 	my $object = $cursor->next;
 	if (!defined($object)) {
@@ -2400,10 +2406,15 @@ sub create_workspace_directory
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN create_workspace_directory
-    $input = $self->_validateargs($input,["directory"],{
+    $input = $self->_validateargs($input,["WorkspacePath"],{
     	metadata => {}
     });
-    my ($user,$workspace,$path) = $self->_parse_ws_path($input->{directory});
+    my ($user,$workspace,$path) = $self->_parse_ws_path($input->{WorkspacePath});
+
+    DEBUG "create_workspace_directory: directory: " .  $input->{WorkspacePath};
+    DEBUG "create_workspace_directory: user: " . $user;
+    DEBUG "create_workspace_directory: workspace: " . $workspace;
+    DEBUG "create_workspace_directory: path: " . $path;
     my $ws = $self->_get_db_ws({
     	owner => $user,
     	name => $workspace
