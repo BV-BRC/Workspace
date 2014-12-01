@@ -59,64 +59,45 @@ can_ok("Bio::P3::Workspace::WorkspaceClient", qw(
 my $obj;
 isa_ok ($obj = Bio::P3::Workspace::WorkspaceClient->new(), Bio::P3::Workspace::WorkspaceClient);
 
-# create a random workspace name
-my($uuid, $string);
-UUID::generate($uuid);
-UUID::unparse($uuid, $string);
-my $workspace = 'brettin-' . $string;
+# create a workspace for each permission value
+my $perms = {'w' => 'write', 'r' => 'read', 'a' => 'admin', 'n' => 'none' };
+foreach my $perm (sort keys %$perms) {
 
-# create the create_workspace_params
-my $create_workspace_params = {
-	workspace => $workspace,
-	permission => "a",
-	metadata => {'owner' => 'brettin'}, 
-};
+	my $create_workspace_params = {
+        	workspace => new_uuid(),
+        	permission => $perm,
+        	metadata => {'owner' => 'brettin'},
+	};
 
-# create a workspace
-my $output;
-ok($output = $obj->create_workspace($create_workspace_params), "auth user can call create workspace");
+	my $output;
+	ok($output = $obj->create_workspace($create_workspace_params), "can create workspace with $perm permission");
 
-# list my workspaces
+	my $list_workspaces_params = {owned_only => 1, no_public => 1};
+	ok($output = $obj->list_workspaces($list_workspaces_params), "can list owned_only, no_public workspaces perm=$perm");
+	print_wsmeta($output);
 
-# typedef structure {
-#                 bool owned_only;
-#                 bool no_public;
-# } list_workspaces_params;
+	$list_workspaces_params = {owned_only => 1, no_public => 0};
+	ok($output = $obj->list_workspaces($list_workspaces_params), "can list owned_only workspaces perm=$perm");
+	print_wsmeta($output);
 
-my $output;
+	$list_workspaces_params = {owned_only => 0, no_public => 1};
+	ok($output = $obj->list_workspaces($list_workspaces_params), "can list no_public workspaces perm=$perm");
+	print_wsmeta($output);
 
-my $list_workspaces_params = {owned_only => 1, no_public => 1};
-ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list owned_only, no_public workspaces");
-print_output($output);
+	$list_workspaces_params = {owned_only => 0, no_public => 0};
+	ok($output = $obj->list_workspaces($list_workspaces_params), "can list workspace perm=$perm");
+	print_wsmeta($output);
 
-$list_workspaces_params = {owned_only => 1, no_public => 0};
-ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list owned_only workspaces");
-print_output($output);
-
-$list_workspaces_params = {owned_only => 0, no_public => 1};
-ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can no_public  workspaces");
-print_output($output);
-
-$list_workspaces_params = {owned_only => 0, no_public => 0};
-ok($output = $obj->list_workspaces($list_workspaces_params), "auth user can list workspaces");
-print_output($output);
-
-sub print_output {
-  my $output = shift;
-  print ref($output), "\n";
-  foreach my $mt (@{$output}) {
-	print "WorkspaceID: $mt->[0]\n";
-	print "WorkspaceName: $mt->[1]\n";
-	print "Username: $mt->[2]\n";
-	print "timestamp: $mt->[3]\n";
-	print "num_objects: $mt->[4]\n";
-	print "user_permission: ", $mt->[5], "\n";
-	print "global_permission: ", $mt->[6], "\n";
-	print "num_directories: $mt->[7]\n";
-  	print "UserMetadata: $mt->[8]\n";
-  }
-  print "\n";
+	# delete workspace
+	my $delete;
+	my $delete_workspace_params = {'WorkspaceName' => $create_workspace_params->{'workspace'}};
+	ok($delete = $obj->delete_workspace($delete_workspace_params), "can delete workspace");
 }
+
+
+
+
+
 
 # add an object to a workspace
 
@@ -130,3 +111,31 @@ sub print_output {
 
 
 done_testing();
+
+sub new_uuid {
+
+	# create a random workspace name
+	my($uuid, $string);
+	UUID::generate($uuid);
+	UUID::unparse($uuid, $string);
+	return 'brettin-' . $string;
+}
+
+
+sub print_wsmeta {
+  my $output = shift;
+  print ref($output), "\n";
+  foreach my $mt (@{$output}) {
+        print "WorkspaceID: $mt->[0]\n";
+        print "WorkspaceName: $mt->[1]\n";
+        print "Username: $mt->[2]\n";
+        print "timestamp: $mt->[3]\n";
+        print "num_objects: $mt->[4]\n";
+        print "user_permission: ", $mt->[5], "\n";
+        print "global_permission: ", $mt->[6], "\n";
+        print "num_directories: $mt->[7]\n";
+        print "UserMetadata: $mt->[8]\n";
+  }
+  print "\n";
+}
+
