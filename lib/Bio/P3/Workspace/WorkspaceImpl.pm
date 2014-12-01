@@ -75,7 +75,7 @@ sub _getUsername {
 		
 		# If _override->{_currentUser} does not evaluate to true, then throw
 		# an error.
-		if ($self->_getContext->{_override}->{_currentUser}) {
+		if (!$self->_getContext->{_override}->{_currentUser}) {
 			$self->_error("Workspace functions cannot be run without an authenticated or test user!")
 		}
 
@@ -149,25 +149,25 @@ sub _getContext {
 	my ($self) = @_;
 
 	DEBUG "in _getContext";
-	DEBUG ref $Bio::P3::Workspace::Server::CallContext;
-	DEBUG join (", ", keys %{$Bio::P3::Workspace::Server::CallContext});
+	DEBUG ref $Bio::P3::Workspace::Service::CallContext;
+	DEBUG join (", ", keys %{$Bio::P3::Workspace::Service::CallContext});
 
 	# If the CallContext is not defined, then define an empty one.
-	if (!defined($Bio::P3::Workspace::Server::CallContext)) {
-
+	if (!defined($Bio::P3::Workspace::Service::CallContext)) {
+		
 		# This could cause problems. Here we are setting the CallContext to a plain
 		# hash, while on the other hand if it was created by the Service class, then
 		# it is a Bio::P3::Workspace::ServiceContext object.
-		$Bio::P3::Workspace::Server::CallContext = {};
+		$Bio::P3::Workspace::Service::CallContext = {};
 	}
 
 	# If the _current_method attribute of the CallContext is not set, then set it.
-	if (!defined($Bio::P3::Workspace::Server::CallContext->{_current_method})) {
+	if (!defined($Bio::P3::Workspace::Service::CallContext->{_current_method})) {
 		my @calldata = caller(1);
 		my $temp = [split(/:/,$calldata[3])];
-		$Bio::P3::Workspace::Server::CallContext->{_current_method} = pop(@{$temp});
+		$Bio::P3::Workspace::Service::CallContext->{_current_method} = pop(@{$temp});
 	}
-	return $Bio::P3::Workspace::Server::CallContext;
+	return $Bio::P3::Workspace::Service::CallContext;
 }
 
 sub _current_method {
@@ -821,9 +821,6 @@ sub new
     };
     bless $self, $class;
     #BEGIN_CONSTRUCTOR
-	# This fails, I do not understand why!
-	# my $ctx = $Bio::P3::Workspace::Service::CallContext or die "could not get ctx";
-	# Dumper $ctx;
 
     my $params = $args[0];
     my $paramlist = [qw(
@@ -2045,6 +2042,7 @@ sub list_workspaces
     		$query = { '$or' => [ {owner => $self->_getUsername()},{"permissions.".$self->_escape_username($self->_getUsername()) => {'$exists' => 1 } } ] };
     	}
     }
+    my $output = [];
     my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
 	while (my $object = $cursor->next) {
 		push(@{$output},$self->_generate_ws_meta($object));
