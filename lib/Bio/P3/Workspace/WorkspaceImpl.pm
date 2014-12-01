@@ -24,155 +24,27 @@ use Log::Log4perl qw(:easy);
 use MongoDB::Connection;
 Log::Log4perl->easy_init($DEBUG);
 
-# This sub is private. If the CallContext has a key _override that contains
-# a hash that has a key _authentication that has a value, then return the
-# value.
-sub _authentication {
-	my($self) = @_;
+#
+# Alias our context variable.
+#
 
-	# If the CallContext has a key _override that contains a hash that
-	# has a key _authentication that has a value, then return the value.
-	if (defined($self->_getContext->{_override}->{_authentication})) {
-		return $self->_getContext->{_override}->{_authentication};
-	} 
-
-	# If the context has a key called token that contains a value,
-	# return that value
-	elsif (defined($self->_getContext()->{token})) {
-		return $self->_getContext()->{token};
-	}
-
-	# Else return undef.
-	return undef;
-}
+*Bio::P3::Workspace::WorkspaceImpl::CallContext = *Bio::P3::Workspace::Service::CallContext;
+our $CallContext;
 
 sub _getUsername {
 	my ($self) = @_;
 
-	# If the CallContext does not have a key _override that contains a hash that
-	# has a key _currentUser that has a value, then figure out how to set the 
-	# value.
-	if (!defined($self->_getContext->{_override}->{_currentUser})) {
-
-		# Cardinal Sin #1. Do not build into your design hooks for testing.
-		# Your code should assume nothing about testing. Otherwise, you're
-		# testing your untested code that supports testing.
-
-		# If an object attribte called _testuser is defined, then set the
-		# value of the _override->{_currentUser} to the vallue of this 
-		# object attribute.
-		if (defined($self->{_testuser})) {
-			$self->_getContext->{_override}->{_currentUser} = $self->{_testuser};
-		}
-
-		# Else if the object attribute _testuser is not defined, then call
-		# the _authenticate method, which does not appear to set the value of
-		# _override->{_currentUser}.
-
-		else {
-			$self->_authenticate();
-		}
-		
-		# If _override->{_currentUser} does not evaluate to true, then throw
-		# an error.
-		if (!$self->_getContext->{_override}->{_currentUser}) {
-			$self->_error("Workspace functions cannot be run without an authenticated or test user!")
-		}
-
-	}
-	DEBUG "in _getUsername";
-	DEBUG ref $self->_getContext;
-	DEBUG "currentUser: " .$self->_getContext->{user_id};
-	DEBUG "override currentUser: " . $self->_getContext->{_override}->{_currentUser}; 
-	return $self->_getContext->{_override}->{_currentUser};
+	return $CallContext->user_id;
 }
-
-# Private sub. Takes zero or one arguements. The arguement can be anything.
-# The purpose is to validate a token.
-sub _authenticate {
-	my ($self,$auth) = @_;
-
-	# if the zero arguement version
-	if (!defined($auth)) {
-
-		# assign the value of the token key in the CallContext object
-		# to a new variable if it exists.
-		if (defined($self->_getContext()->{token})) {
-			$auth = $self->_getContext()->{token};
-		}
-	}
-
-
-	# if the zero arguement version or the one arguement version (POSSIBLE BUG)
-	# so why the if statement? Well, if the CallContext does not contain a token
-	# then $auth will not be defined and this sub will return nothing (false).
-
-	# the auth value can be set in one of two ways. It was passed in, or it was
-	# set equal to the value of the CallContext token attribute, which appears
-	# to be a string.
-	if (defined($auth)) {
-
-		# create a new auth token object passing in the value of $auth.
-		# the value of $auth will be either that which was passed in, or
-		# that which was obtained from the CallContext->token field.
-		require "Bio/KBase/AuthToken.pm";
-		my $token = Bio::KBase::AuthToken->new(
-			token => $auth,
-		);
-
-		# and now validate the newly created token, and if it is valid
-		# (WHY WOULD IT NOT BE VALID) then set the _override fields of
-		# _authentication and _currentUser to the values of $auth and 
-		# user_id respectively.
-
-		# Cardinal Sin #2, calling the same thing by different names. Consistent
-		# naming of variables makes code much more readable, debuggable and 
-		# maintainable. However, this is fruit of the poisionous tree at this point
-		# because all this is Cardinal Sin #1.
-		if ($token->validate()) {
-			$self->_getContext()->{_override}->{_authentication} = $auth;
-			$self->_getContext()->{_override}->{_currentUser} = $token->user_id;
-		}
-
-		# Else the newly created token does not validate, not sure why it 
-		# wouldn't validate since we just created it. If we're testing for successful
-		# creation, then do this right after the attempt to create it occurs.
-		else {
-			$self->_error("Invalid authorization token:".$auth,'_setContext');
-		}
-	}
-}
-
-# The purpose is to return the/a CallContext and to set the CallContext attribute _current_method
-# if the value is not already set.
 sub _getContext {
 	my ($self) = @_;
 
-	DEBUG "in _getContext";
-	DEBUG ref $Bio::P3::Workspace::Service::CallContext;
-	DEBUG join (", ", keys %{$Bio::P3::Workspace::Service::CallContext});
-
-	# If the CallContext is not defined, then define an empty one.
-	if (!defined($Bio::P3::Workspace::Service::CallContext)) {
-		
-		# This could cause problems. Here we are setting the CallContext to a plain
-		# hash, while on the other hand if it was created by the Service class, then
-		# it is a Bio::P3::Workspace::ServiceContext object.
-		$Bio::P3::Workspace::Service::CallContext = {};
-	}
-
-	# If the _current_method attribute of the CallContext is not set, then set it.
-	if (!defined($Bio::P3::Workspace::Service::CallContext->{_current_method})) {
-		my @calldata = caller(1);
-		my $temp = [split(/:/,$calldata[3])];
-		$Bio::P3::Workspace::Service::CallContext->{_current_method} = pop(@{$temp});
-	}
-	return $Bio::P3::Workspace::Service::CallContext;
-}
+	return $CallContext;
+    }
 
 sub _current_method {
 	my ($self) = @_;
-	return $self->_getContext()->{_current_method};
+	return $CallContext->method;
 }
 
 sub _validateargs {
