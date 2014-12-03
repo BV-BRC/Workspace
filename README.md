@@ -1,6 +1,6 @@
-#Repo for development of the P3 Workspace Service
+##Repo for development of the P3 Workspace Service
 
-##SERVICE DEPENDENCIES:
+##SERVICE DEPENDENCIES
 typecomp  
 shock  
 
