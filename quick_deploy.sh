@@ -31,4 +31,35 @@ echo "starting service"
 sleep 5
 
 pushd modules/$SERVICE
-make test
+
+# running tests. this section is still under development.
+
+echo "deleting mongo database"
+mongo WorkspaceBuild --eval "db.dropDatabase()"
+
+echo "deleting db-path"
+if [ -d /disks/p3/workspace/P3WSDB ] ; then
+  rm -r /disks/p3/workspace/P3WSDB/
+fi
+
+source /disks/p3/deployment/user-env.sh
+
+perl t/client-tests/ws.t
+if [ $? -ne 0 ] ; then
+        echo "BUILD ERROR: problem running make test"
+        exit 1
+fi
+
+perl t/client-tests/create.t
+if [ $? -ne 0 ] ; then
+        echo "BUILD ERROR: problem running make test"
+        exit 1
+fi
+
+perl t/client-tests/create_subdir.t
+if [ $? -ne 0 ] ; then
+        echo "BUILD ERROR: problem running make test"
+        exit 1
+fi
+
+
