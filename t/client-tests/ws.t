@@ -7,6 +7,8 @@ use Data::Dumper;
 use UUID;
 
 my($cfg, $url, );
+my $username = "brettin";
+
 
 if (defined $ENV{KB_DEPLOYMENT_CONFIG} && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
     $cfg = new Config::Simple($ENV{KB_DEPLOYMENT_CONFIG}) or
@@ -64,9 +66,9 @@ my $perms = {'w' => 'write', 'r' => 'read', 'a' => 'admin', 'n' => 'none' };
 foreach my $perm (sort keys %$perms) {
 
 	my $create_workspace_params = {
-        	workspace => new_uuid("brettin"),
+        	workspace => new_uuid("$username"),
         	permission => $perm,
-        	metadata => {'owner' => 'brettin'},
+        	metadata => {'owner' => '$username'},
 	};
 
 	my $output;
@@ -74,19 +76,19 @@ foreach my $perm (sort keys %$perms) {
 
 	my $list_workspaces_params = {owned_only => 1, no_public => 1};
 	ok($output = $obj->list_workspaces($list_workspaces_params), "can list owned_only, no_public workspaces perm=$perm");
-	print_wsmeta($output);
+	# print_wsmeta($output);
 
 	$list_workspaces_params = {owned_only => 1, no_public => 0};
 	ok($output = $obj->list_workspaces($list_workspaces_params), "can list owned_only workspaces perm=$perm");
-	print_wsmeta($output);
+	# print_wsmeta($output);
 
 	$list_workspaces_params = {owned_only => 0, no_public => 1};
 	ok($output = $obj->list_workspaces($list_workspaces_params), "can list no_public workspaces perm=$perm");
-	print_wsmeta($output);
+	# print_wsmeta($output);
 
 	$list_workspaces_params = {owned_only => 0, no_public => 0};
 	ok($output = $obj->list_workspaces($list_workspaces_params), "can list workspace perm=$perm");
-	print_wsmeta($output);
+	# print_wsmeta($output);
 
 	# delete workspace
 	my $delete;
@@ -100,14 +102,13 @@ foreach my $perm (sort keys %$perms) {
 my $perms = {'w' => 'write', 'r' => 'read', 'a' => 'admin', 'n' => 'none' };
 foreach my $perm (sort keys %$perms) {
 	my $cws_params = {
-		workspace => new_uuid("brettin"),
+		workspace => new_uuid("$username"),
 		permission => $perm,
-		metadata => {'owner' => 'brettin'},
+		metadata => {'owner' => '$username'},
 	};
 	my $cwsd_params = {
-# TODO: make user brettin a variable
-                WorkspacePath => "brettin" . "/" . $cws_params->{workspace} . "/" . new_uuid("dir"),
-                UserMetadata => {'owner' => 'brettin'},
+                WorkspacePath => "/$username" . "/" . $cws_params->{workspace} . "/" . new_uuid("dir"),
+                UserMetadata => {'owner' => '$username'},
 	};
 	my $delete_workspace_params = {
 		'WorkspaceName' => $cws_params->{'workspace'}
