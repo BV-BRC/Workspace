@@ -423,6 +423,7 @@ sub _parse_ws_path {
 	#/<Username>/<Workspace name>/<Path>
 	#<Workspace name>/<Path> (in this case, the currently logged user is assumed to be the owner of the workspace)
 	#/<Username>/<Workspace name>/<Path>
+	DEBUG "_parse_ws_path: input: $input";
 	my ($user,$workspace,$path);
 	if ($input =~ m/^\/([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
 		$user = $1;
@@ -443,6 +444,7 @@ sub _parse_ws_path {
 		$workspace = $1;
 		$path = $2;
 	}
+	else { WARN "_parse_ws_path: could not parse WorkspacePath: $input"; }
 	return ($user,$workspace,$path);
 }
 
@@ -2415,6 +2417,8 @@ sub create_workspace_directory
     DEBUG "create_workspace_directory: user: " . $user;
     DEBUG "create_workspace_directory: workspace: " . $workspace;
     DEBUG "create_workspace_directory: path: " . $path;
+
+
     my $ws = $self->_get_db_ws({
     	owner => $user,
     	name => $workspace
