@@ -8,9 +8,9 @@ SERVER_SPEC = Workspace.spec
 SERVICE_MODULE = lib/Bio/P3/Workspace/Service.pm
 
 SERVICE = Workspace
-SERVICE_PORT = 7125?
+SERVICE_PORT = 7125
 
-SERVICE_URL = https://kbase.us/services/$(SERVICE)
+SERVICE_URL = http://p3.theseed.org/services/$(SERVICE)
 
 SERVICE_NAME = Workspace
 SERVICE_NAME_PY = $(SERVICE_NAME)

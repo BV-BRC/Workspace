@@ -287,25 +287,35 @@ sub _parse_ws_path {
 	#<Workspace name>/<Path> (in this case, the currently logged user is assumed to be the owner of the workspace)
 	#/<Username>/<Workspace name>/<Path>
 	my ($user,$workspace,$path);
-	if ($input =~ m/^\/([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
-		$user = $1;
-		$workspace = $2;
-		$path = $3;
-	} elsif ($input =~ m/^\/([^\/]+)\/([^\/]+)\/*$/) {
-		$user = $1;
-		$workspace = $2;
-		$path = "";
-	} elsif ($input =~ m/^([A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12})\/(.+)\/*$/) {
-		my $ws = $self->_get_db_ws({
-	    	uuid => $1,
-	    });
-	    $user = $ws->{owner};
-	    $workspace = $ws->{name};
-	} elsif ($input =~ m/^([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
-		$user = $self->_getUsername();
-		$workspace = $1;
-		$path = $2;
+
+	if ($input =~ m,^[^/],)
+	{
+	    #
+	    # No leading slash, therefore we are relative to the current user.
+	    #
+	    $input = "/" . $self->_getUsername() . "/$input";
 	}
+
+	if ($input =~ m,^/_uuid/([^/]+)/(.+)/*$,)
+	{
+	    #
+	    # UUID
+	    #
+	    my $ws = $self->_get_db_ws({ uuid => $1 });
+	    $user = $ws->{owner};
+	    $workspace = $1;
+	    $path = $2;
+	}
+	elsif ($input =~ m,^/([^/]+)/([^/]+)/(.+)/*$,)
+	{
+	    #
+	    # /user/ws/path
+	    #
+	    $user = $1;
+	    $workspace = $2;
+	    $path = $3;
+	}
+	    
 	return ($user,$workspace,$path);
 }
 
