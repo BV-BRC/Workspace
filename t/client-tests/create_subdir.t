@@ -55,11 +55,11 @@ foreach my $perm (sort keys %$perms) {
   # create_workspace_directory
   my $path = "local_"  . $perm;
 
-  my $cwsd_params = { WorkspacePath => '/' . 
+  my $cwsd_params = { directory => '/' . 
                         $username . '/' . 
                         $create_workspace_params->{workspace} . '/' .
                         $path,
-                      UserMetadata => {'owner' => 'brettin'},
+                      metadata => {'owner' => 'brettin'},
   };
 
 
