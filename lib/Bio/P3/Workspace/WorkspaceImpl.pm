@@ -50,6 +50,9 @@ sub _getUsername {
 #Returns the method supplied to the service in the context object
 sub _current_method {
 	my ($self) = @_;
+	if (!defined($CallContext)) {
+		return undef;
+	}
 	return $CallContext->method;
 }
 
