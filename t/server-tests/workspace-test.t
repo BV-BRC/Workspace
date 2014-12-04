@@ -25,20 +25,13 @@ my $testuserone = "reviewer";
 my $tokenObj = Bio::KBase::AuthToken->new(
     user_id => $testuserone, password => 'reviewer',ignore_authrc => 1
 );
-my $ctxone = {
-	method => "test",
-	user_id => $testuserone,
-	token => $tokenObj->token()
-};
+my $ctxone = Bio::P3::Workspace::ServiceContext->new($tokenObj->token(),"test",$testuserone);
 my $testusertwo = "chenry";
 $tokenObj = Bio::KBase::AuthToken->new(
     user_id => 'chenry', password => 'hello824',ignore_authrc => 1
 );
-my $ctxtwo = {
-	method => "test",
-	user_id => $testusertwo,
-	token => $tokenObj->token()
-};
+my $ctxtwo = Bio::P3::Workspace::ServiceContext->new($tokenObj->token(),"test",$testusertwo);
+
 my $ws = Bio::P3::Workspace::WorkspaceImpl->new();
 
 #Setting context to authenticated user one
@@ -321,3 +314,29 @@ ok defined($output), "Successfully ran delete_workspace function!";
 print "delete_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 
 done_testing($test_count);
+
+package Bio::P3::Workspace::ServiceContext;
+
+use strict;
+
+sub new {
+    my($class,$token,$method,$user) = @_;
+    my $self = {
+        token => $token,
+        method => $method,
+        user_id => $user
+    };
+    return bless $self, $class;
+}
+sub user_id {
+	my($self) = @_;
+	return $self->{user_id};
+}
+sub token {
+	my($self) = @_;
+	return $self->{token};
+}
+sub method {
+	my($self) = @_;
+	return $self->{method};
+}

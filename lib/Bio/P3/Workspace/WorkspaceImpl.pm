@@ -73,9 +73,6 @@ sub _validateargs {
 			}
 		}
 	}
-
-	#     $input = $self->_validateargs($input,["workspace"],{});
-	#     from line 2804
 	if (defined($args->{_error})) {
 		$self->_error("Mandatory arguments ".join("; ",@{$args->{_error}})." missing.");
 	}
@@ -319,16 +316,14 @@ sub _parse_ws_path {
 	#DEBUG "_parse_ws_path: input: $input";
 	my ($user,$workspace,$path);
 
-	if ($input =~ m,^[^/],)
-	{
+	if ($input =~ m,^[^/],) {
 	    #
 	    # No leading slash, therefore we are relative to the current user.
 	    #
 	    $input = "/" . $self->_getUsername() . "/$input";
 	}
 
-	if ($input =~ m,^/_uuid/([^/]+)/(.+)/*$,)
-	{
+	if ($input =~ m,^/_uuid/([^/]+)/(.+)/*$,) {
 	    #
 	    # UUID
 	    #
@@ -336,9 +331,11 @@ sub _parse_ws_path {
 	    $user = $ws->{owner};
 	    $workspace = $1;
 	    $path = $2;
-	}
-	elsif ($input =~ m,^/([^/]+)/([^/]+)/(.+)/*$,)
-	{
+	} elsif ($input =~ m,^/([^/]+)/([^/]+)/*$,) {
+		$user = $1;
+	    $workspace = $2;
+	    $path = "";
+	} elsif ($input =~ m,^/([^/]+)/([^/]+)/(.+)/*$,) {
 	    #
 	    # /user/ws/path
 	    #
