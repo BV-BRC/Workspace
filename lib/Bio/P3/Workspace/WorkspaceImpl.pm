@@ -29,65 +29,28 @@ use Log::Log4perl qw(:easy);
 use MongoDB::Connection;
 Log::Log4perl->easy_init($DEBUG);
 
-<<<<<<< HEAD
-#Returns the authentication token supplied to the service in the context object
-sub _authentication {
-	my($self) = @_;
-	if (!defined($self->_getContext()->{token})) {
-		$self->_error("Workspace functions cannot be run without an authentication token!")
-		
-	}
-	return $self->_getContext()->{token};
-}
-=======
 #
 # Alias our context variable.
 #
-
 *Bio::P3::Workspace::WorkspaceImpl::CallContext = *Bio::P3::Workspace::Service::CallContext;
 our $CallContext;
->>>>>>> 17852f320b8c05cbb38150f00fbf51f0efd3583c
+
+#Returns the authentication token supplied to the service in the context object
+sub _authentication {
+	my($self) = @_;
+	return $CallContext->token;
+}
 
 #Returns the username supplied to the service in the context object
 sub _getUsername {
 	my ($self) = @_;
-<<<<<<< HEAD
-	if (!defined($self->_getContext()->{user_id})) {
-		$self->_error("Workspace functions cannot be run without an authenticated user!")
-	}
-	return $self->_getContext()->{user_id};
-}
-
-#Returns the current context object
-sub _getContext {
-	my ($self) = @_;
-	if (!defined($Bio::P3::Workspace::Service::CallContext)) {
-		$self->_error("Cannot call workspace functions without valid context object!")
-	}
-	return $Bio::P3::Workspace::Service::CallContext;
-}
-=======
-
 	return $CallContext->user_id;
 }
-sub _getContext {
-	my ($self) = @_;
-
-	return $CallContext;
-    }
->>>>>>> 17852f320b8c05cbb38150f00fbf51f0efd3583c
 
 #Returns the method supplied to the service in the context object
 sub _current_method {
 	my ($self) = @_;
-<<<<<<< HEAD
-	if (!defined($self->_getContext()->{method})) {
-		$self->_error("Context object must include which method is being called!")
-	}
-	return $self->_getContext()->{method};
-=======
 	return $CallContext->method;
->>>>>>> 17852f320b8c05cbb38150f00fbf51f0efd3583c
 }
 
 sub _validateargs {
