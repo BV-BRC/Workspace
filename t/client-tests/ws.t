@@ -92,7 +92,7 @@ foreach my $perm (sort keys %$perms) {
 
 	# delete workspace
 	my $delete;
-	my $delete_workspace_params = {'WorkspaceName' => $create_workspace_params->{'workspace'}};
+	my $delete_workspace_params = {'workspace' => $create_workspace_params->{'workspace'}};
 	ok($delete = $obj->delete_workspace($delete_workspace_params), "can delete workspace");
 }
 
@@ -107,11 +107,11 @@ foreach my $perm (sort keys %$perms) {
 		metadata => {'owner' => '$username'},
 	};
 	my $cwsd_params = {
-                WorkspacePath => "/$username" . "/" . $cws_params->{workspace} . "/" . new_uuid("dir"),
-                UserMetadata => {'owner' => '$username'},
+                directory => "/$username" . "/" . $cws_params->{workspace} . "/" . new_uuid("dir"),
+                metadata => {'owner' => '$username'},
 	};
 	my $delete_workspace_params = {
-		'WorkspaceName' => $cws_params->{'workspace'}
+		'workspace' => $cws_params->{'workspace'}
 	};
 
 	ok(my $ws = $obj->create_workspace($cws_params), "can create workspace");

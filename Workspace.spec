@@ -114,12 +114,14 @@ funcdef create_upload_node(create_upload_node_params input) returns (list<string
 /* This function retrieves a list of objects from the workspace */
 typedef structure {
 		list<tuple<WorkspacePath,ObjectName>> objects;
+		bool metadata_only;
 } get_objects_params;
 funcdef get_objects(get_objects_params input) returns (list<ObjectDataInfo> output) authentication required;
 
 /* This function retrieves a list of objects from the workspace */
 typedef structure {
 		list<ObjectID> objects;
+		bool metadata_only;
 } get_objects_by_reference_params;
 funcdef get_objects_by_reference(get_objects_by_reference_params input) returns (list<ObjectDataInfo> output) authentication required;
 
