@@ -1,3 +1,4 @@
+use FindBin qw($Bin);
 use Test::More;
 use Config::Simple;
 use JSON;
@@ -5,31 +6,43 @@ use Data::Dumper;
 use Bio::P3::Workspace::WorkspaceImpl;
 use Bio::KBase::AuthToken;
 use File::Path;
-my $test_count = 29;
+use REST::Client;
+use LWP::UserAgent;
+use JSON::XS;
+use HTTP::Request::Common;
+my $test_count = 31;
 
 BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceImpl );
 }
 
-my $params = {
-	"shock-url" => "140.221.67.190:7078",
-	"db-path" => "/Users/chenry/P3WSDB/",
-	"mongodb-database" => "P3Workspace",
-	"mongodb-host" => "localhost",
-	"mongodb-user" => undef,
-	"mongodb-pwd" => undef
-};
+#if (!defined $ENV{KB_DEPLOYMENT_CONFIG} || !-e $ENV{KB_DEPLOYMENT_CONFIG}) {
+    $ENV{KB_DEPLOYMENT_CONFIG}=$Bin."/../../configs/test.cfg";
+#}
+print $Bin."/../configs/test.cfg";
 
+my $testuserone = "reviewer";
 my $tokenObj = Bio::KBase::AuthToken->new(
-    user_id => 'kbasetest', password => '@Suite525'
+    user_id => $testuserone, password => 'reviewer',ignore_authrc => 1
 );
-my $tokenone = $tokenObj->token();
-my $ws = Bio::P3::Workspace::WorkspaceImpl->new($params);
-$ws->_authenticate($tokenObj->token());
+my $ctxone = {
+	method => "test",
+	user_id => $testuserone,
+	token => $tokenObj->token()
+};
+my $testusertwo = "chenry";
 $tokenObj = Bio::KBase::AuthToken->new(
-    user_id => 'kbasetest2', password => '@Suite525'
+    user_id => 'chenry', password => 'hello824',ignore_authrc => 1
 );
-my $tokentwo = $tokenObj->token();
+my $ctxtwo = {
+	method => "test",
+	user_id => $testusertwo,
+	token => $tokenObj->token()
+};
+my $ws = Bio::P3::Workspace::WorkspaceImpl->new();
+
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxone;
 
 print "DBPath:".$ws->_db_path()."\n";
 rmtree($ws->_db_path());
@@ -60,7 +73,7 @@ can_ok("Bio::P3::Workspace::WorkspaceImpl", qw(
    )
 );
 
-#Creating a private workspace as "kbasetest"
+#Creating a private workspace as "$testuserone"
 my $output = $ws->create_workspace({
 	workspace => "TestWorkspace",
 	permission => "n",
@@ -69,9 +82,10 @@ my $output = $ws->create_workspace({
 ok defined($output), "Successfully ran create_workspace function!";
 print "create_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 
-$ws->_authenticate($tokentwo);
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
 
-#Creating a public workspace as "kbasetest2"
+#Creating a public workspace as "$testusertwo"
 $output = $ws->create_workspace({
 	workspace => "TestWorkspace",
 	permission => "r",
@@ -80,26 +94,27 @@ $output = $ws->create_workspace({
 ok defined($output), "Successfully ran create_workspace function!";
 print "create_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 
-#Listing workspaces as "kbasetest2"
+#Listing workspaces as "$testusertwo"
 $output = $ws->list_workspaces({});
 ok defined($output->[0]) && !defined($output->[1]), "Successfully ran list_workspaces function on got one workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
-$ws->_authenticate($tokenone);
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxone;
 
-#Listing workspaces as "kbasetest"
+#Listing workspaces as "$testuserone"
 $output = $ws->list_workspaces({});
 ok defined($output->[1]), "Successfully ran list_workspaces function on got two workspaces back!";
 print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
-#Listing workspaces as "kbasetest" but restricting to owned only
+#Listing workspaces as "$testuserone" but restricting to owned only
 $output = $ws->list_workspaces({
 	owned_only => 1
 });
 ok defined($output->[0]) && !defined($output->[1]), "Successfully ran list_workspaces unction and got one workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
-#Listing workspaces as "kbasetest" but restricting to private only
+#Listing workspaces as "$testuserone" but restricting to private only
 $output = $ws->list_workspaces({
 	owned_only => 0,
 	no_public => 1
@@ -109,14 +124,36 @@ print "list_workspaces output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Saving an object
 $output = $ws->save_objects({
-	objects => [["/kbasetest/TestWorkspace/testdir/testdir2/testdir3/","testobj","my test object data","String",{"Description" => "My first object!"}]]
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/","testobj","my test object data","String",{"Description" => "My first object!"}]]
 });
 ok defined($output->[0]), "Successfully ran save_objects action!";
 print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
+#Creating shock nodes
+$output = $ws->create_upload_node({
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/","shockobj","String",{"Description" => "My first shock object!"}]]
+});
+ok defined($output->[0]), "Successfully ran create_upload_node action!";
+print "create_upload_node output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Uploading file to newly created shock node
+print "Filename:".$Bin."/testdata.txt\n";
+my $req = HTTP::Request::Common::POST($output->[0],Authorization => "OAuth ".$ctxone->{token},Content_Type => 'multipart/form-data',Content => [upload => [$Bin."/testdata.txt"]]);
+$req->method('PUT');
+my $ua = LWP::UserAgent->new();
+my $res = $ua->request($req);
+print "File uploaded:\n".Data::Dumper->Dump([$res])."\n\n";
+
+#Retrieving shock object through workspace API
+$output = $ws->get_objects({
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3","shockobj"]]
+});
+ok defined($output->[0]->{data}), "Successfully ran get_objects function!";
+print "get_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+
 #Listing objects
 $output = $ws->list_workspace_contents({
-	directory => "/kbasetest/TestWorkspace/testdir/testdir2",
+	directory => "/$testuserone/TestWorkspace/testdir/testdir2",
 	includeSubDirectories => 1,
 	excludeObjects => 0,
 	Recursive => 1
@@ -124,7 +161,7 @@ $output = $ws->list_workspace_contents({
 ok defined($output->[1]), "Successfully listed all workspace contents!";
 print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
 $output = $ws->list_workspace_contents({
-	directory => "/kbasetest/TestWorkspace",
+	directory => "/$testuserone/TestWorkspace",
 	includeSubDirectories => 1,
 	excludeObjects => 0,
 	Recursive => 0
@@ -132,15 +169,15 @@ $output = $ws->list_workspace_contents({
 ok defined($output->[0]) && !defined($output->[1]), "Successfuly listed workspace contents nonrecursively!";
 print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
 $output = $ws->list_workspace_contents({
-	directory => "/kbasetest/TestWorkspace",
+	directory => "/$testuserone/TestWorkspace",
 	includeSubDirectories => 0,
 	excludeObjects => 0,
 	Recursive => 1
 });
-ok defined($output->[0]) && !defined($output->[1]), "Successfully listed workspace contents without directories!";
+ok defined($output->[0]) && !defined($output->[2]), "Successfully listed workspace contents without directories!";
 print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
 $output = $ws->list_workspace_contents({
-	directory => "/kbasetest/TestWorkspace",
+	directory => "/$testuserone/TestWorkspace",
 	includeSubDirectories => 1,
 	excludeObjects => 1,
 	Recursive => 1
@@ -150,42 +187,47 @@ print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Listing objects hierarchically
 $output = $ws->list_workspace_hierarchical_contents({
-	directory => "/kbasetest/TestWorkspace",
+	directory => "/$testuserone/TestWorkspace",
 	includeSubDirectories => 1,
 	excludeObjects => 0,
 	Recursive => 1
 });
-ok defined($output->{"/kbasetest/TestWorkspace"}) && defined($output->{"/kbasetest/TestWorkspace/testdir"}), "Successfully listed workspace contents hierarchically!";
+ok defined($output->{"/$testuserone/TestWorkspace"}) && defined($output->{"/$testuserone/TestWorkspace/testdir"}), "Successfully listed workspace contents hierarchically!";
 print "list_workspace_hierarchical_contents output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Copying workspace object
 $output = undef;
 eval {
 $output = $ws->copy_objects({
-	objects => [["/kbasetest/TestWorkspace","testdir","/kbasetest2/TestWorkspace","copydir"]],
+	objects => [["/$testuserone/TestWorkspace","testdir","/$testusertwo/TestWorkspace","copydir"]],
 	recursive => 1
 });
 };
 ok !defined($output), "Copying to a read only workspace fails!";
 
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
+
 #Changing workspace permissions
-$ws->_authenticate($tokentwo);
 $output = $ws->set_workspace_permissions({
 	workspace => "TestWorkspace",
-	permissions => [["kbasetest","w"]]
+	permissions => [[$testuserone,"w"]]
 });
 ok defined($output), "Successfully ran set_workspace_permissions function!";
 print "set_workspace_permissions output:\n".Data::Dumper->Dump($output)."\n\n";
 #Listing workspace permission
 $output = $ws->list_workspace_permissions({
-	workspaces => ["/kbasetest2/TestWorkspace"]
+	workspaces => ["/$testusertwo/TestWorkspace"]
 });
-ok defined($output->{"/kbasetest2/TestWorkspace"}->[0]), "Successfully ran list_workspace_permissions function!";
+ok defined($output->{"/$testusertwo/TestWorkspace"}->[0]), "Successfully ran list_workspace_permissions function!";
 print "list_workspace_permissions output:\n".Data::Dumper->Dump([$output])."\n\n";
+
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxone;
+
 #Copying workspace object
-$ws->_authenticate($tokenone);
 $output = $ws->copy_objects({
-	objects => [["/kbasetest/TestWorkspace","testdir","/kbasetest2/TestWorkspace","copydir"]],
+	objects => [["/$testuserone/TestWorkspace","testdir","/$testusertwo/TestWorkspace","copydir"]],
 	recursive => 1
 });
 ok defined($output), "Successfully ran copy_objects function!";
@@ -193,7 +235,7 @@ print "copy_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Listing contents of workspace with copied objects
 $output = $ws->list_workspace_contents({
-	directory => "/kbasetest2/TestWorkspace",
+	directory => "/$testusertwo/TestWorkspace",
 	includeSubDirectories => 1,
 	excludeObjects => 0,
 	Recursive => 1
@@ -203,49 +245,54 @@ print "list_workspace_contents output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Changing global workspace permissions
 $output = $ws->reset_global_permission({
-	workspace => "/kbasetest/TestWorkspace",
+	workspace => "/$testuserone/TestWorkspace",
 	global_permission => "w"
 });
 ok defined($output), "Successfully changed global permissions!";
 print "reset_global_permission output:\n".Data::Dumper->Dump($output)."\n\n";
 
+#Setting context to authenticated user two
+$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
+
 #Moving objects
-$ws->_authenticate($tokentwo);
 $output = $ws->move_objects({
-	objects => [["/kbasetest2/TestWorkspace","copydir","/kbasetest/TestWorkspace","movedir"]],
+	objects => [["/$testusertwo/TestWorkspace","copydir","/$testuserone/TestWorkspace","movedir"]],
 	recursive => 1
 });
 ok defined($output), "Successfully ran move_objects function!";
 print "move_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxone;
+
 #Deleting an object
-$ws->_authenticate($tokenone);
 $output = $ws->delete_objects({
-	objects => [["/kbasetest/TestWorkspace/movedir/testdir2/testdir3","testobj"]]
+	objects => [["/$testuserone/TestWorkspace/movedir/testdir2/testdir3","testobj"],["/$testuserone/TestWorkspace/movedir/testdir2/testdir3","shockobj"]]
 });
 ok defined($output), "Successfully ran delete_objects function on object!";
 print "delete_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 $output = $ws->delete_objects({
-	objects => [["/kbasetest/TestWorkspace/movedir/testdir2","testdir3"]],
+	objects => [["/$testuserone/TestWorkspace/movedir/testdir2","testdir3"]],
 	delete_directories => 1
 });
 ok defined($output), "Successfully ran delete_objects function on directory!";
 print "delete_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 #Deleting a directory
 $output = $ws->delete_workspace_directory({
-	directory => "/kbasetest/TestWorkspace/movedir",
+	directory => "/$testuserone/TestWorkspace/movedir",
 	force => 1
 });
 ok defined($output), "Successfully ran delete_workspace_directory function!";
 print "delete_workspace_directory output:\n".Data::Dumper->Dump($output)."\n\n";
 #Creating a directory
 $output = $ws->create_workspace_directory({
-	directory => "/kbasetest/TestWorkspace/emptydir"
+	directory => "/$testuserone/TestWorkspace/emptydir"
 });
 ok defined($output), "Successfully ran create_workspace_directory function!";
 print "create_workspace_directory output:\n".Data::Dumper->Dump($output)."\n\n";
 #Getting an object
 $output = $ws->get_objects({
-	objects => [["/kbasetest/TestWorkspace/testdir/testdir2/testdir3","testobj"]]
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3","testobj"]]
 });
 ok defined($output->[0]->{data}), "Successfully ran get_objects function!";
 print "get_objects output:\n".Data::Dumper->Dump($output)."\n\n";
@@ -255,14 +302,18 @@ $output = $ws->get_objects_by_reference({
 });
 ok defined($output->[0]->{data}), "Successfully ran get_objects_by_reference function!";
 print "get_objects_by_reference output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxone;
+
 #Deleting workspaces
-$ws->_authenticate($tokenone);
 $output = $ws->delete_workspace({
-	workspace => "/kbasetest/TestWorkspace"
+	workspace => "/$testuserone/TestWorkspace"
 });
 ok defined($output), "Successfully ran delete_workspace function!";
 print "delete_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
-$ws->_authenticate($tokentwo);
+#Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
 $output = $ws->delete_workspace({
 	workspace => "TestWorkspace"
 });

@@ -104,7 +104,7 @@ funcdef save_objects(save_objects_params input) returns (list<ObjectMeta> output
 
 /* This function creates a node in shock that the user can upload to and links this node to a workspace */
 typedef structure {
-		list<tuple<WorkspacePath,ObjectName,ObjectType>> objects;
+		list<tuple<WorkspacePath,ObjectName,ObjectType,UserMetadata>> objects;
 		bool overwrite;
 } create_upload_node_params;
 funcdef create_upload_node(create_upload_node_params input) returns (list<string> output) authentication required;

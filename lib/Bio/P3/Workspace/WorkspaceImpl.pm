@@ -20,159 +20,50 @@ Workspace
 use File::Path;
 use File::Copy;
 use Data::UUID;
+use REST::Client;
+use LWP::UserAgent;
+use JSON::XS;
+use Data::Dumper;
+use HTTP::Request::Common;
 use Log::Log4perl qw(:easy);
 use MongoDB::Connection;
 Log::Log4perl->easy_init($DEBUG);
 
-# This sub is private. If the CallContext has a key _override that contains
-# a hash that has a key _authentication that has a value, then return the
-# value.
+#Returns the authentication token supplied to the service in the context object
 sub _authentication {
 	my($self) = @_;
-
-	# If the CallContext has a key _override that contains a hash that
-	# has a key _authentication that has a value, then return the value.
-	if (defined($self->_getContext->{_override}->{_authentication})) {
-		return $self->_getContext->{_override}->{_authentication};
-	} 
-
-	# If the context has a key called token that contains a value,
-	# return that value
-	elsif (defined($self->_getContext()->{token})) {
-		return $self->_getContext()->{token};
+	if (!defined($self->_getContext()->{token})) {
+		$self->_error("Workspace functions cannot be run without an authentication token!")
+		
 	}
-
-	# Else return undef.
-	return undef;
+	return $self->_getContext()->{token};
 }
 
+#Returns the username supplied to the service in the context object
 sub _getUsername {
 	my ($self) = @_;
-
-	# If the CallContext does not have a key _override that contains a hash that
-	# has a key _currentUser that has a value, then figure out how to set the 
-	# value.
-	if (!defined($self->_getContext->{_override}->{_currentUser})) {
-
-		# Cardinal Sin #1. Do not build into your design hooks for testing.
-		# Your code should assume nothing about testing. Otherwise, you're
-		# testing your untested code that supports testing.
-
-		# If an object attribte called _testuser is defined, then set the
-		# value of the _override->{_currentUser} to the vallue of this 
-		# object attribute.
-		if (defined($self->{_testuser})) {
-			$self->_getContext->{_override}->{_currentUser} = $self->{_testuser};
-		}
-
-		# Else if the object attribute _testuser is not defined, then call
-		# the _authenticate method, which does not appear to set the value of
-		# _override->{_currentUser}.
-
-		else {
-			$self->_authenticate();
-		}
-		
-		# If _override->{_currentUser} does not evaluate to true, then throw
-		# an error.
-		if (!$self->_getContext->{_override}->{_currentUser}) {
-			$self->_error("Workspace functions cannot be run without an authenticated or test user!")
-		}
-
+	if (!defined($self->_getContext()->{user_id})) {
+		$self->_error("Workspace functions cannot be run without an authenticated user!")
 	}
-	DEBUG "in _getUsername";
-	DEBUG ref $self->_getContext;
-	DEBUG "currentUser: " .$self->_getContext->{user_id};
-	DEBUG "override currentUser: " . $self->_getContext->{_override}->{_currentUser}; 
-	return $self->_getContext->{_override}->{_currentUser};
+	return $self->_getContext()->{user_id};
 }
 
-# Private sub. Takes zero or one arguements. The arguement can be anything.
-# The purpose is to validate a token.
-sub _authenticate {
-	my ($self,$auth) = @_;
-
-	# if the zero arguement version
-	if (!defined($auth)) {
-
-		# assign the value of the token key in the CallContext object
-		# to a new variable if it exists.
-		if (defined($self->_getContext()->{token})) {
-			$auth = $self->_getContext()->{token};
-		}
-	}
-
-
-	# if the zero arguement version or the one arguement version (POSSIBLE BUG)
-	# so why the if statement? Well, if the CallContext does not contain a token
-	# then $auth will not be defined and this sub will return nothing (false).
-
-	# the auth value can be set in one of two ways. It was passed in, or it was
-	# set equal to the value of the CallContext token attribute, which appears
-	# to be a string.
-	if (defined($auth)) {
-
-		# create a new auth token object passing in the value of $auth.
-		# the value of $auth will be either that which was passed in, or
-		# that which was obtained from the CallContext->token field.
-		require "Bio/KBase/AuthToken.pm";
-		my $token = Bio::KBase::AuthToken->new(
-			token => $auth,
-		);
-
-		# and now validate the newly created token, and if it is valid
-		# (WHY WOULD IT NOT BE VALID) then set the _override fields of
-		# _authentication and _currentUser to the values of $auth and 
-		# user_id respectively.
-
-		# Cardinal Sin #2, calling the same thing by different names. Consistent
-		# naming of variables makes code much more readable, debuggable and 
-		# maintainable. However, this is fruit of the poisionous tree at this point
-		# because all this is Cardinal Sin #1.
-		if ($token->validate()) {
-			$self->_getContext()->{_override}->{_authentication} = $auth;
-			$self->_getContext()->{_override}->{_currentUser} = $token->user_id;
-		}
-
-		# Else the newly created token does not validate, not sure why it 
-		# wouldn't validate since we just created it. If we're testing for successful
-		# creation, then do this right after the attempt to create it occurs.
-		else {
-			$self->_error("Invalid authorization token:".$auth,'_setContext');
-		}
-	}
-}
-
-# The purpose is to return the/a CallContext and to set the CallContext attribute _current_method
-# if the value is not already set.
+#Returns the current context object
 sub _getContext {
 	my ($self) = @_;
-
-	DEBUG "in _getContext";
-	DEBUG ref $Bio::P3::Workspace::Service::CallContext;
-	DEBUG join (", ", keys %{$Bio::P3::Workspace::Service::CallContext});
-
-	# If the CallContext is not defined, then define an empty one.
 	if (!defined($Bio::P3::Workspace::Service::CallContext)) {
-		
-		# This could cause problems. Here we are setting the CallContext to a plain
-		# hash, while on the other hand if it was created by the Service class, then
-		# it is a Bio::P3::Workspace::ServiceContext object.
-		$Bio::P3::Workspace::Service::CallContext = {};
-	}
-
-	# If the _current_method attribute of the CallContext is not set, then set it.
-	if (!defined($Bio::P3::Workspace::Service::CallContext->{_current_method})) {
-		my @calldata = caller(1);
-		my $temp = [split(/:/,$calldata[3])];
-		$Bio::P3::Workspace::Service::CallContext->{_current_method} = pop(@{$temp});
+		$self->_error("Cannot call workspace functions without valid context object!")
 	}
 	return $Bio::P3::Workspace::Service::CallContext;
 }
 
+#Returns the method supplied to the service in the context object
 sub _current_method {
 	my ($self) = @_;
-	return $self->_getContext()->{_current_method};
+	if (!defined($self->_getContext()->{method})) {
+		$self->_error("Context object must include which method is being called!")
+	}
+	return $self->_getContext()->{method};
 }
 
 sub _validateargs {
@@ -213,10 +104,16 @@ sub _validateargs {
 
 sub _shockurl {
 	my $self = shift;
-	if (defined($self->_getContext()->{_override}->{_shockurl})) {
-		return $self->_getContext()->{_override}->{_shockurl};
-	}
 	return $self->{_params}->{"shock-url"};
+}
+
+sub _wsauth {
+	my $self = shift;
+	if (!defined($self->{_wsauth})) {
+		my $token = Bio::KBase::AuthToken->new(user_id =>  $self->{_params}->{wsuser}, password => $self->{_params}->{wspassword});
+		$self->{_wsauth} = $token->token();
+	}
+	return $self->{_wsauth};
 }
 
 sub _url {
@@ -227,7 +124,6 @@ sub _url {
 sub _error {
 	my($self,$msg) = @_;
 	$msg = "_ERROR_".$msg."_ERROR_";
-	DEBUG "_error: _current_method: " . $self->_current_method();
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,method_name => $self->_current_method());
 }
 
@@ -269,11 +165,11 @@ sub _get_db_ws {
 			$query->{name} = $1;
 		}
 	}
-	DEBUG "_get_db_ws: received query: $query";
-	DEBUG "_get_db_ws: " . JSON->new()->pretty->encode($query);
-	DEBUG "_get_db_ws: parsing owner,name,and/or uuid where raw_id = $query->{raw_id}";
-	DEBUG "_get_db_ws: running query with owner = $query->{owner}";
-	DEBUG "_get_db_ws: running query with name = $query->{name}";
+	#DEBUG "_get_db_ws: received query: $query";
+	#DEBUG "_get_db_ws: " . JSON->new()->pretty->encode($query);
+	#DEBUG "_get_db_ws: parsing owner,name,and/or uuid where raw_id = $query->{raw_id}";
+	#DEBUG "_get_db_ws: running query with owner = $query->{owner}";
+	#DEBUG "_get_db_ws: running query with name = $query->{name}";
 
 	my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
 	my $object = $cursor->next;
@@ -322,17 +218,27 @@ sub _retrieve_object_data {
 	if ($obj->{directory} == 1) {
 		return {};
 	}
-	my $filename = $self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name};
-	open (my $fh,"<",$filename);
 	my $data;
-	while (my $line = <$fh>) {
-		$data .= $line;	
+	if (!defined($obj->{shock}) || $obj->{shock} == 0) {
+		my $filename = $self->_db_path()."/".$ws->{owner}."/".$ws->{name}."/".$obj->{path}."/".$obj->{name};
+		open (my $fh,"<",$filename);
+		while (my $line = <$fh>) {
+			$data .= $line;	
+		}
+		close($fh);
+	} else {
+		my $rest = REST::Client->new(useragent => LWP::UserAgent->new());
+		$rest->addHeader(Authorization => "OAuth ".$self->_wsauth());
+		my $res = $rest->GET($obj->{shocknode}."?download");
+		if ($rest->responseCode != 200){
+			die "get_file failed: " . $rest->responseContent();
+		}
+		$data = $rest->responseContent();
 	}
-	my $JSON = JSON::XS->new->utf8(1);
 	if ($data =~ m/^[\{\[].+[\}\]]$/) {
+		my $JSON = JSON::XS->new->utf8(1);
 		$data = $JSON->encode($data);
 	}
-	close($fh);
 	if (!defined($data)) {
 		$data = "";
 	}
@@ -379,7 +285,7 @@ sub _unescape_username {
 sub _get_ws_permission {
 	my ($self,$wsobj) = @_;
 	my $curruser = $self->_escape_username($self->_getUsername());
-	DEBUG "curruser = $curruser";
+	#DEBUG "curruser = $curruser";
 	if ($wsobj->{owner} eq $curruser) {
 		return "o";
 	}
@@ -423,7 +329,7 @@ sub _parse_ws_path {
 	#/<Username>/<Workspace name>/<Path>
 	#<Workspace name>/<Path> (in this case, the currently logged user is assumed to be the owner of the workspace)
 	#/<Username>/<Workspace name>/<Path>
-	DEBUG "_parse_ws_path: input: $input";
+	#DEBUG "_parse_ws_path: input: $input";
 	my ($user,$workspace,$path);
 	if ($input =~ m/^\/([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
 		$user = $1;
@@ -635,6 +541,9 @@ sub _save_object_to_db {
     $obj->{creation_date} = DateTime->now()->datetime();
     $obj->{owner} = $self->_getUsername();
     $obj->{autometadata} = {};
+    if (!defined($obj->{shock})) {
+    	$obj->{shock} = 0;
+    }
     if (!defined($obj->{metadata})) {
     	$obj->{metadata} = {};
     }
@@ -823,6 +732,55 @@ sub _copy_or_move_objects {
     return $output;
 }
 
+#This function creates an empty shock node, gives the logged user ACLs, and returns the node ID
+sub _create_shock_node {
+	my ($self) = @_;
+	my $ua = LWP::UserAgent->new();
+	my $res = $ua->post($self->_shockurl()."/node",Authorization => "OAuth ".$self->_wsauth());
+	my $json = JSON::XS->new;
+	my $data = $json->decode($res->content);
+	print "create shock node output:\n".Data::Dumper->Dump([$data])."\n\n";
+	my $res = $ua->put($self->_shockurl()."/node/".$data->{data}->{id}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
+	print "authorizing shock node output:\n".Data::Dumper->Dump([$res])."\n\n";
+	return $data->{data}->{id};
+}
+
+#This function clears away any exiting objects before saving new objects. Returns a hash of all workspaces involved
+sub _clear_existing_objects_before_save {
+	my ($self,$objects,$overwrite) = @_;
+	my $workspaces = {};
+    my $delete = [];
+    my $deletews = [];
+    for (my $i=0; $i < @{$objects}; $i++) {
+    	my ($user,$workspace,$path) = $self->_parse_ws_path($objects->[$i]->[0]);
+    	if (!defined($workspaces->{$user}->{$workspace})) {
+    		$workspaces->{$user}->{$workspace} = $self->_get_db_ws({
+    			name => $workspace,
+    			owner => $user
+    		});
+    		$self->_check_ws_permissions($workspaces->{$user}->{$workspace},"w",1);
+    	}
+    	my $obj = $self->_get_db_object({
+	    	workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
+	    	path => $path,
+	    	name => $objects->[$i]->[1]
+	    },0);
+    	if (defined($obj)) {
+    		if ($obj->{directory} == 1) {
+    			$self->_error("Cannot overwrite directory /".$user."/".$workspace."/".$workspace."/".$objects->[$i]->[1]." on save!");
+    		} elsif ($overwrite == 0) {
+    			$self->_error("Overwriting object /".$user."/".$workspace."/".$workspace."/".$objects->[$i]->[1]." and overwrite flag is not set!");
+    		}
+    		push(@{$delete},$obj);
+    		push(@{$deletews},$workspaces->{$user}->{$workspace});
+    	}
+    }
+    for (my $i=0; $i < @{$delete}; $i++) {
+    	$self->_delete_object($delete->[$i],$deletews->[$i],1,0);
+    }
+    return $workspaces;
+}
+
 #END_HEADER
 
 sub new
@@ -842,6 +800,8 @@ sub new
     	mongodb-user
     	mongodb-pwd
     	url
+    	wsuser
+    	wspassword
     )];
     if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 		my $service = $ENV{KB_SERVICE_NAME};
@@ -862,7 +822,7 @@ sub new
 			}
 		}
     }    
-	$params = $self->_validateargs($params,["db-path",],{
+	$params = $self->_validateargs($params,["db-path","wsuser","wspassword"],{
 		"mongodb-host" => "localhost",
 		"mongodb-database" => "P3Workspace",
 		"mongodb-user" => undef,
@@ -1162,48 +1122,20 @@ sub save_objects
     $input = $self->_validateargs($input,["objects"],{
 		overwrite => 1
 	});
-    my $workspaces = {};
-    my $delete = [];
-    my $deletews = [];
+    my $wshash = $self->_clear_existing_objects_before_save($input->{objects},$input->{overwrite});
     for (my $i=0; $i < @{$input->{objects}}; $i++) {
     	my ($user,$workspace,$path) = $self->_parse_ws_path($input->{objects}->[$i]->[0]);
-    	if (!defined($workspaces->{$user}->{$workspace})) {
-    		$workspaces->{$user}->{$workspace} = $self->_get_db_ws({
-    			name => $workspace,
-    			owner => $user
-    		});
-    		$self->_check_ws_permissions($workspaces->{$user}->{$workspace},"w",1);
-    	}
-    	my $obj = $self->_get_db_object({
-	    	workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
-	    	path => $path,
-	    	name => $input->{objects}->[$i]->[1]
-	    },0);
-    	if (defined($obj)) {
-    		if ($obj->{overwrite} == 1) {
-    			$self->_error("Cannot overwrite directory /".$user."/".$workspace."/".$workspace."/".$input->{objects}->[$i]->[1]." on save!");
-    		} elsif ($input->{objects} == 0) {
-    			$self->_error("Overwriting object /".$user."/".$workspace."/".$workspace."/".$input->{objects}->[$i]->[1]." and overwrite flag is not set!");
-    		}
-    		push(@{$delete},$obj);
-    		push(@{$deletews},$workspaces->{$user}->{$workspace});
-    	}
-    }
-    for (my $i=0; $i < @{$delete}; $i++) {
-    	$self->_delete_object($delete->[$i],$deletews->[$i],1,0);
-    }
-    for (my $i=0; $i < @{$input->{objects}}; $i++) {
-    	my ($user,$workspace,$path) = $self->_parse_ws_path($input->{objects}->[$i]->[0]);
-    	my $obj = $self->_create_new_object($workspaces->{$user}->{$workspace},{
+    	my $obj = $self->_create_new_object($wshash->{$user}->{$workspace},{
     		directory => 0,
-			workspace_uuid => $workspaces->{$user}->{$workspace}->{uuid},
-			workspace_owner => $workspaces->{$user}->{$workspace}->{owner},
+			workspace_uuid => $wshash->{$user}->{$workspace}->{uuid},
+			workspace_owner => $wshash->{$user}->{$workspace}->{owner},
+			shock => 0,
 			path => $path,
 			name => $input->{objects}->[$i]->[1],
 			type => $input->{objects}->[$i]->[3],
 			metadata => $input->{objects}->[$i]->[4],
     	},$input->{objects}->[$i]->[2]);
-    	push(@{$output},$self->_generate_object_meta($obj,$workspaces->{$user}->{$workspace}))
+    	push(@{$output},$self->_generate_object_meta($obj,$wshash->{$user}->{$workspace}))
     }
     #END save_objects
     my @_bad_returns;
@@ -1296,6 +1228,23 @@ sub create_upload_node
     $input = $self->_validateargs($input,["objects"],{
 		overwrite => 1
 	});
+    my $wshash = $self->_clear_existing_objects_before_save($input->{objects},$input->{overwrite});
+    for (my $i=0; $i < @{$input->{objects}}; $i++) {
+    	my ($user,$workspace,$path) = $self->_parse_ws_path($input->{objects}->[$i]->[0]);
+    	my $shocknode = $self->_shockurl()."/node/".$self->_create_shock_node();
+    	my $obj = $self->_create_new_object($wshash->{$user}->{$workspace},{
+    		directory => 0,
+    		shock => 1,
+    		shocknode => $shocknode,
+			workspace_uuid => $wshash->{$user}->{$workspace}->{uuid},
+			workspace_owner => $wshash->{$user}->{$workspace}->{owner},
+			path => $path,
+			name => $input->{objects}->[$i]->[1],
+			type => $input->{objects}->[$i]->[2],
+			metadata => $input->{objects}->[$i]->[3],
+    	},undef);
+    	push(@{$output},$shocknode);
+    }
     #END create_upload_node
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -1432,7 +1381,7 @@ sub get_objects
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN get_objects
-    $input = $self->_validateargs($input,["objects"],{});
+    $input = $self->_validateargs($input,["objects"],{metadata_only => 0});
     my $workspaces = {};
     for (my $i=0; $i < @{$input->{objects}}; $i++) {
     	my ($user,$workspace,$path) = $self->_parse_ws_path($input->{objects}->[$i]->[0]);
@@ -1449,10 +1398,16 @@ sub get_objects
 	    		path => $path,
 	    		name => $input->{objects}->[$i]->[1]
 	    	});
-	    	push(@{$output},{
-	    		info => $self->_generate_object_meta($obj,$workspaces->{$user}->{$workspace}),
-    			data => $self->_retrieve_object_data($obj,$workspaces->{$user}->{$workspace})
-	    	});
+	    	if ($input->{metadata_only} == 1) {
+		    	push(@{$output},{
+		    		info => $self->_generate_object_meta($obj,$workspaces->{$user}->{$workspace})
+		    	});
+	    	} else {
+	    		push(@{$output},{
+		    		info => $self->_generate_object_meta($obj,$workspaces->{$user}->{$workspace}),
+	    			data => $self->_retrieve_object_data($obj,$workspaces->{$user}->{$workspace})
+		    	});
+	    	}
     	}
     }
     #END get_objects
@@ -1585,7 +1540,7 @@ sub get_objects_by_reference
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN get_objects_by_reference
-    $input = $self->_validateargs($input,["objects"],{});
+    $input = $self->_validateargs($input,["objects"],{metadata_only => 0});
     my $query = {uuid => {'$in' => $input->{objects}}};
 	my $objects = $self->_query_database($query,0);
 	$output = [];
@@ -1599,10 +1554,16 @@ sub get_objects_by_reference
 			$wscache->{$object->{workspace_uuid}}->{currperm} = $self->_check_ws_permissions($wscache->{$object->{workspace_uuid}},"r",0);
 		}
 		if ($wscache->{$object->{workspace_uuid}}->{currperm} == 1) {
-			push(@{$output},{
-				info => $self->_generate_object_meta($object,$wscache->{$object->{workspace_uuid}}),
-				data => $self->_retrieve_object_data($object,$wscache->{$object->{workspace_uuid}})
-			});
+			if ($input->{metadata_only} == 1) {
+				push(@{$output},{
+					info => $self->_generate_object_meta($object,$wscache->{$object->{workspace_uuid}}),
+				});
+			} else {
+				push(@{$output},{
+					info => $self->_generate_object_meta($object,$wscache->{$object->{workspace_uuid}}),
+					data => $self->_retrieve_object_data($object,$wscache->{$object->{workspace_uuid}})
+				});
+			}
 		}
 	}
     #END get_objects_by_reference
@@ -2408,17 +2369,10 @@ sub create_workspace_directory
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN create_workspace_directory
-    $input = $self->_validateargs($input,["WorkspacePath"],{
+    $input = $self->_validateargs($input,["directory"],{
     	metadata => {}
     });
-    my ($user,$workspace,$path) = $self->_parse_ws_path($input->{WorkspacePath});
-
-    DEBUG "create_workspace_directory: directory: " .  $input->{WorkspacePath};
-    DEBUG "create_workspace_directory: user: " . $user;
-    DEBUG "create_workspace_directory: workspace: " . $workspace;
-    DEBUG "create_workspace_directory: path: " . $path;
-
-
+    my ($user,$workspace,$path) = $self->_parse_ws_path($input->{directory});
     my $ws = $self->_get_db_ws({
     	owner => $user,
     	name => $workspace
@@ -2819,7 +2773,7 @@ sub delete_workspace
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN delete_workspace
-    $input = $self->_validateargs($input,["WorkspaceName"],{});
+    $input = $self->_validateargs($input,["workspace"],{});
     my $ws = $self->_get_db_ws({
     	raw_id => $input->{workspace}
     });
