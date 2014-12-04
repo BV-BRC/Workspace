@@ -1,0 +1,28 @@
+use strict;
+use Template;
+use Data::Dumper;
+
+@ARGV == 2 or die "Usage: $0 name description\n";
+
+my $name = shift;
+my $desc = shift;
+
+my $dest = "scripts/$name.pl";
+
+if (-f $dest)
+{
+    die "Script $dest already exists\n";
+}
+
+my $dashed_name = $name;
+$dashed_name =~ s/_/-/g;
+
+my %vars = (
+    name => $name,
+    dashed_name => $dashed_name,
+    description => $desc,
+);
+
+my $templ = Template->new();
+
+$templ->process("ws-template", \%vars, $dest);

@@ -29,6 +29,7 @@ use Log::Log4perl qw(:easy);
 use MongoDB::Connection;
 Log::Log4perl->easy_init($DEBUG);
 
+<<<<<<< HEAD
 #Returns the authentication token supplied to the service in the context object
 sub _authentication {
 	my($self) = @_;
@@ -38,10 +39,19 @@ sub _authentication {
 	}
 	return $self->_getContext()->{token};
 }
+=======
+#
+# Alias our context variable.
+#
+
+*Bio::P3::Workspace::WorkspaceImpl::CallContext = *Bio::P3::Workspace::Service::CallContext;
+our $CallContext;
+>>>>>>> 17852f320b8c05cbb38150f00fbf51f0efd3583c
 
 #Returns the username supplied to the service in the context object
 sub _getUsername {
 	my ($self) = @_;
+<<<<<<< HEAD
 	if (!defined($self->_getContext()->{user_id})) {
 		$self->_error("Workspace functions cannot be run without an authenticated user!")
 	}
@@ -56,14 +66,28 @@ sub _getContext {
 	}
 	return $Bio::P3::Workspace::Service::CallContext;
 }
+=======
+
+	return $CallContext->user_id;
+}
+sub _getContext {
+	my ($self) = @_;
+
+	return $CallContext;
+    }
+>>>>>>> 17852f320b8c05cbb38150f00fbf51f0efd3583c
 
 #Returns the method supplied to the service in the context object
 sub _current_method {
 	my ($self) = @_;
+<<<<<<< HEAD
 	if (!defined($self->_getContext()->{method})) {
 		$self->_error("Context object must include which method is being called!")
 	}
 	return $self->_getContext()->{method};
+=======
+	return $CallContext->method;
+>>>>>>> 17852f320b8c05cbb38150f00fbf51f0efd3583c
 }
 
 sub _validateargs {
@@ -331,26 +355,36 @@ sub _parse_ws_path {
 	#/<Username>/<Workspace name>/<Path>
 	#DEBUG "_parse_ws_path: input: $input";
 	my ($user,$workspace,$path);
-	if ($input =~ m/^\/([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
-		$user = $1;
-		$workspace = $2;
-		$path = $3;
-	} elsif ($input =~ m/^\/([^\/]+)\/([^\/]+)\/*$/) {
-		$user = $1;
-		$workspace = $2;
-		$path = "";
-	} elsif ($input =~ m/^([A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12})\/(.+)\/*$/) {
-		my $ws = $self->_get_db_ws({
-	    	uuid => $1,
-	    });
+
+	if ($input =~ m,^[^/],)
+	{
+	    #
+	    # No leading slash, therefore we are relative to the current user.
+	    #
+	    $input = "/" . $self->_getUsername() . "/$input";
+	}
+
+	if ($input =~ m,^/_uuid/([^/]+)/(.+)/*$,)
+	{
+	    #
+	    # UUID
+	    #
+	    my $ws = $self->_get_db_ws({ uuid => $1 });
 	    $user = $ws->{owner};
-	    $workspace = $ws->{name};
-	} elsif ($input =~ m/^([^\/]+)\/([^\/]+)\/(.+)\/*$/) {
-		$user = $self->_getUsername();
-		$workspace = $1;
-		$path = $2;
+	    $workspace = $1;
+	    $path = $2;
+	}
+	elsif ($input =~ m,^/([^/]+)/([^/]+)/(.+)/*$,)
+	{
+	    #
+	    # /user/ws/path
+	    #
+	    $user = $1;
+	    $workspace = $2;
+	    $path = $3;
 	}
 	else { WARN "_parse_ws_path: could not parse WorkspacePath: $input"; }
+
 	return ($user,$workspace,$path);
 }
 
