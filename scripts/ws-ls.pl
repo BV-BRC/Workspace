@@ -28,7 +28,7 @@ rast-annotate-proteins-kmer-v2 [-io] [long options...] < input > output
 
 =cut
 
-my @options = (["url", 'Service URL'],
+my @options = (["url=s", 'Service URL'],
 	       ["help|h", "Show this usage message"],
 	      );
 
@@ -38,6 +38,13 @@ my($opt, $usage) = describe_options("%c %o path [path...]",
 print($usage->text), exit if $opt->help;
 
 my $ws = Bio::P3::Workspace::WorkspaceClient->new($opt->url);
+
+my @paths = @ARGV;
+my $objs;
+$objs = $ws->get_objects({ objects => [ map { my($x, $y) = $_ =~ m,^(.*)/(.*)$,; [$x, $y] } @paths ]});
+print Dumper($objs);
+
+exit;
 
 for my $path (@ARGV)
 {
@@ -49,7 +56,7 @@ for my $path (@ARGV)
     };
     if ($@)
     {
-	print Dumper($@);
+	
     }
     
 }

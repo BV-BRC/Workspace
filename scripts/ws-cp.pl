@@ -3,6 +3,7 @@ use strict;
 use Getopt::Long::Descriptive;
 use Data::Dumper;
 use Bio::P3::Workspace::WorkspaceClient;
+
 =head1 NAME
 
 ws-cp
@@ -25,7 +26,7 @@ ws-cp [-h] [long options...]
 =cut
 
 my @options = (
-	       ["url", 'Service URL'],
+	       ["url=s", 'Service URL'],
 	       ["help|h", "Show this usage message"],
 	      );
 

@@ -27,7 +27,7 @@ rast-annotate-proteins-kmer-v2 [-io] [long options...] < input > output
 
 =cut
 
-my @options = (["url", 'Service URL'],
+my @options = (["url=s", 'Service URL'],
 	       ["help|h", "Show this usage message"],
 	      );
 
