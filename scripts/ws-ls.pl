@@ -3,6 +3,8 @@ use strict;
 use Getopt::Long::Descriptive;
 use Data::Dumper;
 use Bio::P3::Workspace::WorkspaceClient;
+use Bio::P3::Workspace::ScriptHelpers;
+use Text::Table;
 
 =head1 NAME
 
@@ -18,45 +20,63 @@ List the contents of a workspace directory.
 
 =head1 COMMAND-LINE OPTIONS
 
-rast-annotate-proteins-kmer-v2 [-io] [long options...] < input > output
-	-i --input      file from which the input is to be read
-	-o --output     file to which the output is to be written
-	--help          print usage message and exit
-	--min-hits      minimum number of Kmer hits required for a call to be
-	                made
-	--max-gap       maximum size of a gap allowed for a call to be made
+ws-ls path [long options...]
+	--url      URL to use for workspace service
+	--help     print usage message and exit
 
 =cut
 
 my @options = (["url=s", 'Service URL'],
-	       ["help|h", "Show this usage message"],
-	      );
+	       ["help|h", "Show this usage message"]);
 
-my($opt, $usage) = describe_options("%c %o path [path...]",
+my($opt, $usage) = describe_options("%c %o path",
 				    @options);
 
 print($usage->text), exit if $opt->help;
 
-my $ws = Bio::P3::Workspace::WorkspaceClient->new($opt->url);
+my $ws = Bio::P3::Workspace::ScriptHelpers::wsClient($opt->url);
 
-my @paths = @ARGV;
-my $objs;
-$objs = $ws->get_objects({ objects => [ map { my($x, $y) = $_ =~ m,^(.*)/(.*)$,; [$x, $y] } @paths ]});
-print Dumper($objs);
+my $path = $ARGV[0];
 
-exit;
-
-for my $path (@ARGV)
-{
-    my $r;
-
-    eval {
-	$r = $ws->list_workspace_contents({ directory => $path });
-	print Dumper($r);
-    };
-    if ($@)
-    {
-	
-    }
-    
+my $tbl = [];
+if (defined($path) && $path =~ /\/[^\/]+\/[^\/]+\/*/) {
+	my $objs = $ws->list_workspace_contents({
+		directory => $path,
+		includeSubDirectories => 1,
+		excludeObjects => 0,
+		Recursive => 0
+	});
+ 	for (my $i=0; $i < @{$objs}; $i++) {
+ 		my $obj = $objs->[$i];
+ 		if ($obj->[2] eq "Directory") {
+ 			push(@{$tbl},[$obj->[1],$obj->[5],$obj->[2],$obj->[3],$obj->[9],"?","?"]);
+ 		}
+ 	}
+ 	for (my $i=0; $i < @{$objs}; $i++) {
+ 		my $obj = $objs->[$i];
+ 		if ($obj->[2] ne "Directory") {
+ 			push(@{$tbl},[$obj->[1],$obj->[5],$obj->[2],$obj->[3],$obj->[9],"?","?"]);
+ 		}
+ 	}
+} else {
+	my $wslist = $ws->list_workspaces({});
+	my $user;
+	if ($path =~ /\/([^\/]+)\/*/) {
+ 		print "Listing workspaces owned by $user\n";
+ 		$user = $1;
+	} else {
+		print "Listing all accessible workspaces\n";
+	}
+ 	for (my $i=0; $i < @{$wslist}; $i++) {
+ 		my $obj = $wslist->[$i];
+ 		
+ 		if (!defined($user) || $user eq $obj->[2]) {
+ 			push(@{$tbl},[$obj->[1],$obj->[2],"Workspace",$obj->[3],$obj->[4],$obj->[5],$obj->[6]]);
+ 		}
+ 	}
 }
+my $table = Text::Table->new(
+	"Name","Owner","Type","Moddate","Size","User perm","Global perm",
+);
+$table->load(@{$tbl});
+print $table."\n";

@@ -1162,15 +1162,17 @@ sub save_objects
 $input is a create_upload_node_params
 $output is a reference to a list where each element is a string
 create_upload_node_params is a reference to a hash where the following keys are defined:
-	objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
+	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectType
+	3: a UserMetadata
 
 	overwrite has a value which is a bool
 WorkspacePath is a string
 ObjectName is a string
 ObjectType is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
 bool is an int
 
 </pre>
@@ -1182,15 +1184,17 @@ bool is an int
 $input is a create_upload_node_params
 $output is a reference to a list where each element is a string
 create_upload_node_params is a reference to a hash where the following keys are defined:
-	objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
+	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a WorkspacePath
 	1: an ObjectName
 	2: an ObjectType
+	3: a UserMetadata
 
 	overwrite has a value which is a bool
 WorkspacePath is a string
 ObjectName is a string
 ObjectType is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
 bool is an int
 
 
@@ -1274,8 +1278,10 @@ get_objects_params is a reference to a hash where the following keys are defined
 	0: a WorkspacePath
 	1: an ObjectName
 
+	metadata_only has a value which is a bool
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectDataInfo is a reference to a hash where the following keys are defined:
 	data has a value which is an ObjectData
 	info has a value which is an ObjectMeta
@@ -1318,8 +1324,10 @@ get_objects_params is a reference to a hash where the following keys are defined
 	0: a WorkspacePath
 	1: an ObjectName
 
+	metadata_only has a value which is a bool
 WorkspacePath is a string
 ObjectName is a string
+bool is an int
 ObjectDataInfo is a reference to a hash where the following keys are defined:
 	data has a value which is an ObjectData
 	info has a value which is an ObjectMeta
@@ -1436,7 +1444,9 @@ $input is a get_objects_by_reference_params
 $output is a reference to a list where each element is an ObjectDataInfo
 get_objects_by_reference_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is an ObjectID
+	metadata_only has a value which is a bool
 ObjectID is a string
+bool is an int
 ObjectDataInfo is a reference to a hash where the following keys are defined:
 	data has a value which is an ObjectData
 	info has a value which is an ObjectMeta
@@ -1477,7 +1487,9 @@ $input is a get_objects_by_reference_params
 $output is a reference to a list where each element is an ObjectDataInfo
 get_objects_by_reference_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is an ObjectID
+	metadata_only has a value which is a bool
 ObjectID is a string
+bool is an int
 ObjectDataInfo is a reference to a hash where the following keys are defined:
 	data has a value which is an ObjectData
 	info has a value which is an ObjectMeta
@@ -4220,10 +4232,11 @@ This function creates a node in shock that the user can upload to and links this
 
 <pre>
 a reference to a hash where the following keys are defined:
-objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
+objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a WorkspacePath
 1: an ObjectName
 2: an ObjectType
+3: a UserMetadata
 
 overwrite has a value which is a bool
 
@@ -4234,10 +4247,11 @@ overwrite has a value which is a bool
 =begin text
 
 a reference to a hash where the following keys are defined:
-objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
+objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a WorkspacePath
 1: an ObjectName
 2: an ObjectType
+3: a UserMetadata
 
 overwrite has a value which is a bool
 
@@ -4269,6 +4283,7 @@ objects has a value which is a reference to a list where each element is a refer
 0: a WorkspacePath
 1: an ObjectName
 
+metadata_only has a value which is a bool
 
 </pre>
 
@@ -4281,6 +4296,7 @@ objects has a value which is a reference to a list where each element is a refer
 0: a WorkspacePath
 1: an ObjectName
 
+metadata_only has a value which is a bool
 
 
 =end text
@@ -4307,6 +4323,7 @@ This function retrieves a list of objects from the workspace
 <pre>
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is an ObjectID
+metadata_only has a value which is a bool
 
 </pre>
 
@@ -4316,6 +4333,7 @@ objects has a value which is a reference to a list where each element is an Obje
 
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is an ObjectID
+metadata_only has a value which is a bool
 
 
 =end text

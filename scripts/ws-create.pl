@@ -3,6 +3,8 @@ use strict;
 use Getopt::Long::Descriptive;
 use Data::Dumper;
 use Bio::P3::Workspace::WorkspaceClient;
+use Bio::P3::Workspace::ScriptHelpers;
+use Text::Table;
 =head1 NAME
 
 ws-create
@@ -17,19 +19,14 @@ Create a workspace
 
 =head1 COMMAND-LINE OPTIONS
 
-rast-annotate-proteins-kmer-v2 [-io] [long options...] < input > output
-	-i --input      file from which the input is to be read
-	-o --output     file to which the output is to be written
-	--help          print usage message and exit
-	--min-hits      minimum number of Kmer hits required for a call to be
-	                made
-	--max-gap       maximum size of a gap allowed for a call to be made
-
+ws-create workspace [long options...]
+	--url      URL to use for workspace service
+	--help     print usage message and exit
+	
 =cut
 
 my @options = (["url=s", 'Service URL'],
-	       ["help|h", "Show this usage message"],
-	      );
+	       ["help|h", "Show this usage message"]);
 
 my($opt, $usage) = describe_options("%c %o ws-name",
 				    @options);
@@ -38,7 +35,12 @@ my $name = shift;
 
 print($usage->text), exit if $opt->help;
 
-my $ws = Bio::P3::Workspace::WorkspaceClient->new($opt->url);
+my $ws = Bio::P3::Workspace::ScriptHelpers::wsClient($opt->url);
 
-my $r = $ws->create_workspace({ workspace => $name });
-print Dumper($r);
+my $wslist = $ws->create_workspace({ workspace => $name });
+my $table = Text::Table->new(
+	"Name","Owner","Type","Moddate","Size","User perm","Global perm",
+);
+my $tbl = [[$wslist->[1],$wslist->[2],"Workspace",$wslist->[3],$wslist->[4],$wslist->[5],$wslist->[6]]];
+$table->load(@{$tbl});
+print $table."\n";
