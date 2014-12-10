@@ -1429,6 +1429,115 @@ sub get_objects
 
 
 
+=head2 get_workspace_meta
+
+  $output = $obj->get_workspace_meta($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is a get_workspace_meta_params
+$output is a reference to a list where each element is a WorkspaceMeta
+get_workspace_meta_params is a reference to a hash where the following keys are defined:
+	workspaces has a value which is a reference to a list where each element is a WorkspaceID
+WorkspaceID is a string
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is a get_workspace_meta_params
+$output is a reference to a list where each element is a WorkspaceMeta
+get_workspace_meta_params is a reference to a hash where the following keys are defined:
+	workspaces has a value which is a reference to a list where each element is a WorkspaceID
+WorkspaceID is a string
+WorkspaceMeta is a reference to a list containing 9 items:
+	0: a WorkspaceID
+	1: a WorkspaceName
+	2: (workspace_owner) a Username
+	3: (moddate) a Timestamp
+	4: (num_objects) an int
+	5: (user_permission) a WorkspacePerm
+	6: (global_permission) a WorkspacePerm
+	7: (num_directories) an int
+	8: a UserMetadata
+WorkspaceName is a string
+Username is a string
+Timestamp is a string
+WorkspacePerm is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+
+
+=end text
+
+
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub get_workspace_meta
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to get_workspace_meta:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'get_workspace_meta');
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN get_workspace_meta
+    $input = $self->_validateargs($input,["workspaces"],{});
+    for (my $i=0; $i < @{$input->{workspaces}}; $i++) {
+    	my $ws = $self->_get_db_ws({raw_id => $input->{workspaces}->[$i]});
+    	if ($self->_check_ws_permissions($ws,"r",0) == 1) {
+    		push(@{$output},$self->_generate_ws_meta($ws));
+    	}
+    }
+    #END get_workspace_meta
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to get_workspace_meta:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'get_workspace_meta');
+    }
+    return($output);
+}
+
+
+
+
 =head2 get_objects_by_reference
 
   $output = $obj->get_objects_by_reference($input)
@@ -4297,6 +4406,41 @@ objects has a value which is a reference to a list where each element is a refer
 1: an ObjectName
 
 metadata_only has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 get_workspace_meta_params
+
+=over 4
+
+
+
+=item Description
+
+This function retrieves metadata for a set of workspaces
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+workspaces has a value which is a reference to a list where each element is a WorkspaceID
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+workspaces has a value which is a reference to a list where each element is a WorkspaceID
 
 
 =end text

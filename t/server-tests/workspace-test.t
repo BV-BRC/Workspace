@@ -84,6 +84,13 @@ $output = $ws->create_workspace({
 ok defined($output), "Successfully ran create_workspace function!";
 print "create_workspace output:\n".Data::Dumper->Dump($output)."\n\n";
 
+#Getting workspace metadata
+$output = $ws->get_workspace_meta({
+	workspaces => ["/chenry/TestWorkspace"]
+});
+ok defined($output), "Successfully ran get_workspace_meta function!";
+print "get_workspace_meta output:\n".Data::Dumper->Dump($output)."\n\n";
+
 #Listing workspaces as "$testusertwo"
 $output = $ws->list_workspaces({});
 ok defined($output->[0]) && !defined($output->[1]), "Successfully ran list_workspaces function on got one workspace back!";

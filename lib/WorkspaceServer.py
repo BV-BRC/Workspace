@@ -280,6 +280,10 @@ class Application(object):
                              name='Workspace.get_objects',
                              types=[dict])
         self.method_authentication['Workspace.get_objects'] = 'required'
+        self.rpc_service.add(impl_Workspace.get_workspace_meta,
+                             name='Workspace.get_workspace_meta',
+                             types=[dict])
+        self.method_authentication['Workspace.get_workspace_meta'] = 'required'
         self.rpc_service.add(impl_Workspace.get_objects_by_reference,
                              name='Workspace.get_objects_by_reference',
                              types=[dict])

@@ -118,6 +118,12 @@ typedef structure {
 } get_objects_params;
 funcdef get_objects(get_objects_params input) returns (list<ObjectDataInfo> output) authentication required;
 
+/* This function retrieves metadata for a set of workspaces */
+typedef structure {
+		list<WorkspaceID> workspaces;
+} get_workspace_meta_params;
+funcdef get_workspace_meta(get_workspace_meta_params input) returns (list<WorkspaceMeta> output) authentication required;
+
 /* This function retrieves a list of objects from the workspace */
 typedef structure {
 		list<ObjectID> objects;
