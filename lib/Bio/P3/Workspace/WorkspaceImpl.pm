@@ -251,7 +251,11 @@ sub _validate_workspace_name {
 sub _validate_object_type {
 	my ($self,$type) = @_;
 	my $types = {
-		String => 1,Genome => 1,Unspecified => 1,Directory => 1
+		String => 1,
+		Genome => 1,
+		Unspecified => 1,
+		Directory => 1,
+		Contigs => 1,
 	};
 	if (!defined($types->{$type})) {
 		$self->_error("Invalid type submitted!");
