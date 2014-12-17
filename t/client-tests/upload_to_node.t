@@ -62,6 +62,8 @@ $create_upload_node_params->{objects}->[0]->[0] = $path,
 $create_upload_node_params->{objects}->[0]->[1] = $obj_name,
 $create_upload_node_params->{objects}->[0]->[2] = $obj_type,
 $create_upload_node_params->{objects}->[0]->[3] = \%metadata,
+
+
 ok($rnodes = $obj->create_upload_node($create_upload_node_params),
   "can create_upload_node with params\n" . 
   Dumper $create_upload_node_params .  "\n" .
@@ -73,9 +75,41 @@ ok($rnodes = $obj->create_upload_node($create_upload_node_params),
 my $auth_header;
 ok(my $tok = Bio::KBase::AuthToken->new(), "can create token object");
 $auth_header = "-H 'Authorization: OAuth $tok->{token}'" if $tok->{token};
-my $cmd = "curl -s $auth_header -X PUT -F upload=\@$infile $rnodes->[0]";
+my $cmd = "curl -s $auth_header -X PUT -F upload=\@$infile $rnodes->[0] > /dev/null";
 ok(system($cmd) == 0, "can put data to shock node at\n  $rnodes->[0]");
-print $cmd;
+# print $cmd;
+
+
+# can see the data in the workspace
+my $list_workspace_params = {
+	directory => '/brettin/' . $create_workspace_params->{workspace} . '/',
+	includeSubDirectories => 1,
+	excludeObjects => 0,
+	Recursive => 1
+};
+
+my $output;
+ok($output = $obj->list_workspace_contents($list_workspace_params), "can call list_workspace_contents");
+print Dumper $output;
+undef $output;
+
+# can get data
+my $ret;
+my $get_objects_params = {
+	objects => [[$path, $obj_name]],
+	metadata_only => 1
+};
+ok($ret = $obj->get_objects($get_objects_params), "can call get_objects for metadata");
+ok (ref $ret->[0]->{info} eq "ARRAY", "get_objects return info is array ref");
+print Dumper $ret;
+
+
+$get_objects_params->{metadata_only} = 0;
+ok($ret = $obj->get_objects($get_objects_params), "can call get_objects for data");
+ok (exists $ret->[0]->{data} , "data exists in get_objects return");
+ok (defined $ret->[0]->{data} , "data defined in get_objects return");
+# print Dumper $ret;
+
 
 # done testing
 done_testing();
