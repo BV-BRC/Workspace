@@ -36,47 +36,26 @@ print($usage->text), exit if $opt->help;
 
 my $ws = Bio::P3::Workspace::ScriptHelpers::wsClient($opt->url);
 
-my $path = $ARGV[0];
+my @paths = @ARGV;
 
-my $tbl = [];
-if (defined($path) && $path =~ /\/[^\/]+\/[^\/]+\/*/) {
-	my $objs = $ws->list_workspace_contents({
-		directory => $path,
-		includeSubDirectories => 1,
-		excludeObjects => 0,
-		Recursive => 0
-	});
- 	for (my $i=0; $i < @{$objs}; $i++) {
- 		my $obj = $objs->[$i];
- 		if ($obj->[2] eq "Directory") {
- 			push(@{$tbl},[$obj->[1],$obj->[5],$obj->[2],$obj->[3],$obj->[9],"?","?"]);
- 		}
- 	}
- 	for (my $i=0; $i < @{$objs}; $i++) {
- 		my $obj = $objs->[$i];
- 		if ($obj->[2] ne "Directory") {
- 			push(@{$tbl},[$obj->[1],$obj->[5],$obj->[2],$obj->[3],$obj->[9],"?","?"]);
- 		}
- 	}
-} else {
-	my $wslist = $ws->list_workspaces({});
-	my $user;
-	if ($path =~ /\/([^\/]+)\/*/) {
- 		print "Listing workspaces owned by $user\n";
- 		$user = $1;
-	} else {
-		print "Listing all accessible workspaces\n";
-	}
- 	for (my $i=0; $i < @{$wslist}; $i++) {
- 		my $obj = $wslist->[$i];
- 		
- 		if (!defined($user) || $user eq $obj->[2]) {
- 			push(@{$tbl},[$obj->[1],$obj->[2],"Workspace",$obj->[3],$obj->[4],$obj->[5],$obj->[6]]);
- 		}
- 	}
+my $res = $ws->ls({ paths => \@paths });
+
+
+for my $p (@paths)
+{
+    my $x = $res->{$p};
+    print "$p:\n" if @paths > 1;
+    my $tbl = [];
+    
+    for my $file (@$x)
+    {
+	my($name, $type, $path, $created, $id, $owner, $size, $user_meta, $auto_meta, $user_perm,
+	   $global_perm, $shockurl) = @$file;
+	push(@$tbl, [$name, $owner, $type, $created, $size, $user_perm, $global_perm]);
+    }
+    my $table = Text::Table->new(
+				 "Name","Owner","Type","Moddate","Size","User perm","Global perm",
+				);
+    $table->load(@{$tbl});
+    print $table."\n";
 }
-my $table = Text::Table->new(
-	"Name","Owner","Type","Moddate","Size","User perm","Global perm",
-);
-$table->load(@{$tbl});
-print $table."\n";
