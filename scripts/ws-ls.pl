@@ -51,10 +51,10 @@ for my $p (@paths)
     {
 	my($name, $type, $path, $created, $id, $owner, $size, $user_meta, $auto_meta, $user_perm,
 	   $global_perm, $shockurl) = @$file;
-	push(@$tbl, [$name, $owner, $type, $created, $size, $user_perm, $global_perm]);
+	push(@$tbl, [$name, $owner, $type, $created, $size, $user_perm, $global_perm, $shockurl]);
     }
     my $table = Text::Table->new(
-				 "Name","Owner","Type","Moddate","Size","User perm","Global perm",
+				 "Name","Owner","Type","Moddate","Size","User perm","Global perm", "Shock URL"
 				);
     $table->load(@{$tbl});
     print $table."\n";
