@@ -3,7 +3,7 @@ use strict;
 use Bio::KBase::Exceptions;
 # Use Semantic Versioning (2.0.0-rc.1)
 # http://semver.org 
-our $VERSION = "0.2.0";
+our $VERSION = "0.1.0";
 
 =head1 NAME
 
@@ -1012,7 +1012,7 @@ create_params is a reference to a hash where the following keys are defined:
 	3: an ObjectData
 
 	permission has a value which is a WorkspacePerm
-	uploadNodes has a value which is a bool
+	createUploadNodes has a value which is a bool
 	downloadLinks has a value which is a bool
 	overwrite has a value which is a bool
 FullObjectPath is a string
@@ -1058,7 +1058,7 @@ create_params is a reference to a hash where the following keys are defined:
 	3: an ObjectData
 
 	permission has a value which is a WorkspacePerm
-	uploadNodes has a value which is a bool
+	createUploadNodes has a value which is a bool
 	downloadLinks has a value which is a bool
 	overwrite has a value which is a bool
 FullObjectPath is a string
@@ -1420,6 +1420,8 @@ sub ls
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN ls
+
+    $output = {};
     $input = $self->_validateargs($input,["paths"],{
     	excludeDirectories => 0,
 		excludeObjects => 0,
@@ -2501,7 +2503,7 @@ objects has a value which is a reference to a list where each element is a refer
 3: an ObjectData
 
 permission has a value which is a WorkspacePerm
-uploadNodes has a value which is a bool
+createUploadNodes has a value which is a bool
 downloadLinks has a value which is a bool
 overwrite has a value which is a bool
 
@@ -2519,7 +2521,7 @@ objects has a value which is a reference to a list where each element is a refer
 3: an ObjectData
 
 permission has a value which is a WorkspacePerm
-uploadNodes has a value which is a bool
+createUploadNodes has a value which is a bool
 downloadLinks has a value which is a bool
 overwrite has a value which is a bool
 
