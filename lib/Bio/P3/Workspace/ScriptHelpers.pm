@@ -2,6 +2,7 @@ package Bio::P3::Workspace::ScriptHelpers;
 use strict;
 use warnings;
 use Bio::P3::Workspace::WorkspaceClient;
+use Bio::P3::Workspace::WorkspaceClientExt;
 
 our $defaultWSURL   = "http://p3.theseed.org/services/Workspace";
 
@@ -169,7 +170,7 @@ sub wsClient {
 			return Bio::P3::Workspace::WorkspaceImpl->new();
 		};
 	}
-	return Bio::P3::Workspace::WorkspaceClient->new($url);
+	return Bio::P3::Workspace::WorkspaceClientExt->new($url);
 }
 
 sub token {
