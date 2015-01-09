@@ -37,19 +37,74 @@ my $obj;
 isa_ok ($obj = Bio::P3::Workspace::WorkspaceClient->new(), Bio::P3::Workspace::WorkspaceClient);
 
 # create a workspace for each permission value and then delete it
+my $full_obj_path = '/' . 'brettin' . '/' . new_uuid("brettin");
+my $obj_type = 'folder'; # folder, 
+my $user_meta = undef;
+my $obj_data = undef;
 
+my $object = [$full_obj_path, $obj_type, $user_meta, $obj_data];
+my $objects = [$object];
 my $perm = 'w';
-my $create_workspace_params = {
-    workspace => new_uuid("brettin"),
-    permission => $perm,
-    metadata => {'owner' => 'brettin'},
+my $cun = undef;
+my $dl = undef;
+my $ow = undef;
+my $create_params = {
+	objects => $objects,
+	permission => $perm,
+	createUploadNodes => $cun,
+	downloadLinks => $dl,
+	overwrite => $ow
 };
+#    metadata => {'owner' => 'brettin'},
+#};
 
-my $output;
-ok($output = $obj->create_workspace($create_workspace_params), "can create workspace with perm=$perm");
+# create a ws
+ok($obj->create($create_params), "can call create");
+
+# create a duplicate ws
+# ok($obj->create($create_params), "can call create");
+
+{
+  # create a ws and check return is defined, contains arrays, and has values
+  my $full_obj_path = '/' . 'brettin' . '/' . new_uuid("brettin");
+  my $obj_type = 'folder'; # folder, 
+  my $user_meta = undef;
+  my $obj_data = undef;
+
+  my $object = [$full_obj_path, $obj_type, $user_meta, $obj_data];
+  my $objects = [$object];
+  my $perm = 'w';
+  my $cun = undef;
+  my $dl = undef;
+  my $ow = undef;
+  my $create_params = {
+        objects => $objects,
+        permission => $perm,
+        createUploadNodes => $cun,
+        downloadLinks => $dl,
+        overwrite => $ow
+  };
+
+  my $output;
+
+  ok($output = $obj->create($create_params), "create workspace returns output");
+  ok(ref $output->[0] eq 'ARRAY', "output is contains arrays");
+  ok($output->[0]->[0], "Object meta has name " . $output->[0]->[0]);
+  ok($output->[0]->[1], "Object meta has type " . $output->[0]->[1]);
+  ok($output->[0]->[2], "Object meta has path " . $output->[0]->[2]);
+  ok($output->[0]->[3], "Object meta has timestamp " . $output->[0]->[3]);
+  ok($output->[0]->[4], "Object meta has id " . $output->[0]->[4]);
+  ok($output->[0]->[5], "Object meta has owner " . $output->[0]->[5]);
+  ok($output->[0]->[6] == 0, "Object meta has size " . $output->[0]->[6]);
+  ok($output->[0]->[7], "Object meta has user meta " . $output->[0]->[7]);
+  ok($output->[0]->[8], "Object meta has auto meta " . $output->[0]->[8]);
+  ok($output->[0]->[9], "Object meta has user perm " . $output->[0]->[9]);
+  ok($output->[0]->[10], "Object meta has global perm " . $output->[0]->[10]);
+  ok($output->[0]->[11] eq '',  "Object meta has shock url " . $output->[0]->[11]);
 
 
 
+}
 done_testing();
 
 

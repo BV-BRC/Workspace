@@ -35,5 +35,17 @@ BEGIN {
 my $obj;
 isa_ok ($obj = Bio::P3::Workspace::WorkspaceClient->new(), Bio::P3::Workspace::WorkspaceClient);
 
+# check the interface
+my @funcdefs = qw(
+	create
+        get
+        ls
+        copy
+        delete
+        set_permissions
+        list_permissions
+      );
+can_ok( "Bio::P3::Workspace::WorkspaceClient", @funcdefs);
+diag("API supports ", join ", ", @funcdefs);
 
 done_testing();
