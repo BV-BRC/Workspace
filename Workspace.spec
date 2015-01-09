@@ -64,7 +64,7 @@ typedef tuple<ObjectName,ObjectType,FullObjectPath,Timestamp creation_time,Objec
 	Parameters:
 	list<tuple<FullObjectPath,ObjectType,UserMetadata,ObjectData>> objects - data on objects being create; use type "Directory" to create a directory; data does not need to be specified if creating a directory or upload node
 	WorkspacePerm permission - this will be the default permission specified for any top level directories being created (optional; default = "n")
-	bool uploadNodes - set this boolean to "1" if we are creating upload nodes instead of objects or directories (optional; default = "0")
+	bool createUploadNodes - set this boolean to "1" if we are creating upload nodes instead of objects or directories (optional; default = "0")
 	bool overwrite - set this boolean to "1" if we should overwrite existing objects; directories cannot be overwritten (optional; default = "0")
 
 */
