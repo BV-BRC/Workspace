@@ -52,6 +52,7 @@ $local_file = abs_path($local_file);
 
 if ($opt->shock)
 {
+    local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
     my $token = Bio::KBase::AuthToken->new();
     my $ua = LWP::UserAgent->new();
 

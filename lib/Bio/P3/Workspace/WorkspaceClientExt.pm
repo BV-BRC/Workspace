@@ -4,6 +4,7 @@ use Data::Dumper;
 use strict;
 use base 'Bio::P3::Workspace::WorkspaceClient';
 use LWP::UserAgent;
+use File::Slurp;
 
 sub copy_files_to_handles
 {
@@ -18,7 +19,8 @@ sub copy_files_to_handles
 
     my %fhmap = map { @$_ } @$file_handle_pairs;
     my $res = $self->get({ objects => [ map { $_->[0] } @$file_handle_pairs] });
-    
+
+    print Dumper(\%fhmap, $file_handle_pairs, $res);
     for my $ent (@$res)
     {
 	my($meta, $data) = @$ent;
@@ -57,6 +59,8 @@ sub save_data_to_file
 
     if ($use_shock)
     {
+	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
+
 	$token = $token->token if ref($token);
 	my $ua = LWP::UserAgent->new();
 
@@ -81,6 +85,45 @@ sub save_data_to_file
     else
     {
 	my $res = $self->create({ objects => [[$path, $type, $metadata, $data ]],
+				overwrite => ($overwrite ? 1 : 0) });
+	print STDERR Dumper($res);
+    }
+}
+
+sub save_file_to_file
+{
+    my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token) = @_;
+
+    $type ||= 'unspecified';
+
+    if ($use_shock)
+    {
+	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
+
+	$token = $token->token if ref($token);
+	my $ua = LWP::UserAgent->new();
+
+	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
+				overwrite => ($overwrite ? 1 : 0),
+				createUploadNodes => 1 });
+	if (!ref($res) || @$res == 0)
+	{
+	    die "Create failed";
+	}
+	$res = $res->[0];
+	my $shock_url = $res->[11];
+	
+	my $req = HTTP::Request::Common::POST($shock_url, 
+					      Authorization => "OAuth " . $token,
+					      Content_Type => 'multipart/form-data',
+					      Content => [upload => [$local_file]]);
+	$req->method('PUT');
+	my $sres = $ua->request($req);
+	print STDERR Dumper($sres->content);
+    }
+    else
+    {
+	my $res = $self->create({ objects => [[$path, $type, $metadata, read_file($local_file) ]],
 				overwrite => ($overwrite ? 1 : 0) });
 	print STDERR Dumper($res);
     }
