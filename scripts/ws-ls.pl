@@ -22,11 +22,13 @@ List the contents of a workspace directory.
 
 ws-ls path [long options...]
 	--url      URL to use for workspace service
+        --shock    Include Shock URLs
 	--help     print usage message and exit
 
 =cut
 
 my @options = (["url=s", 'Service URL'],
+	       ['shock', 'Include Shock URLs'],
 	       ["help|h", "Show this usage message"]);
 
 my($opt, $usage) = describe_options("%c %o path",
@@ -51,10 +53,10 @@ for my $p (@paths)
     {
 	my($name, $type, $path, $created, $id, $owner, $size, $user_meta, $auto_meta, $user_perm,
 	   $global_perm, $shockurl) = @$file;
-	push(@$tbl, [$name, $owner, $type, $created, $size, $user_perm, $global_perm, $shockurl]);
+	push(@$tbl, [$name, $owner, $type, $created, $size, $user_perm, $global_perm, ($opt->shock ? $shockurl  : ())]);
     }
     my $table = Text::Table->new(
-				 "Name","Owner","Type","Moddate","Size","User perm","Global perm", "Shock URL"
+				 "Name","Owner","Type","Moddate","Size","User perm","Global perm", ($opt->shock ? "Shock URL" : ())
 				);
     $table->load(@{$tbl});
     print $table."\n";
