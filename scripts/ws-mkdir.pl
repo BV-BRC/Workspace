@@ -4,6 +4,7 @@ use strict;
 use Getopt::Long::Descriptive;
 use Data::Dumper;
 use Bio::P3::Workspace::WorkspaceClient;
+use Bio::P3::Workspace::WorkspaceClientExt;
 use Bio::P3::Workspace::Utils;
 
 =head1 NAME
@@ -44,58 +45,34 @@ my $wsutil = Bio::P3::Workspace::Utils->new($ws);
 
 for my $fullpath (@ARGV)
 {
-    my($wsname, $user, $path);
-    if ($fullpath =~ m,^/([^/]+)/([^/]+)(.*),)
-    {
-	($user, $wsname, $path) = ($1, $2, $3);
-	print "wsname=$wsname user=$user path=$path\n";
-    }
-    elsif ($fullpath !~ m,^/,)
+    if ($fullpath !~ m,^/,)
     {
 	warn "ws-mkdir $fullpath: Currently all paths must be absolute\n";
 	next;
     }
-    elsif ($fullpath =~ m,^([^/]+)(.*),)
+
+    my $cur;
+    eval {
+	$cur = $ws->get({ objects => \@ARGV, metadata_only => 0 });
+    };
+    if ($@)
     {
-	($wsname, $path) = ($1, $2);
-	print "rel: wsname=$wsname path=$path\n";
+	$cur = [];
     }
-    else
+    $cur = $cur->[0]->[0];
+    bless $cur, 'Bio::P3::Workspace::ObjectMeta';
+    if (defined($cur->name))
     {
-	warn "ws-mkdir $fullpath: Cannot parse path\n";
+	warn "ws-mkdir $fullpath: path already exists\n";
+	print Dumper($cur);
 	next;
     }
-
-    if (!$wsutil->workspace_exists("/$user/$wsname"))
+    eval {
+	$ws->create({ objects => [[$fullpath, 'folder']] });
+    };
+    if ($@)
     {
-	if ($wsutil->username() ne $user)
-	{
-	    warn "ws-mkdir $fullpath: Cannot create workspace for another user\n";
-	    next;
-	}
-	
-	my $m = $ws->create_workspace({ workspace => $wsname });
-	print Dumper($m);
+	warn "Error creating $fullpath\n$@\n";
     }
 
-    $path =~ s,^/,,;
-    if ($path)
-    {
-	my $curpath = "/$user/$wsname";
-	my @parts = split(m!/!, $path);
-	for my $part (@parts)
-	{
-	    $curpath .= "/$part";
-	    try {
-		my $x = $ws->create_workspace_directory({ directory => $curpath});
-		print Dumper($x);
-	    } catch {
-		if (!/already exists/)
-		{
-		    die "Create $curpath failed: $_\n";
-		}
-	    };
-	    
-	}
-    }	 
 }
