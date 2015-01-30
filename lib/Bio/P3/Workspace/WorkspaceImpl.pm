@@ -265,8 +265,19 @@ sub _validate_object_type {
 		$type = "folder";
 	}
 	my $types = {
-		string => 1,genome => 1,unspecified => 1,folder => 1
+		string => 0,
+		genome => 0,
+		unspecified => 0,
+		folder => 1,
+		transcriptomics_experiment => 1,
+		proteomics_experiment => 1,
+		genome_group => 0,
+		feature_group => 0,
+		experiment_group => 0,
+		contigs => 0,
+		genome_annotation_result => 1
 	};
+	
 	if (!defined($types->{$type})) {
 		$self->_error("Invalid type submitted!");
 	}
