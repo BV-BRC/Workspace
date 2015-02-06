@@ -206,7 +206,7 @@ sub _retrieve_object_data {
 		close($fh);
 		if ($data =~ m/^[\{\[].+[\}\]]$/) {
 			my $JSON = JSON::XS->new->utf8(1);
-			$data = $JSON->encode($data);
+			$data = $JSON->decode($data);
 		}
 	} else {
 		my $ua = LWP::UserAgent->new();
