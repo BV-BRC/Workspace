@@ -60,12 +60,15 @@ for my $fullpath (@ARGV)
 	$cur = [];
     }
     $cur = $cur->[0]->[0];
-    bless $cur, 'Bio::P3::Workspace::ObjectMeta';
-    if (defined($cur->name))
+    if ($cur)
     {
-	warn "ws-mkdir $fullpath: path already exists\n";
-	print Dumper($cur);
-	next;
+	bless $cur, 'Bio::P3::Workspace::ObjectMeta';
+	if (defined($cur->name))
+	{
+	    warn "ws-mkdir $fullpath: path already exists\n";
+	    print Dumper($cur);
+	    next;
+	}
     }
     eval {
 	$ws->create({ objects => [[$fullpath, 'folder']] });

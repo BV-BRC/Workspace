@@ -73,6 +73,7 @@ sub save_data_to_file
 	}
 	$res = $res->[0];
 	my $shock_url = $res->[11];
+	$shock_url or die "Workspace did not return shock url. Return object: " . Dumper($res);
 	
 	my $req = HTTP::Request::Common::POST($shock_url, 
 					      Authorization => "OAuth " . $token,
