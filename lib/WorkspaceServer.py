@@ -272,6 +272,14 @@ class Application(object):
                              name='Workspace.get',
                              types=[dict])
         self.method_authentication['Workspace.get'] = 'required'
+        self.rpc_service.add(impl_Workspace.get_download_url,
+                             name='Workspace.get_download_url',
+                             types=[dict])
+        self.method_authentication['Workspace.get_download_url'] = 'required'
+        self.rpc_service.add(impl_Workspace.get_archive_url,
+                             name='Workspace.get_archive_url',
+                             types=[dict])
+        self.method_authentication['Workspace.get_archive_url'] = 'none'
         self.rpc_service.add(impl_Workspace.ls,
                              name='Workspace.ls',
                              types=[dict])

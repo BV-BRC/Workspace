@@ -4,7 +4,6 @@ use Bio::KBase::Exceptions;
 # Use Semantic Versioning (2.0.0-rc.1)
 # http://semver.org 
 our $VERSION = "0.1.0";
-our $gah;
 
 =head1 NAME
 
@@ -15,11 +14,13 @@ Workspace
 
 
 =cut
-    use Carp::Always;
+
 #BEGIN_HEADER
 
 use File::Path;
 use File::Copy ("cp","mv");
+use File::stat;
+use Fcntl ':mode';
 use Data::UUID;
 use REST::Client;
 use LWP::UserAgent;
@@ -947,15 +948,35 @@ sub _download_service_start
 {
     my($self) = @_;
 
-    my $timer = AnyEvent->timer(after => 0,
-				interval => 10,
-				cb => sub { $self->_download_cleanup() });
+    my $timer;
+    $timer = AnyEvent->timer(after => 0,
+			     interval => 10,
+			     cb => sub { $self->_download_cleanup($self->{_mongodb}); });
     $self->{_download_timer} = $timer;
+	
 }
 
+#
+# This should be an async mongo lookup. Later.
+#
 sub _download_cleanup
 {
-    my($self) = @_;
+    my($self, $db) = @_;
+    my $coll = $db->get_collection("downloads");
+    my $now = time;
+    $coll->remove({expiration_time => {'$lt', $now}});
+    my $res = $db->last_error();
+    if ($res->{ok})
+    {
+	if ($res->{n} > 0)
+	{
+	    print STDERR "Removed $res->{n} expired download records\n";
+	}
+    }
+    else
+    {
+	print STDERR "Error expiring download records: " . Dumper($res);
+    }
 }
 
 sub _download_request
@@ -964,13 +985,11 @@ sub _download_request
     my $req = Plack::Request->new($env);
     my $path = $req->path_info;
 
-    print "path=$path\n";
     my($dlid, $name) = $path =~ m,^/([^/]+)/([^/]+)$,;
     if (!($name && $dlid))
     {
-	return [500, ['Content-Type' => 'text/plain' ], ["Invalid path"]];
+	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
     }
-    print STDERR "id=$dlid name=$name\n";
 
     #
     # Query mongo for the file details.
@@ -982,15 +1001,19 @@ sub _download_request
 
     if (!$res)
     {
-	return [500, ['Content-Type' => 'text/plain' ], ["Invalid path"]];
+	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
     }
-
-    print Dumper($env);
 
     if ($res->{shock_node})
     {
 	#
 	# For shock, construct http request for file.
+	#
+	# Note that with the formulation below we might have an uncaught
+	# error on the HTTP connect to shock. By using the responder/writer
+	# interface we can't reasonably deal with it. However, see the
+	# sample code in http://cpansearch.perl.org/src/MIYAGAWA/Twiggy-0.1025/eg/chat-websocket/chat.psgi
+	# that uses the underlying socket to do this right. 
 	#
 
 	return sub {
@@ -1000,7 +1023,9 @@ sub _download_request
 				       ['Content-type' => 'application/octet-stream',
 					'Content-Disposition' => "attachment; filename=$res->{name}"]]);
 
-	    http_request(GET => $res->{shock_node} . "?download",
+	    my $url = $res->{shock_node} . "?download";
+	    print STDERR "retrieve $url\n";
+	    http_request(GET => $url,
 			 headers => {Authorization => "OAuth $res->{user_token}" },
 			 # handle_params => { max_read_size => 32768 },
 			 on_body => sub {
@@ -1009,7 +1034,7 @@ sub _download_request
 			     {
 				 $writer->write($data);
 				 my $len = length($data);
-				 print "B $len\n";
+				 print STDERR "B $len\n";
 				 return 1;
 			     }
 			     else
@@ -1028,8 +1053,15 @@ sub _download_request
 	if (!open($fh, "<", $res->{file_path}))
 	{
 	    warn "Could not open $res->{file_path}: $!";
-	    return [500, ['Content-Type' => 'text/plain' ], ["Invalid path"]];
+	    return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
 	}
+	my $stat = stat($fh);
+	if (S_ISDIR($stat->mode))
+	{
+	    return [404, ['Content-Type' => 'text/plain' ], ["Not a file\n"]];
+	}
+
+	print "Opened $res->{file_path} fh=$fh\n";
 
 	return sub {
 	    my($responder) = @_;
@@ -1038,6 +1070,7 @@ sub _download_request
 				       ['Content-type' => 'application/octet-stream',
 					'Content-Disposition' => "attachment; filename=$res->{name}"]]);
 
+	    print STDERR "retrieve $res->{file_path}\n";
 	    my $ah;
 	    $ah = new AnyEvent::Handle(fh => $fh,
 				       on_eof => sub {
@@ -1128,6 +1161,7 @@ sub new
 		$config->{password} = $params->{"mongodb-pwd"};
 	}
 	my $conn = MongoDB::Connection->new(%$config);
+        $self->{_mongodb_config} = $config;
 	if (!defined($conn)) {
 		$self->_error("Unable to connect to mongodb database!");
 	}
@@ -1545,6 +1579,11 @@ sub get_download_url
 	    push(@objs, {});
 	    next;
 	}
+	elsif (!$obj->{wsobj})
+	{
+	    push(@objs, []);
+	    next;
+	}
 
 	my $doc = {
 	    workspace_path => $ws_path,
@@ -1586,15 +1625,19 @@ sub get_download_url
     for my $ent (@objs)
     {
 	my($obj, $name, $doc) = @$ent;
-	my $dlid = $gen->create_b64();
-	$dlid =~ s/=*$//;
-	$dlid =~ s/\+/-/g;
-	$dlid =~ s,/,_,g;
-	$doc->{download_key} = $dlid;
-	$doc->{expiration_time} = $expires;
-	$doc->{name} = $name;
-	$coll->insert($doc);
-	my $url = $self->{_params}->{'download-url-base'} . "/$dlid/" . uri_escape($name);
+	my $url;
+	if ($obj)
+	{
+	    my $dlid = $gen->create_b64();
+	    $dlid =~ s/=*$//;
+	    $dlid =~ s/\+/-/g;
+	    $dlid =~ s,/,_,g;
+	    $doc->{download_key} = $dlid;
+	    $doc->{expiration_time} = $expires;
+	    $doc->{name} = $name;
+	    $coll->insert($doc);
+	    $url = $self->{_params}->{'download-url-base'} . "/$dlid/" . uri_escape($name);
+	}
 	push(@$urls, $url);
     }    
 
