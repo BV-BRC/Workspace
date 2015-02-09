@@ -55,20 +55,20 @@ ok($obj->create_workspace($create_workspace_params), "can create workspace with 
 my $create_upload_node_params = { objects => [["", "", "", ""]], overwrite => 1 }; 
 
 my @v = ("/" . $username . "/" . $create_workspace_params->{workspace} . "/");        # this should be a valid ws path
-my @w = ("", 'object_name');           # this is the object name
-my @x = ("String", 'Genome', 'Unspecified', 'Directory');                # this is the object type
-my @y = ({}, { 'comment' => 'for testing only' });
+my @w = ("", undef, 'my-name');           # this is the object name
+my @x = ("String", 'Genome', 'Unspecified' );                # this is the object type
+my @y = (undef, {}, { 'comment' => 'for testing only' });
 
-for (my $n=0; $n<1; $n++) {
-  for (my $o=0; $o<2; $o++) {
-    for (my $p=0; $p<4; $p++) {
-      for (my $q=0; $q<2; $q++) {
+for (my $n=0; $n<@v; $n++) {
+  for (my $o=0; $o<@w; $o++) {
+    for (my $p=0; $p<@x; $p++) {
+      for (my $q=0; $q<@y; $q++) {
         $create_upload_node_params->{objects}->[0]->[0] = $v[$n],
         $create_upload_node_params->{objects}->[0]->[1] = $w[$o],
         $create_upload_node_params->{objects}->[0]->[2] = $x[$p],
         $create_upload_node_params->{objects}->[0]->[3] = $y[$q],
 	ok(my $ret = $obj->create_upload_node($create_upload_node_params),
-           "can create_upload_node with $v[$n], $w[$o], $x[$p], $y[$q]");
+           "can create_upload_node with path: $v[$n], object name: $w[$o], object type: $x[$p], metadata: $y[$q]");
       }
     }
   }

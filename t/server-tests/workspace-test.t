@@ -125,7 +125,7 @@ print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Saving an object
 $output = $ws->create({
-	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/testobj","string",{"Description" => "My first object!"},"my test object data"]]
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/testobj","unspecified",{"Description" => "My first object!"},{key1 => "data",key2 => "data"}]]
 });
 delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};

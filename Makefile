@@ -9,13 +9,18 @@ SERVICE_MODULE = lib/Bio/P3/Workspace/Service.pm
 
 SERVICE = Workspace
 SERVICE_PORT = 7125
+DOWNLOAD_SERVICE = WorkspaceDownload
+DOWNLOAD_SERVICE_PORT = 7129
 
 SERVICE_URL = http://p3.theseed.org/services/$(SERVICE)
+DOWNLOAD_URL = http://p3.theseed.org/services/$(DOWNLOAD_SERVICE)
 
 SERVICE_NAME = Workspace
 SERVICE_NAME_PY = $(SERVICE_NAME)
+DOWNLOAD_SERVICE_NAME = WorkspaceDownload
 
 SERVICE_PSGI_FILE = $(SERVICE_NAME).psgi
+DOWNLOAD_SERVICE_PSGI_FILE = $(DOWNLOAD_SERVICE_NAME).psgi
 
 SRC_SERVICE_PERL = $(wildcard service-scripts/*.pl)
 BIN_SERVICE_PERL = $(addprefix $(BIN_DIR)/,$(basename $(notdir $(SRC_SERVICE_PERL))))
@@ -31,6 +36,8 @@ TPAGE_ARGS = --define kb_top=$(TARGET) \
 	--define kb_service_name=$(SERVICE) \
 	--define kb_service_port=$(SERVICE_PORT) \
 	--define kb_psgi=$(SERVICE_PSGI_FILE) \
+	--define kb_download_port=$(DOWNLOAD_SERVICE_PORT) \
+	--define kb_download_psgi=$(DOWNLOAD_SERVICE_PSGI_FILE) \
 	$(TPAGE_TEMPDIR)
 
 TESTS = $(wildcard t/client-tests/*.t)

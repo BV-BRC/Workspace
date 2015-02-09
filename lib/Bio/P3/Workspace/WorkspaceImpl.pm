@@ -19,6 +19,8 @@ Workspace
 
 use File::Path;
 use File::Copy ("cp","mv");
+use File::stat;
+use Fcntl ':mode';
 use Data::UUID;
 use REST::Client;
 use LWP::UserAgent;
@@ -27,6 +29,12 @@ use Data::Dumper;
 use HTTP::Request::Common;
 use Log::Log4perl qw(:easy);
 use MongoDB::Connection;
+use URI::Escape;
+use AnyEvent;
+use AnyEvent::HTTP;
+use Config::Simple;
+use Plack::Request;
+
 Log::Log4perl->easy_init($DEBUG);
 
 #
@@ -206,7 +214,7 @@ sub _retrieve_object_data {
 		close($fh);
 		if ($data =~ m/^[\{\[].+[\}\]]$/) {
 			my $JSON = JSON::XS->new->utf8(1);
-			$data = $JSON->encode($data);
+			$data = $JSON->decode($data);
 		}
 	} else {
 		my $ua = LWP::UserAgent->new();
@@ -265,8 +273,19 @@ sub _validate_object_type {
 		$type = "folder";
 	}
 	my $types = {
-		string => 1,genome => 1,unspecified => 1,folder => 1
+		string => 0,
+		genome => 0,
+		unspecified => 0,
+		folder => 1,
+		transcriptomics_experiment => 1,
+		proteomics_experiment => 1,
+		genome_group => 0,
+		feature_group => 0,
+		experiment_group => 0,
+		contigs => 0,
+		genome_annotation_result => 1
 	};
+	
 	if (!defined($types->{$type})) {
 		$self->_error("Invalid type submitted!");
 	}
@@ -544,6 +563,7 @@ sub _validate_save_objects_before_saving {
 		    		}
 		    	} elsif ($user ne $self->_getUsername()) {
 		    		#Users can only create their own workspaces
+			    print STDERR "user=$user username=" . $self->_getUsername() . "\n";
 		    		$self->_error("Insufficient permissions to create ".$objects->[$i]->[0]);
 		    	} elsif ($objects->[$i]->[1] ne "folder") {
 		    		#Workspace must be a folder
@@ -911,6 +931,174 @@ sub _formatQuery {
 	return $inquery;
 }
 
+#
+# Here begins the implementation of the download handler.
+#
+# This code is executed in the context of an asynchronous IO web service, so
+# we cannot allow the download request to block.
+#
+
+#
+# Start the download service. This will create a timer to garbage-collect
+# download records from the mongodb.
+#
+
+
+sub _download_service_start
+{
+    my($self) = @_;
+
+    my $timer;
+    $timer = AnyEvent->timer(after => 0,
+			     interval => 120,
+			     cb => sub { $self->_download_cleanup($self->{_mongodb}); });
+    $self->{_download_timer} = $timer;
+	
+}
+
+#
+# This should be an async mongo lookup. Later.
+#
+sub _download_cleanup
+{
+    my($self, $db) = @_;
+    my $coll = $db->get_collection("downloads");
+    my $now = time;
+    $coll->remove({expiration_time => {'$lt', $now}});
+    my $res = $db->last_error();
+    if ($res->{ok})
+    {
+	if ($res->{n} > 0)
+	{
+	    print STDERR "Removed $res->{n} expired download records\n";
+	}
+    }
+    else
+    {
+	print STDERR "Error expiring download records: " . Dumper($res);
+    }
+}
+
+sub _download_request
+{
+    my($self, $env) = @_;
+    my $req = Plack::Request->new($env);
+    my $path = $req->path_info;
+
+    my($dlid, $name) = $path =~ m,^/([^/]+)/([^/]+)$,;
+    if (!($name && $dlid))
+    {
+	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+    }
+
+    #
+    # Query mongo for the file details.
+    #
+
+    my $coll = $self->_mongodb()->get_collection('downloads');
+
+    my $res = $coll->find_one({ download_key => $dlid });
+
+    if (!$res)
+    {
+	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+    }
+
+    if ($res->{shock_node})
+    {
+	#
+	# For shock, construct http request for file.
+	#
+	# Note that with the formulation below we might have an uncaught
+	# error on the HTTP connect to shock. By using the responder/writer
+	# interface we can't reasonably deal with it. However, see the
+	# sample code in http://cpansearch.perl.org/src/MIYAGAWA/Twiggy-0.1025/eg/chat-websocket/chat.psgi
+	# that uses the underlying socket to do this right. 
+	#
+
+	return sub {
+	    my($responder) = @_;
+
+	    my $writer = $responder->([200,
+				       ['Content-type' => 'application/octet-stream',
+					'Content-Disposition' => "attachment; filename=$res->{name}"]]);
+
+	    my $url = $res->{shock_node} . "?download";
+	    print STDERR "retrieve $url\n";
+	    http_request(GET => $url,
+			 headers => {Authorization => "OAuth $res->{user_token}" },
+			 # handle_params => { max_read_size => 32768 },
+			 on_body => sub {
+			     my($data, $hdr) = @_;
+			     if ($data)
+			     {
+				 $writer->write($data);
+				 my $len = length($data);
+				 print STDERR "B $len\n";
+				 return 1;
+			     }
+			     else
+			     {
+				 $writer->close();
+				 return 0;
+			     }
+			 },
+			 sub {});
+	};
+		     
+    }
+    else
+    {
+	my $fh;
+	if (!open($fh, "<", $res->{file_path}))
+	{
+	    warn "Could not open $res->{file_path}: $!";
+	    return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+	}
+	my $stat = stat($fh);
+	if (S_ISDIR($stat->mode))
+	{
+	    return [404, ['Content-Type' => 'text/plain' ], ["Not a file\n"]];
+	}
+
+	print "Opened $res->{file_path} fh=$fh\n";
+
+	return sub {
+	    my($responder) = @_;
+	    
+	    my $writer = $responder->([200,
+				       ['Content-type' => 'application/octet-stream',
+					'Content-Disposition' => "attachment; filename=$res->{name}"]]);
+
+	    print STDERR "retrieve $res->{file_path}\n";
+	    my $ah;
+	    $ah = new AnyEvent::Handle(fh => $fh,
+				       on_eof => sub {
+					   $writer->close();
+					   undef $ah;
+				       },
+				       on_read => sub {
+					   my($h) = @_;
+					   
+					   if ($h->{rbuf})
+					   {
+					       my $len = length($h->{rbuf});
+					       print "R $len\n";
+					       $writer->write($h->{rbuf});
+					       $h->rbuf = '';
+					   }
+					   else
+					   {
+					       $writer->close();
+					       undef $ah;
+					   }
+				       });
+	};
+    }
+
+    [200, ['Content-Type' => 'text/plain'], [$dlid]];
+}
+
 #END_HEADER
 
 sub new
@@ -932,6 +1120,8 @@ sub new
     	url
     	wsuser
     	wspassword
+        download-lifetime
+        download-url-base
     )];
     if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 		my $service = $ENV{KB_SERVICE_NAME};
@@ -971,6 +1161,7 @@ sub new
 		$config->{password} = $params->{"mongodb-pwd"};
 	}
 	my $conn = MongoDB::Connection->new(%$config);
+        $self->{_mongodb_config} = $config;
 	if (!defined($conn)) {
 		$self->_error("Unable to connect to mongodb database!");
 	}
@@ -1301,6 +1492,245 @@ sub get
 							       method_name => 'get');
     }
     return($output);
+}
+
+
+
+
+=head2 get_download_url
+
+  $urls = $obj->get_download_url($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is a get_download_url_params
+$urls is a reference to a list where each element is a string
+get_download_url_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+FullObjectPath is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is a get_download_url_params
+$urls is a reference to a list where each element is a string
+get_download_url_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+FullObjectPath is a string
+
+
+=end text
+
+
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub get_download_url
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to get_download_url:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'get_download_url');
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($urls);
+    #BEGIN get_download_url
+
+    $input = $self->_validateargs($input,["objects"],{});
+    my @objs;
+    for my $ws_path (@{$input->{objects}})
+    {
+    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($ws_path);
+
+    	if (!defined($ws) || length($ws) == 0) {
+    		$self->_error("Path $ws_path does not include at least a top level directory!");
+    	}
+
+    	my $wsobj = $self->_wscache($user,$ws);
+    	$self->_check_ws_permissions($wsobj,"r",1);
+
+	my $obj = $self->_get_db_object({
+	    workspace_uuid => $wsobj->{uuid},
+	    path => $path,
+	    name => $name
+	    });
+	
+	if ($obj->{folder} == 1) {
+	    push(@objs, {});
+	    next;
+	}
+	elsif (!$obj->{wsobj})
+	{
+	    push(@objs, []);
+	    next;
+	}
+
+	my $doc = {
+	    workspace_path => $ws_path,
+	};
+
+	print Dumper($obj);
+	if (!defined($obj->{shock}) || $obj->{shock} == 0) {
+	    my $filename = $self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name};
+	    $doc->{file_path} = $filename;
+	} else {
+	    my $ua = LWP::UserAgent->new();
+	    my $res = $ua->put($obj->{shocknode}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
+
+	    $doc->{shock_node} = $obj->{shocknode};
+	    $doc->{user_token} = _authentication();
+	}
+
+	push(@objs, [$ws_path, $name, $doc]);
+    }
+
+    #
+    # Permissions checked out, generate download records.
+    #
+
+    my $coll = $self->_mongodb()->get_collection('downloads');
+
+    my $download_lifetime = $self->{_params}->{'download-lifetime'};
+    if (!$download_lifetime)
+    {
+	$download_lifetime = 60 * 60;
+	warn "default dl lifetime to $download_lifetime\n";
+    }
+    my $expires = time + $download_lifetime;
+
+    my $gen = Data::UUID->new;
+
+    $urls = [];
+    
+    for my $ent (@objs)
+    {
+	my($obj, $name, $doc) = @$ent;
+	my $url;
+	if ($obj)
+	{
+	    my $dlid = $gen->create_b64();
+	    $dlid =~ s/=*$//;
+	    $dlid =~ s/\+/-/g;
+	    $dlid =~ s,/,_,g;
+	    $doc->{download_key} = $dlid;
+	    $doc->{expiration_time} = $expires;
+	    $doc->{name} = $name;
+	    $coll->insert($doc);
+	    $url = $self->{_params}->{'download-url-base'} . "/$dlid/" . uri_escape($name);
+	}
+	push(@$urls, $url);
+    }    
+
+    
+    #END get_download_url
+    my @_bad_returns;
+    (ref($urls) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"urls\" (value was \"$urls\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to get_download_url:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'get_download_url');
+    }
+    return($urls);
+}
+
+
+
+
+=head2 get_archive_url
+
+  $url = $obj->get_archive_url($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is a get_archive_url_params
+$url is a string
+get_archive_url_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	archive_name has a value which is a string
+	archive_type has a value which is a string
+FullObjectPath is a string
+bool is an int
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is a get_archive_url_params
+$url is a string
+get_archive_url_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	archive_name has a value which is a string
+	archive_type has a value which is a string
+FullObjectPath is a string
+bool is an int
+
+
+=end text
+
+
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub get_archive_url
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to get_archive_url:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'get_archive_url');
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($url);
+    #BEGIN get_archive_url
+    #END get_archive_url
+    my @_bad_returns;
+    (!ref($url)) or push(@_bad_returns, "Invalid type for return variable \"url\" (value was \"$url\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to get_archive_url:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'get_archive_url');
+    }
+    return($url);
 }
 
 
@@ -2561,6 +2991,99 @@ metadata_only has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 metadata_only has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 get_download_url_params
+
+=over 4
+
+
+
+=item Description
+
+"get_download_url" command
+Description:
+This function returns a URL from which an object may be downloaded
+without any other authentication required. The download URL will only be
+valid for a limited amount of time. 
+
+Parameters:
+list<FullObjectPath> objects - list of full paths to objects for which URLs are to be constructed
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+
+
+=end text
+
+=back
+
+
+
+=head2 get_archive_url_params
+
+=over 4
+
+
+
+=item Description
+
+"get_archive_url" command
+Description:
+This function returns a URL from which an archive of the given 
+objects may be downloaded. The download URL will only be valid for a limited
+amount of time.
+
+Parameters:
+list<FullObjectPath> objects - list of full paths to objects to be archived
+bool recursive - if true, recurse into folders
+string archive_name - name to be given to the archive file
+string archive_type - type of archive, one of "zip", "tar.gz", "tar.bz2"
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+archive_name has a value which is a string
+archive_type has a value which is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+archive_name has a value which is a string
+archive_type has a value which is a string
 
 
 =end text
