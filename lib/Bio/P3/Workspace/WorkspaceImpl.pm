@@ -950,7 +950,7 @@ sub _download_service_start
 
     my $timer;
     $timer = AnyEvent->timer(after => 0,
-			     interval => 10,
+			     interval => 120,
 			     cb => sub { $self->_download_cleanup($self->{_mongodb}); });
     $self->{_download_timer} = $timer;
 	
