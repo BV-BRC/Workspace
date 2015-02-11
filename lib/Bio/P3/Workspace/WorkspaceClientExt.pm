@@ -21,9 +21,16 @@ sub copy_files_to_handles
     my $res = $self->get({ objects => [ map { $_->[0] } @$file_handle_pairs] });
 
     print Dumper(\%fhmap, $file_handle_pairs, $res);
-    for my $ent (@$res)
+    for my $i (0 .. $#$res)
     {
+	my $ent = $res->[$i];
 	my($meta, $data) = @$ent;
+
+	if (!defined($meta->[0]))
+	{
+	    my $f = $file_handle_pairs->[$i]->[0];
+	    die "Workspace object not found for $f\n";
+	}
 
 	bless $meta, 'Bio::P3::Workspace::ObjectMeta';
 	my $fh = $fhmap{$meta->full_path};
