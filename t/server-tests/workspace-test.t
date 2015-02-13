@@ -71,7 +71,15 @@ delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
 ok defined($output), "Successfully created a top level directory!";
 print "create output:\n".Data::Dumper->Dump($output)."\n\n";
-
+#Testing testusertwo acting as an adminitrator
+$output = $ws->create({
+	objects => [["/reviewer/TestAdminWorkspace","folder",{description => "My first admin workspace!"},undef]],
+	permission => "r",
+	adminmode => 1,
+	setowner => "reviewer"
+});
+ok defined($output), "Successfully created a top level directory!";
+print "create output:\n".Data::Dumper->Dump($output)."\n\n";
 #Attempting to make a workspace for another user
 $output = undef;
 eval {

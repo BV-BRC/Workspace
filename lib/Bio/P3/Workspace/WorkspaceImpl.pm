@@ -47,6 +47,14 @@ sub _getUsername {
 	return $CallContext->user_id;
 }
 
+sub _get_newobject_owner {
+	my ($self) = @_;
+	if (defined($CallContext->{_setowner}) && $self->_adminmode()) {
+		return $CallContext->{_setowner};
+	}
+	return $self->_getUsername();
+}
+
 #Returns the method supplied to the service in the context object
 sub _current_method {
 	my ($self) = @_;
@@ -58,11 +66,18 @@ sub _current_method {
 
 sub _validateargs {
 	my ($self,$args,$mandatoryArguments,$optionalArguments,$substitutions) = @_;
+	$CallContext->{_adminmode} = 0;
 	if (!defined($args)) {
 	    $args = {};
 	}
 	if (ref($args) ne "HASH") {
 		$self->_error("Arguments not hash");
+	}
+	if (defined($args->{adminmode}) && $args->{adminmode} == 1) {
+		if ($self->_user_is_admin() == 0) {
+			$self->_error("Cannot run functions in admin mode. User is not an admin!");
+		}
+		$CallContext->{_adminmode} = 1;
 	}
 	if (defined($substitutions) && ref($substitutions) eq "HASH") {
 		foreach my $original (keys(%{$substitutions})) {
@@ -122,6 +137,22 @@ sub _db_path {
 sub _mongodb {
 	my ($self) = @_;
 	return $self->{_mongodb};
+}
+
+sub _adminmode {
+	my ($self) = @_;
+	if (!defined($CallContext->{_adminmode})) {
+		$CallContext->{_adminmode} = 0;
+	}
+	return $CallContext->{_adminmode};
+}
+
+sub _user_is_admin {
+	my ($self) = @_;
+	if (defined($self->{_admins}->{$self->_getUsername()})) {
+		return 1;
+	}
+	return 0;
 }
 
 sub _updateDB {
@@ -309,6 +340,9 @@ sub _get_ws_permission {
 #Checking whether user has sufficient permissions to undertake action**
 sub _check_ws_permissions {
 	my ($self,$wsobj,$minperm,$throwerror) = @_;
+	if ($self->_adminmode() == 1) {
+		return 1;
+	}
 	my $perm = $self->_get_ws_permission($wsobj);
 	my $values = {
 		n => 0,
@@ -553,7 +587,7 @@ sub _validate_save_objects_before_saving {
 		    			#Cannot overwrite a workspace on creation
 		    			$self->_error("Cannot overwrite existing top level folder:".$objects->[$i]->[0]);
 		    		}
-		    	} elsif ($user ne $self->_getUsername()) {
+		    	} elsif ($user ne $self->_getUsername() && $self->_adminmode() == 0) {
 		    		#Users can only create their own workspaces
 		    		$self->_error("Insufficient permissions to create ".$objects->[$i]->[0]);
 		    	} elsif ($objects->[$i]->[1] ne "folder") {
@@ -761,7 +795,7 @@ sub _create_object {
 		workspace_uuid => $self->_wscache($specs->{user},$specs->{workspace})->{uuid},
 		uuid => $uuid,
 		creation_date => DateTime->now()->datetime(),
-		owner => $self->_getUsername(),
+		owner => $self->_get_newobject_owner(),
 		autometadata => {},
 		shock => 0,
 		metadata => $specs->{metadata}
@@ -847,11 +881,17 @@ sub _wscache {
 sub _list_workspaces {
 	my ($self,$user) = @_;
 	my $query = { '$or' => [ {owner => $self->_getUsername()},{global_permission => {'$ne' => "n"} },{"permissions.".$self->_getUsername() => {'$exists' => 1 } } ] };
+	if ($self->_adminmode() == 1) {
+		$query = {};
+	}
 	if (defined($user)) {
 		if ($user eq $self->_getUsername()) {
 			$query = {owner => $self->_getUsername()};
 		} else {
 			$query = { '$and' => [ {owner => $user },{ '$or' => [ {global_permission => {'$ne' => "n"} },{"permissions.".$self->_getUsername() => {'$exists' => 1 } } ] } ] };
+			if ($self->_adminmode() == 1) {
+				$query = {owner => $user};
+			}
 		}
 	}
     my $objs = [];
@@ -873,6 +913,7 @@ sub _list_objects {
 		$path .= $name;
 	}
 	my $wsobj = $self->_wscache($user,$ws);
+	$self->_check_ws_permissions($wsobj,"r",1);
 	if ($excludeDirectories == 1 && $excludeObjects == 1) {
 		return [];
 	}
@@ -943,6 +984,7 @@ sub new
     	url
     	wsuser
     	wspassword
+    	adminlist
     )];
     if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 		my $service = $ENV{KB_SERVICE_NAME};
@@ -977,6 +1019,12 @@ sub new
 		auto_connect => 1,
 		auto_reconnect => 1
 	};
+	if (defined($params->{adminlist})) {
+		my $array = [split(/;/,$params->{adminlist})];
+		for (my $i=0; $i < @{$array}; $i++) {
+			$self->{_admins}->{$array->[$i]} = 1;
+		}	
+	}
 	if(defined $params->{"mongodb-user"} && defined $params->{"mongodb-pwd"}) {
 		$config->{username} = $params->{"mongodb-user"};
 		$config->{password} = $params->{"mongodb-pwd"};
@@ -1132,8 +1180,15 @@ sub create
 		createUploadNodes => 0,
 		downloadFromLinks => 0,
 		overwrite => 0,
-		permission => "n"
+		permission => "n",
+		setowner => undef
 	});
+	if (defined($input->{setowner})) {
+		if ($self->_adminmode() == 0) {
+			$self->_error("Cannot set owner unless adminmode is active!");
+		}
+		$CallContext->{_setowner} = $input->{setowner};
+	}
     #Validating permissions
     $input->{permission} = $self->_validate_workspace_permission($input->{permission});
 	#Validating input objects
