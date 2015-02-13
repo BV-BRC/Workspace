@@ -31,5 +31,20 @@ starman_params="$starman_params --access-log $KB_SERVICE_DIR/access.log"
 
 starman_params="$starman_params --daemonize"
 
-exec $KB_RUNTIME/bin/perl $KB_RUNTIME/bin/starman $starman_params $KB_TOP/lib/[% kb_psgi %]
+$KB_RUNTIME/bin/perl $KB_RUNTIME/bin/starman $starman_params $KB_TOP/lib/[% kb_psgi %] 
 
+#
+# And start the download server.
+#
+
+[% IF kb_download_port -%]
+ss_params="--port [% kb_download_port %]"
+ss_params="$ss_params --status-file $KB_SERVICE_DIR/download.status"
+ss_params="$ss_params --pid-file $KB_SERVICE_DIR/download.pid"
+
+plackup_params="--access-log $KB_SERVICE_DIR/download.access.log"
+plackup_params="$plackup_params -s Twiggy"
+
+$KB_RUNTIME/bin/perl $KB_RUNTIME/bin/start_server $ss_params -- $KB_RUNTIME/bin/perl $KB_RUNTIME/bin/plackup $plackup_params $KB_TOP/lib/[% kb_download_psgi %] 2> $KB_SERVICE_DIR/download.error.log &
+
+[% END -%]

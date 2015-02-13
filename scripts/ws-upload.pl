@@ -65,6 +65,7 @@ if ($opt->shock)
     }
     $res = $res->[0];
     my $shock_url = $res->[11];
+    $shock_url or die "Workspace did not reutrn shock url. Return object: " . Dumper($res);
 
     my $req = HTTP::Request::Common::POST($shock_url, 
 					  Authorization => "OAuth " . $token->token,

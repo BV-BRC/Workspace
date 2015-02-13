@@ -98,6 +98,41 @@ typedef structure {
 } get_params;
 funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output) authentication required;
 
+/* "get_download_url" command
+	Description:
+	This function returns a URL from which an object may be downloaded
+	without any other authentication required. The download URL will only be
+	valid for a limited amount of time. 
+
+	Parameters:
+	list<FullObjectPath> objects - list of full paths to objects for which URLs are to be constructed
+*/
+typedef structure {
+	list<FullObjectPath> objects;
+} get_download_url_params;
+funcdef get_download_url(get_download_url_params input) returns (list<string> urls) authentication required;
+
+
+/* "get_archive_url" command
+	Description:
+	This function returns a URL from which an archive of the given 
+	objects may be downloaded. The download URL will only be valid for a limited
+	amount of time.
+
+	Parameters:
+	list<FullObjectPath> objects - list of full paths to objects to be archived
+	bool recursive - if true, recurse into folders
+	string archive_name - name to be given to the archive file
+	string archive_type - type of archive, one of "zip", "tar.gz", "tar.bz2"
+*/
+typedef structure {
+	list<FullObjectPath> objects;
+	bool recursive;
+	string archive_name;
+	string archive_type;
+} get_archive_url_params;
+funcdef get_archive_url(get_archive_url_params input) returns (string url);
+
 /* "list" command
 	Description: 
 	This function retrieves a list of all objects and directories below the specified paths with optional ability to filter by search
