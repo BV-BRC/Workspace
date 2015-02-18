@@ -71,7 +71,15 @@ delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
 ok defined($output), "Successfully created a top level directory!";
 print "create output:\n".Data::Dumper->Dump($output)."\n\n";
-
+#Testing testusertwo acting as an adminitrator
+$output = $ws->create({
+	objects => [["/reviewer/TestAdminWorkspace","folder",{description => "My first admin workspace!"},undef]],
+	permission => "r",
+	adminmode => 1,
+	setowner => "reviewer"
+});
+ok defined($output), "Successfully created a top level directory!";
+print "create output:\n".Data::Dumper->Dump($output)."\n\n";
 #Attempting to make a workspace for another user
 $output = undef;
 eval {
@@ -141,7 +149,6 @@ delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
 ok defined($output->[0]), "Successfully ran create_upload_node action!";
 print "create_upload_node output:\n".Data::Dumper->Dump($output)."\n\n";
-
 #Uploading file to newly created shock node
 print "Filename:".$Bin."/testdata.txt\n";
 my $req = HTTP::Request::Common::POST($output->[0]->[11],Authorization => "OAuth ".$ctxone->{token},Content_Type => 'multipart/form-data',Content => [upload => [$Bin."/testdata.txt"]]);

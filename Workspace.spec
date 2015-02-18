@@ -66,7 +66,8 @@ typedef tuple<ObjectName,ObjectType,FullObjectPath,Timestamp creation_time,Objec
 	WorkspacePerm permission - this will be the default permission specified for any top level directories being created (optional; default = "n")
 	bool createUploadNodes - set this boolean to "1" if we are creating upload nodes instead of objects or directories (optional; default = "0")
 	bool overwrite - set this boolean to "1" if we should overwrite existing objects; directories cannot be overwritten (optional; default = "0")
-
+	bool adminmode - run this command as an admin, meaning you can create anything anywhere and use the "setowner" param
+	string setowner - use this parameter as an administrator to set the own of the created objects
 */
 typedef structure {
 		list<tuple<FullObjectPath,ObjectType,UserMetadata,ObjectData>> objects;
@@ -74,6 +75,8 @@ typedef structure {
 		bool createUploadNodes;
 		bool downloadLinks;
 		bool overwrite;
+		bool adminmode;
+		string setowner;
 } create_params;
 funcdef create(create_params input) returns (list<ObjectMeta> output) authentication required;
 
@@ -86,10 +89,12 @@ funcdef create(create_params input) returns (list<ObjectMeta> output) authentica
 	Parameters:
 	list<FullObjectPath> objects - list of full paths to objects to be retreived
 	bool metadata_only - return metadata only
+	bool adminmode - run this command as an admin, meaning you can get anything anywhere
 */
 typedef structure {
 		list<FullObjectPath> objects;
 		bool metadata_only;
+		bool adminmode;
 } get_params;
 funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output) authentication required;
 
@@ -139,6 +144,7 @@ funcdef get_archive_url(get_archive_url_params input) returns (string url);
 	bool recursive - recursively list contents of all subdirectories; will not work above top level directory (optional; default "0")
 	bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
 	mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
+	bool adminmode - run this command as an admin, meaning you can see anything anywhere
 */
 typedef structure {
 		list<FullObjectPath> paths;
@@ -147,6 +153,7 @@ typedef structure {
 		bool recursive;
 		bool fullHierachicalOutput;
 		mapping<string,string> query;
+		bool adminmode;
 } list_params;
 funcdef ls(list_params input) returns (mapping<FullObjectPath,list<ObjectMeta>> output) authentication required;
 
@@ -161,12 +168,14 @@ funcdef ls(list_params input) returns (mapping<FullObjectPath,list<ObjectMeta>> 
 	bool overwrite - indicates that copy/move should permit overwrite of destination objects; directories will never by overwritten by objects (optional; default = "0")
 	bool recursive - indicates that when copying a directory, all subobjects within the directory will also be copied (optional; default = "0")
 	bool move  - indicates that instead of a copy, objects should be moved; moved objects retain their UUIDs (optional; default = "0")
+	bool adminmode - run this command as an admin, meaning you can copy anything anywhere
 */
 typedef structure {
 	list<tuple<FullObjectPath source,FullObjectPath destination>> objects;
 	bool overwrite;
 	bool recursive;
 	bool move;
+	bool adminmode;
 } copy_params;
 funcdef copy(copy_params input) returns (list<ObjectMeta> output) authentication required;
 
@@ -180,11 +189,13 @@ funcdef copy(copy_params input) returns (list<ObjectMeta> output) authentication
 	list<FullObjectPath> objects  - list of objects or directories to be deleted
 	bool deleteDirectories - indicates that directories should be deleted (optional; default = "0")
 	bool forces - must set this flag to delete a directory that contains subobjects (optional; default = "0")
+	bool adminmode - run this command as an admin, meaning you can delete anything anywhere
 */
 typedef structure {
 	list<FullObjectPath> objects;
 	bool deleteDirectories;
 	bool force;
+	bool adminmode;
 } delete_params;
 funcdef delete(delete_params input) returns (list<ObjectMeta> output) authentication required;
 
@@ -198,11 +209,13 @@ funcdef delete(delete_params input) returns (list<ObjectMeta> output) authentica
 	FullObjectPath path - path to directory for which permissions are to be set; only top-level directories can have permissions altered
 	list<tuple<Username,WorkspacePerm>> permissions - set of user-specific permissions for specified directory (optional; default = null)
 	WorkspacePerm new_global_permission - new default permissions on specified directory (optional; default = null)
+	bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
 */
 typedef structure {
 	FullObjectPath path;
 	list<tuple<Username,WorkspacePerm> > permissions;
 	WorkspacePerm new_global_permission;
+	bool adminmode;
 } set_permissions_params;
 funcdef set_permissions(set_permissions_params input) returns (ObjectMeta output) authentication required;
 
@@ -212,9 +225,11 @@ funcdef set_permissions(set_permissions_params input) returns (ObjectMeta output
 	
 	Parameters:
 	list<FullObjectPath> objects - path to objects for which permissions are to be listed
+	bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
 */
 typedef structure {
 	list<FullObjectPath> objects;
+	bool adminmode;
 } list_permissions_params;
 funcdef list_permissions(list_permissions_params input) returns (mapping<string,list<tuple<Username,WorkspacePerm> > > output) authentication required;
 
