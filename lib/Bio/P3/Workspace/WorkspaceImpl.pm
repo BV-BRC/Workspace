@@ -463,6 +463,9 @@ sub _query_database {
 	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
 	while (my $object = $cursor->next) {
 		$object->{wsobj} = $self->_wscache("_uuid",$object->{workspace_uuid});
+		if ($object->{shock} == 1 && $object->{size} == 0) {			
+			$self->_update_shock_node_size($object);
+		}
 		push(@{$output},$object);
 	}
 	return $output;
@@ -562,6 +565,24 @@ sub _create_shock_node {
 	print "authorizing shock node output:\n".Data::Dumper->Dump([$res])."\n\n";
 	return $data->{data}->{id};
 }
+
+sub _update_shock_node_size {
+	my ($self,$object) = @_;
+	if (!defined($self->{_shockupdate}->{$object->{uuid}}) || (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
+		my $ua = LWP::UserAgent->new();
+		my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
+		my $json = JSON::XS->new;
+		my $data = $json->decode($res->content);
+		print Data::Dumper->Dump([$data])."\n";
+		if (length($data->{data}->{file}->{name}) == 0) {
+			$self->{_shockupdate}->{$object->{uuid}} = time();
+		} else {
+			delete $self->{_shockupdate}->{$object->{uuid}};
+			$self->_updateDB("objects",{uuid => $object->{uuid}},{'$set' => {size => $data->{data}->{file}->{size}}});
+		}
+	}
+}
+
 #This function clears away any exiting objects before saving new objects. Returns a hash of all objects involved**
 sub _validate_save_objects_before_saving {
 	my ($self,$objects,$overwrite) = @_;
@@ -851,8 +872,8 @@ sub _create_object {
 		}
 		print $fh $data;
 		close($fh);
-		my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks) = stat($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
-		$object->{size} = $size;
+		my $fstat = stat($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
+		$object->{size} = $fstat->size();
 	}
 	#Creating object in mongodb
 	$self->_mongodb()->get_collection('objects')->insert($object);
@@ -1185,6 +1206,7 @@ sub new
 		}
     }    
 	$params = $self->_validateargs($params,["db-path","wsuser","wspassword"],{
+		"update-interval" => 1800,
 		"mongodb-host" => "localhost",
 		"mongodb-database" => "P3Workspace",
 		"mongodb-user" => undef,

@@ -149,7 +149,6 @@ delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
 ok defined($output->[0]), "Successfully ran create_upload_node action!";
 print "create_upload_node output:\n".Data::Dumper->Dump($output)."\n\n";
-
 #Uploading file to newly created shock node
 print "Filename:".$Bin."/testdata.txt\n";
 my $req = HTTP::Request::Common::POST($output->[0]->[11],Authorization => "OAuth ".$ctxone->{token},Content_Type => 'multipart/form-data',Content => [upload => [$Bin."/testdata.txt"]]);
