@@ -316,7 +316,7 @@ sub _validate_object_type {
 		contigs => 0,
 		genome_annotation_result => 1,
 		reads => 0,
-		job_results => 1,
+		job_result => 1,
 		expression_gene_list => 0,
 		expression_gene_matrix => 0,
 		expression_experiment_metadata => 0
