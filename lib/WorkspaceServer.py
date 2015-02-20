@@ -268,10 +268,18 @@ class Application(object):
                              name='Workspace.create',
                              types=[dict])
         self.method_authentication['Workspace.create'] = 'required'
+        self.rpc_service.add(impl_Workspace.update_metadata,
+                             name='Workspace.update_metadata',
+                             types=[dict])
+        self.method_authentication['Workspace.update_metadata'] = 'required'
         self.rpc_service.add(impl_Workspace.get,
                              name='Workspace.get',
                              types=[dict])
         self.method_authentication['Workspace.get'] = 'required'
+        self.rpc_service.add(impl_Workspace.update_shock_meta,
+                             name='Workspace.update_shock_meta',
+                             types=[dict])
+        self.method_authentication['Workspace.update_shock_meta'] = 'required'
         self.rpc_service.add(impl_Workspace.get_download_url,
                              name='Workspace.get_download_url',
                              types=[dict])
