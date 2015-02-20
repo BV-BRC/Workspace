@@ -1178,6 +1178,7 @@ sub _compute_autometadata {
 	my $JSON = JSON::XS->new->utf8(1);
 	print $fh $JSON->encode($objs);
 	close($fh);
+	$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
 	system("nohup perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->{_params}->{"script-path"});
 };
 

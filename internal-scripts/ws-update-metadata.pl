@@ -37,7 +37,7 @@ my $scriptpath = $ARGV[1];
 my $datapath = $ARGV[2];
 my $url = $ARGV[3];
 
-my $ws = Bio::P3::Workspace::WorkspaceClient->new($url);
+my $ws = Bio::P3::Workspace::WorkspaceClient->new($url,$ENV{WS_AUTH_TOKEN});
 
 open (my $fh,"<",$filename);
 my $data;
@@ -64,7 +64,10 @@ for (my $i=0; $i < @{$objs}; $i++) {
 				$data .= $line;	
 			}
 			close($fh);
-			$ws->();
+			$ws->update_metadata({
+				objects => [$objs->[$i]->{path}."/".$objs->[$i]->{name},$data],
+				autometadata => 1
+			});
 		}
 	}
 }
