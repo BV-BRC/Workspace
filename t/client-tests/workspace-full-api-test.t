@@ -140,14 +140,14 @@ print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 $output = $wsone->ls({
 	paths => [""]
 });
-ok defined($output->{""}->[1]), "Successfully ran ls function on got two workspaces back!";
+ok defined($output->{""}->[2]), "Successfully ran ls function on got three workspaces back!";
 print "ls output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Listing workspaces as "$testuserone" but restricting to owned only
 $output = $wsone->ls({
 	paths => ["/$testuserone/"]
 });
-ok defined($output->{"/$testuserone/"}->[0]) && !defined($output->{"/$testuserone/"}->[1]), "Successfully ran ls function and got one workspace back!";
+ok defined($output->{"/$testuserone/"}->[1]) && !defined($output->{"/$testuserone/"}->[2]), "Successfully ran ls function and got two workspaces back!";
 print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Saving an object

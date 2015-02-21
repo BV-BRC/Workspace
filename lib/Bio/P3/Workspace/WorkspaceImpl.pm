@@ -821,13 +821,15 @@ sub _create_object {
 	if (defined($specs->{move}) && $specs->{move} == 1) {
     	$uuid = $specs->{data}->{uuid};
     }
+    my $wsobj = $self->_wscache($specs->{user},$specs->{workspace});
 	my $object = {
+		wsobj => $wsobj,
 		size => 0,
 		folder => 0,
 		type => $specs->{type},
 		path => $specs->{path},
 		name => $specs->{name},
-		workspace_uuid => $self->_wscache($specs->{user},$specs->{workspace})->{uuid},
+		workspace_uuid => $wsobj->{uuid},
 		uuid => $uuid,
 		creation_date => DateTime->now()->datetime(),
 		owner => $self->_get_newobject_owner(),
@@ -2097,6 +2099,9 @@ sub copy
     	move => 0
     });
     $output = $self->_copy_or_move_objects($input->{objects},$input->{overwrite},$input->{recursive},$input->{move});
+    for (my $i=0; $i < @{$output}; $i++) {
+    	$output->[$i] = $self->_generate_object_meta($output->[$i]);
+    }
     #END copy
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
