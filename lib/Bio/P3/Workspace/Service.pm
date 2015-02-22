@@ -6,7 +6,6 @@ use Moose;
 use POSIX;
 use JSON;
 use Bio::KBase::Log;
-use Class::Load qw();
 use Config::Simple;
 my $get_time = sub { time, 0 };
 eval {
@@ -29,7 +28,9 @@ our $CallContext;
 
 our %return_counts = (
         'create' => 1,
+        'update_metadata' => 1,
         'get' => 1,
+        'update_shock_meta' => 1,
         'get_download_url' => 1,
         'get_archive_url' => 1,
         'ls' => 1,
@@ -42,7 +43,9 @@ our %return_counts = (
 
 our %method_authentication = (
         'create' => 'required',
+        'update_metadata' => 'required',
         'get' => 'required',
+        'update_shock_meta' => 'required',
         'get_download_url' => 'required',
         'get_archive_url' => 'none',
         'ls' => 'required',
@@ -58,7 +61,9 @@ sub _build_valid_methods
     my($self) = @_;
     my $methods = {
         'create' => 1,
+        'update_metadata' => 1,
         'get' => 1,
+        'update_shock_meta' => 1,
         'get_download_url' => 1,
         'get_archive_url' => 1,
         'ls' => 1,
@@ -143,23 +148,6 @@ sub _build_loggers
     $loggers->{serverlog}->set_log_level(6);
     return $loggers;
 }
-
-#
-# Override method from RPC::Any::Server::JSONRPC 
-# to eliminate the deprecation warning for Class::MOP::load_class.
-#
-sub _default_error {
-    my ($self, %params) = @_;
-    my $version = $self->default_version;
-    $version =~ s/\./_/g;
-    my $error_class = "JSON::RPC::Common::Procedure::Return::Version_${version}::Error";
-    Class::Load::load_class($error_class);
-    my $error = $error_class->new(%params);
-    my $return_class = "JSON::RPC::Common::Procedure::Return::Version_$version";
-    Class::Load::load_class($return_class);
-    return $return_class->new(error => $error);
-}
-
 
 #override of RPC::Any::Server
 sub handle_error {
@@ -408,7 +396,7 @@ sub get_method
 			     "There is no method package named '$package'.");
 	}
 	
-	Class::Load::load_class($module);
+	Class::MOP::load_class($module);
     }
     
     if (!$module->can($method)) {

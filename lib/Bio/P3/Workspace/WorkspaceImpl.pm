@@ -469,7 +469,7 @@ sub _query_database {
 	while (my $object = $cursor->next) {
 		$object->{wsobj} = $self->_wscache("_uuid",$object->{workspace_uuid});
 		if ($object->{shock} == 1 && $object->{size} == 0) {			
-			$self->_update_shock_node_size($object);
+			$self->_update_shock_node($object);
 		}
 		push(@{$output},$object);
 	}
@@ -571,9 +571,9 @@ sub _create_shock_node {
 	return $data->{data}->{id};
 }
 
-sub _update_shock_node_size {
-	my ($self,$object) = @_;
-	if (!defined($self->{_shockupdate}->{$object->{uuid}}) || (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
+sub _update_shock_node {
+	my ($self,$object,$force) = @_;
+	if ($force == 1 || !defined($self->{_shockupdate}->{$object->{uuid}}) || (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
 		my $ua = LWP::UserAgent->new();
 		my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
 		my $json = JSON::XS->new;
@@ -583,7 +583,10 @@ sub _update_shock_node_size {
 			$self->{_shockupdate}->{$object->{uuid}} = time();
 		} else {
 			delete $self->{_shockupdate}->{$object->{uuid}};
-			$self->_updateDB("objects",{uuid => $object->{uuid}},{'$set' => {size => $data->{data}->{file}->{size}}});
+			$object->{size} = $data->{data}->{file}->{size};
+			$object->{autometadata}->{inspection_started} = DateTime->now()->datetime();
+			$self->_updateDB("objects",{uuid => $object->{uuid}},{'$set' => {size => $data->{data}->{file}->{size},"autometadata.inspection_started" => DateTime->now()->datetime()}});
+			$self->_compute_autometadata([$object]);
 		}
 	}
 }
@@ -1168,6 +1171,24 @@ sub _download_request
     [200, ['Content-Type' => 'text/plain'], [$dlid]];
 }
 
+sub _compute_autometadata {
+	my($self, $objs) = @_;
+	my $path = $self->{_params}->{"job-directory"};
+	if (!-d $path) {
+		File::Path::mkpath ($path);
+	}
+	my $fulldir = File::Temp::tempdir(DIR => $path);
+	if (!-d $fulldir) {
+		File::Path::mkpath ($fulldir);
+	}
+	open (my $fh,">",$fulldir."/objects.json");	
+	my $JSON = JSON::XS->new->utf8(1);
+	print $fh $JSON->encode($objs);
+	close($fh);
+	$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
+	system("nohup perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->{_params}->{"script-path"});
+};
+
 #END_HEADER
 
 sub new
@@ -1180,6 +1201,9 @@ sub new
 
     my $params = $args[0];
     my $paramlist = [qw(
+    	update-interval
+    	job-directory
+    	script-path
     	shock-url
     	db-path
     	mongodb-database
@@ -1213,6 +1237,8 @@ sub new
 		}
     }    
 	$params = $self->_validateargs($params,["db-path","wsuser","wspassword"],{
+		"script-path" => "/kb/deployment/plbin/",
+		"job-directory" => "/tmp/wsjobs/",
 		"update-interval" => 1800,
 		"mongodb-host" => "localhost",
 		"mongodb-database" => "P3Workspace",
@@ -1283,6 +1309,8 @@ create_params is a reference to a hash where the following keys are defined:
 	createUploadNodes has a value which is a bool
 	downloadLinks has a value which is a bool
 	overwrite has a value which is a bool
+	adminmode has a value which is a bool
+	setowner has a value which is a string
 FullObjectPath is a string
 ObjectType is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
@@ -1329,6 +1357,8 @@ create_params is a reference to a hash where the following keys are defined:
 	createUploadNodes has a value which is a bool
 	downloadLinks has a value which is a bool
 	overwrite has a value which is a bool
+	adminmode has a value which is a bool
+	setowner has a value which is a string
 FullObjectPath is a string
 ObjectType is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
@@ -1386,11 +1416,7 @@ sub create
     my($output);
     #BEGIN create
     $input = $self->_validateargs($input,["objects"],{
-		createUploadNodes => 0,
-		downloadFromLinks => 0,
-		overwrite => 0,
-		permission => "n",
-		setowner => undef
+		
 	});
 	if (defined($input->{setowner})) {
 		if ($self->_adminmode() == 0) {
@@ -1423,6 +1449,172 @@ sub create
 
 
 
+=head2 update_metadata
+
+  $output = $obj->update_metadata($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is an update_metadata_params
+$output is a reference to a list where each element is an ObjectMeta
+update_metadata_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+	0: a FullObjectPath
+	1: a UserMetadata
+
+	autometadata has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+bool is an int
+ObjectMeta is a reference to a list containing 12 items:
+	0: an ObjectName
+	1: an ObjectType
+	2: a FullObjectPath
+	3: (creation_time) a Timestamp
+	4: an ObjectID
+	5: (object_owner) a Username
+	6: an ObjectSize
+	7: a UserMetadata
+	8: an AutoMetadata
+	9: (user_permission) a WorkspacePerm
+	10: (global_permission) a WorkspacePerm
+	11: (shockurl) a string
+ObjectName is a string
+ObjectType is a string
+Timestamp is a string
+ObjectID is a string
+Username is a string
+ObjectSize is an int
+AutoMetadata is a reference to a hash where the key is a string and the value is a string
+WorkspacePerm is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is an update_metadata_params
+$output is a reference to a list where each element is an ObjectMeta
+update_metadata_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+	0: a FullObjectPath
+	1: a UserMetadata
+
+	autometadata has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+bool is an int
+ObjectMeta is a reference to a list containing 12 items:
+	0: an ObjectName
+	1: an ObjectType
+	2: a FullObjectPath
+	3: (creation_time) a Timestamp
+	4: an ObjectID
+	5: (object_owner) a Username
+	6: an ObjectSize
+	7: a UserMetadata
+	8: an AutoMetadata
+	9: (user_permission) a WorkspacePerm
+	10: (global_permission) a WorkspacePerm
+	11: (shockurl) a string
+ObjectName is a string
+ObjectType is a string
+Timestamp is a string
+ObjectID is a string
+Username is a string
+ObjectSize is an int
+AutoMetadata is a reference to a hash where the key is a string and the value is a string
+WorkspacePerm is a string
+
+
+=end text
+
+
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub update_metadata
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to update_metadata:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'update_metadata');
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN update_metadata
+    $input = $self->_validateargs($input,["objects"],{autometadata => 0,append => 0});
+    if ($input->{autometadata} == 1) {
+    	if ($self->_getUsername() ne $self->{_params}->{wsuser} && $self->_adminmode() eq 0) {
+    		$self->_error("Only the workspace or admin can set autometadata!");	
+    	}
+    }
+    for (my $i=0; $i < @{$input->{objects}}; $i++) {
+    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($input->{objects}->[$i]->[0]);
+    	if (!defined($ws) || length($ws) == 0) {
+    		$self->_error("Path ".$input->{objects}->[$i]." does not include at least a top level directory!");
+    	}
+    	my $wsobj = $self->_wscache($user,$ws);
+    	$self->_check_ws_permissions($wsobj,"w",1);
+    	my $type = "objects";
+    	if (length($path) == 0 && length($name) == 0) {
+    		$type = "workspaces";
+    		$obj = $wsobj;
+    	} else {
+	    	my $obj = $self->_get_db_object({
+	    		workspace_uuid => $wsobj->{uuid},
+	    		path => $path,
+	    		name => $name
+	    	});
+    	}
+    	my $key = "metadata";
+    	if ($input->{autometadata} == 1) {
+    		$key = "autometadata";
+    	}
+    	if ($input->{append} == 1) {
+    		foreach my $item (keys(%{$input->{objects}->[$i]->[1]})) {
+    			$obj->{$key}->{$item} = $input->{objects}->[$i]->[1]->{$item};
+    		}
+    	} else {
+    		$obj->{$key} = $input->{objects}->[$i]->[1];
+    	}
+    	$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {$key => $obj->{$key}});
+	    push(@{$output},$self->_generate_object_meta($obj));
+    }
+    #END update_metadata
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to update_metadata:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'update_metadata');
+    }
+    return($output);
+}
+
+
+
+
 =head2 get
 
   $output = $obj->get($input)
@@ -1441,6 +1633,7 @@ $output is a reference to a list where each element is a reference to a list con
 get_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	metadata_only has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1481,6 +1674,7 @@ $output is a reference to a list where each element is a reference to a list con
 get_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	metadata_only has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1574,6 +1768,150 @@ sub get
 	my $msg = "Invalid returns passed to get:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
 							       method_name => 'get');
+    }
+    return($output);
+}
+
+
+
+
+=head2 update_shock_meta
+
+  $output = $obj->update_shock_meta($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is an update_shock_meta_params
+$output is a reference to a list where each element is an ObjectMeta
+update_shock_meta_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectMeta is a reference to a list containing 12 items:
+	0: an ObjectName
+	1: an ObjectType
+	2: a FullObjectPath
+	3: (creation_time) a Timestamp
+	4: an ObjectID
+	5: (object_owner) a Username
+	6: an ObjectSize
+	7: a UserMetadata
+	8: an AutoMetadata
+	9: (user_permission) a WorkspacePerm
+	10: (global_permission) a WorkspacePerm
+	11: (shockurl) a string
+ObjectName is a string
+ObjectType is a string
+Timestamp is a string
+ObjectID is a string
+Username is a string
+ObjectSize is an int
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+AutoMetadata is a reference to a hash where the key is a string and the value is a string
+WorkspacePerm is a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is an update_shock_meta_params
+$output is a reference to a list where each element is an ObjectMeta
+update_shock_meta_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectMeta is a reference to a list containing 12 items:
+	0: an ObjectName
+	1: an ObjectType
+	2: a FullObjectPath
+	3: (creation_time) a Timestamp
+	4: an ObjectID
+	5: (object_owner) a Username
+	6: an ObjectSize
+	7: a UserMetadata
+	8: an AutoMetadata
+	9: (user_permission) a WorkspacePerm
+	10: (global_permission) a WorkspacePerm
+	11: (shockurl) a string
+ObjectName is a string
+ObjectType is a string
+Timestamp is a string
+ObjectID is a string
+Username is a string
+ObjectSize is an int
+UserMetadata is a reference to a hash where the key is a string and the value is a string
+AutoMetadata is a reference to a hash where the key is a string and the value is a string
+WorkspacePerm is a string
+
+
+=end text
+
+
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub update_shock_meta
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to update_shock_meta:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'update_shock_meta');
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN update_shock_meta
+    $input = $self->_validateargs($input,["objects"],{});
+    for (my $i=0; $i < @{$input->{objects}}; $i++) {
+    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($input->{objects}->[$i]);
+    	if (!defined($ws) || length($ws) == 0) {
+    		$self->_error("Path ".$input->{objects}->[$i]." does not include at least a top level directory!");
+    	}
+    	my $wsobj = $self->_wscache($user,$ws);
+    	$self->_check_ws_permissions($wsobj,"r",1);
+    	if (length($path) == 0 && length($name) == 0) {
+    		$self->_error("Path does not point to a shock object!");
+    	} else {
+	    	my $obj = $self->_get_db_object({
+	    		workspace_uuid => $wsobj->{uuid},
+	    		path => $path,
+	    		name => $name
+	    	});
+	    	if ($obj->{shock} == 0) {
+		    	$self->_error("Path does not point to a shock object!");
+	    	} else {
+	    		$self->_update_shock_node($obj,1);
+	    		push(@{$output},$self->_generate_object_meta($obj)); 
+	    	}
+    	}
+    }
+    #END update_shock_meta
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to update_shock_meta:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
+							       method_name => 'update_shock_meta');
     }
     return($output);
 }
@@ -1840,6 +2178,7 @@ list_params is a reference to a hash where the following keys are defined:
 	recursive has a value which is a bool
 	fullHierachicalOutput has a value which is a bool
 	query has a value which is a reference to a hash where the key is a string and the value is a string
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1880,6 +2219,7 @@ list_params is a reference to a hash where the following keys are defined:
 	recursive has a value which is a bool
 	fullHierachicalOutput has a value which is a bool
 	query has a value which is a reference to a hash where the key is a string and the value is a string
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1998,6 +2338,7 @@ copy_params is a reference to a hash where the following keys are defined:
 	overwrite has a value which is a bool
 	recursive has a value which is a bool
 	move has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2039,6 +2380,7 @@ copy_params is a reference to a hash where the following keys are defined:
 	overwrite has a value which is a bool
 	recursive has a value which is a bool
 	move has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2133,6 +2475,7 @@ delete_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	deleteDirectories has a value which is a bool
 	force has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2170,6 +2513,7 @@ delete_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	deleteDirectories has a value which is a bool
 	force has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2293,9 +2637,11 @@ set_permissions_params is a reference to a hash where the following keys are def
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
+	adminmode has a value which is a bool
 FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectName
 	1: an ObjectType
@@ -2332,9 +2678,11 @@ set_permissions_params is a reference to a hash where the following keys are def
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
+	adminmode has a value which is a bool
 FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectName
 	1: an ObjectType
@@ -2440,7 +2788,9 @@ $output is a reference to a hash where the key is a string and the value is a re
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
 FullObjectPath is a string
+bool is an int
 Username is a string
 WorkspacePerm is a string
 
@@ -2456,7 +2806,9 @@ $output is a reference to a hash where the key is a string and the value is a re
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
 FullObjectPath is a string
+bool is an int
 Username is a string
 WorkspacePerm is a string
 
@@ -3023,6 +3375,8 @@ permission has a value which is a WorkspacePerm
 createUploadNodes has a value which is a bool
 downloadLinks has a value which is a bool
 overwrite has a value which is a bool
+adminmode has a value which is a bool
+setowner has a value which is a string
 
 </pre>
 
@@ -3041,6 +3395,60 @@ permission has a value which is a WorkspacePerm
 createUploadNodes has a value which is a bool
 downloadLinks has a value which is a bool
 overwrite has a value which is a bool
+adminmode has a value which is a bool
+setowner has a value which is a string
+
+
+=end text
+
+=back
+
+
+
+=head2 update_metadata_params
+
+=over 4
+
+
+
+=item Description
+
+"update_metadata" command
+Description: 
+This function permits the alteration of metadata associated with an object
+
+Parameters:
+list<tuple<FullObjectPath,UserMetadata>> objects - list of object paths and new metadatas
+bool autometadata - this flag can only be used by the workspace itself
+bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+0: a FullObjectPath
+1: a UserMetadata
+
+autometadata has a value which is a bool
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+0: a FullObjectPath
+1: a UserMetadata
+
+autometadata has a value which is a bool
+adminmode has a value which is a bool
 
 
 =end text
@@ -3068,6 +3476,7 @@ overwrite has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 metadata_only has a value which is a bool
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3078,6 +3487,50 @@ metadata_only has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 metadata_only has a value which is a bool
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 update_shock_meta_params
+
+=over 4
+
+
+
+=item Description
+
+"update_shock_meta" command
+Description:
+Call this function to trigger an immediate update of workspace metadata for a shock object,
+which should typically take place once the upload of a file into shock has completed
+
+Parameters:
+list<FullObjectPath> objects - list of full paths to objects for which shock nodes should be updated
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
 
 
 =end text
@@ -3198,6 +3651,7 @@ bool excludeObjects - don't return objects with output (optional; default = "0")
 bool recursive - recursively list contents of all subdirectories; will not work above top level directory (optional; default "0")
 bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
 mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
+bool adminmode - run this command as an admin, meaning you can see anything anywhere
 
 
 =item Definition
@@ -3212,6 +3666,7 @@ excludeObjects has a value which is a bool
 recursive has a value which is a bool
 fullHierachicalOutput has a value which is a bool
 query has a value which is a reference to a hash where the key is a string and the value is a string
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3226,6 +3681,7 @@ excludeObjects has a value which is a bool
 recursive has a value which is a bool
 fullHierachicalOutput has a value which is a bool
 query has a value which is a reference to a hash where the key is a string and the value is a string
+adminmode has a value which is a bool
 
 
 =end text
@@ -3258,6 +3714,7 @@ objects has a value which is a reference to a list where each element is a refer
 overwrite has a value which is a bool
 recursive has a value which is a bool
 move has a value which is a bool
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3273,6 +3730,7 @@ objects has a value which is a reference to a list where each element is a refer
 overwrite has a value which is a bool
 recursive has a value which is a bool
 move has a value which is a bool
+adminmode has a value which is a bool
 
 
 =end text
@@ -3301,6 +3759,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 deleteDirectories has a value which is a bool
 force has a value which is a bool
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3312,6 +3771,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 deleteDirectories has a value which is a bool
 force has a value which is a bool
+adminmode has a value which is a bool
 
 
 =end text
@@ -3343,6 +3803,7 @@ permissions has a value which is a reference to a list where each element is a r
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3357,6 +3818,7 @@ permissions has a value which is a reference to a list where each element is a r
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
+adminmode has a value which is a bool
 
 
 =end text
@@ -3379,6 +3841,7 @@ This function lists permissions for the specified objects
 
 Parameters:
 list<FullObjectPath> objects - path to objects for which permissions are to be listed
+bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
 
 
 =item Definition
@@ -3388,6 +3851,7 @@ list<FullObjectPath> objects - path to objects for which permissions are to be l
 <pre>
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3397,6 +3861,7 @@ objects has a value which is a reference to a list where each element is a FullO
 
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
 
 
 =end text

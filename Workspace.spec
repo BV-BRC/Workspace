@@ -80,6 +80,22 @@ typedef structure {
 } create_params;
 funcdef create(create_params input) returns (list<ObjectMeta> output) authentication required;
 
+/* "update_metadata" command
+	Description: 
+	This function permits the alteration of metadata associated with an object
+	
+	Parameters:
+	list<tuple<FullObjectPath,UserMetadata>> objects - list of object paths and new metadatas
+	bool autometadata - this flag can only be used by the workspace itself
+	bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
+*/
+typedef structure {
+	list<tuple<FullObjectPath,UserMetadata>> objects;
+	bool autometadata;
+	bool adminmode;
+} update_metadata_params;
+funcdef update_metadata(update_metadata_params input) returns (list<ObjectMeta> output) authentication required;
+
 /********** DATA RETRIEVAL FUNCTIONS ********************/
 
 /* "get" command
@@ -98,6 +114,20 @@ typedef structure {
 } get_params;
 funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output) authentication required;
 
+/* "update_shock_meta" command
+	Description:
+	Call this function to trigger an immediate update of workspace metadata for a shock object,
+	which should typically take place once the upload of a file into shock has completed
+
+	Parameters:
+	list<FullObjectPath> objects - list of full paths to objects for which shock nodes should be updated
+*/
+typedef structure {
+	list<FullObjectPath> objects;
+	bool adminmode;
+} update_shock_meta_params;
+funcdef update_shock_meta(update_shock_meta_params input) returns (list<ObjectMeta> output) authentication required;
+
 /* "get_download_url" command
 	Description:
 	This function returns a URL from which an object may be downloaded
@@ -111,7 +141,6 @@ typedef structure {
 	list<FullObjectPath> objects;
 } get_download_url_params;
 funcdef get_download_url(get_download_url_params input) returns (list<string> urls) authentication required;
-
 
 /* "get_archive_url" command
 	Description:
