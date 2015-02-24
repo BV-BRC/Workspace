@@ -50,13 +50,13 @@ $objs = $JSON->decode($data);
 
 for (my $i=0; $i < @{$objs}; $i++) {
 	if (-e $scriptpath."/ws-autometa-".$objs->[$i]->{type}.".pl") {
-		if ($objs->[$i]->{shock} == 1) {
-			
+		if ($objs->[$i]->{shock} == 1 && $objs->[$i]->{size} > 0) {
+			system('curl -X GET -H "Authorization: OAuth '.$ENV{WS_AUTH_TOKEN}.'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt');
 		} elsif ($objs->[$i]->{folder} == 0) {
 			my $filename = $datapath."/".$objs->[$i]->{path}."/".$objs->[$i]->{name};
-			system("cp \"".$filename."\" \"".$directory."/object.json\"");
+			system("cp \"".$filename."\" \"".$directory."/object.txt\"");
 		}
-		if (-e $directory."/object.json") {
+		if (-e $directory."/object.txt") {
 			system("perl ".$scriptpath."/ws-autometa-".$objs->[$i]->{type}.".pl ".$directory);
 			open (my $fh,"<",$directory."/meta.json");
 			my $data;

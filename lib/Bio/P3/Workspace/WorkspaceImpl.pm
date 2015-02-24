@@ -776,6 +776,7 @@ sub _create_validated_object_set {
     		}
     	}
     }
+    $self->_compute_autometadata($output);
     return $output;
 }
 #This function creates objects and workspaces**
