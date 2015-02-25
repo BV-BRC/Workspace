@@ -173,7 +173,16 @@ print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Saving an object
 $output = $ws->create({
-	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/testobj","unspecified",{"Description" => "My first object!"},{key1 => "data",key2 => "data"}]]
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/testobj","genome",{"Description" => "My first object!"},{
+		id => "83333.1",
+		scientific_name => "Escherichia coli",
+		domain => "Bacteria",
+		dna_size => 4000000,
+		num_contigs => 1,
+		gc_content => 0.5,
+		taxonomy => "Bacteria",
+		features => [{}]
+	}]]
 });
 delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
@@ -182,7 +191,7 @@ print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Creating shock nodes
 $output = $ws->create({
-	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj","string",{"Description" => "My first shock object!"}]],
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj","genome",{"Description" => "My first shock object!"}]],
 	createUploadNodes => 1
 });
 delete $ctxtwo->{_wscache};
@@ -196,6 +205,8 @@ $req->method('PUT');
 my $ua = LWP::UserAgent->new();
 my $res = $ua->request($req);
 print "File uploaded:\n".Data::Dumper->Dump([$res])."\n\n";
+$output = $ws->update_shock_meta({objects => ["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj"]});
+print "update_shock_meta output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Retrieving shock object through workspace API
 $output = $ws->get({

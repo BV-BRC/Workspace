@@ -837,16 +837,18 @@ sub _create_object {
 		uuid => $uuid,
 		creation_date => DateTime->now()->datetime(),
 		owner => $self->_get_newobject_owner(),
-		autometadata => {},
+		autometadata => {inspection_started => DateTime->now()->datetime()},
 		shock => 0,
 		metadata => $specs->{metadata}
 	};
 	if ($specs->{type} eq "folder") {
 		#Creating folder on file system
+		$object->{autometadata} = {};
 		$object->{folder} = 1;
 		File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
 	} elsif (defined($specs->{copy}) && $specs->{copy} == 1) {
 		$object->{shock} = $specs->{data}->{shock};
+		$object->{autometadata} = $specs->{data}->{autometadata};
 		if (defined($specs->{data}->{shocknode})) {
 			$object->{shocknode} = $specs->{data}->{shocknode};
 		}
@@ -1182,12 +1184,29 @@ sub _compute_autometadata {
 	if (!-d $fulldir) {
 		File::Path::mkpath ($fulldir);
 	}
-	open (my $fh,">",$fulldir."/objects.json");	
-	my $JSON = JSON::XS->new->utf8(1);
-	print $fh $JSON->encode($objs);
-	close($fh);
-	$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
-	system("nohup perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->{_params}->{"script-path"});
+	my $finalobj = [];
+	for (my $i=0; $i < @{$objs}; $i++){
+		if ($objs->[$i]->{folder} == 0 && defined($objs->[$i]->{autometadata}->{inspection_started})) {
+			if (defined($objs->[$i]->{_id})) {
+				delete $objs->[$i]->{_id};
+			}
+			if (defined($objs->[$i]->{wsobj}->{_id})) {
+				delete $objs->[$i]->{wsobj}->{_id};
+			}
+			push(@{$finalobj},$objs->[$i]);
+		}
+	}
+	my $size = @{$finalobj};
+	if ($size > 0) {
+		open (my $fh,">",$fulldir."/objects.json");
+		my $JSON = JSON::XS->new->utf8(1);
+		print $fh $JSON->encode($finalobj);
+		close($fh);
+		$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
+		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->_db_path()." ".$self->{_params}->{"script-path"}." impl");
+	} else {
+		File::Path::rmtree($fulldir);
+	}
 };
 
 #END_HEADER
@@ -1258,7 +1277,8 @@ sub new
 		my $array = [split(/;/,$params->{adminlist})];
 		for (my $i=0; $i < @{$array}; $i++) {
 			$self->{_admins}->{$array->[$i]} = 1;
-		}	
+		}
+		$self->{_admins}->{$params->{wsuser}} = 1;	
 	}
 	if(defined $params->{"mongodb-user"} && defined $params->{"mongodb-pwd"}) {
 		$config->{username} = $params->{"mongodb-user"};
@@ -1417,7 +1437,11 @@ sub create
     my($output);
     #BEGIN create
     $input = $self->_validateargs($input,["objects"],{
-		
+		createUploadNodes => 0,
+		downloadFromLinks => 0,
+		overwrite => 0,
+		permission => "n",
+		setowner => undef
 	});
 	if (defined($input->{setowner})) {
 		if ($self->_adminmode() == 0) {
@@ -1578,11 +1602,12 @@ sub update_metadata
     	my $wsobj = $self->_wscache($user,$ws);
     	$self->_check_ws_permissions($wsobj,"w",1);
     	my $type = "objects";
+    	my $obj;
     	if (length($path) == 0 && length($name) == 0) {
     		$type = "workspaces";
     		$obj = $wsobj;
     	} else {
-	    	my $obj = $self->_get_db_object({
+	    	$obj = $self->_get_db_object({
 	    		workspace_uuid => $wsobj->{uuid},
 	    		path => $path,
 	    		name => $name
@@ -1599,7 +1624,7 @@ sub update_metadata
     	} else {
     		$obj->{$key} = $input->{objects}->[$i]->[1];
     	}
-    	$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {$key => $obj->{$key}});
+    	$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {$key => $obj->{$key}}});
 	    push(@{$output},$self->_generate_object_meta($obj));
     }
     #END update_metadata

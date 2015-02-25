@@ -1,1 +1,10 @@
-SHOCK UPLOAD TEST DATA
+{
+	"id" : "83333.1",
+	"scientific_name" : "Escherichia coli",
+	"domain" : "Bacteria",
+	"dna_size" : 4000000,
+	"num_contigs" : 1,
+	"gc_content" : 0.5,
+	"taxonomy" : "Bacteria",
+	"features" : [{}]
+}

@@ -152,14 +152,23 @@ print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Saving an object
 $output = $wsone->create({
-	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/testobj","unspecified",{"Description" => "My first object!"},{key1 => "data",key2 => "data"}]]
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/testobj","genome",{"Description" => "My first object!"},{
+		id => "83333.1",
+		scientific_name => "Escherichia coli",
+		domain => "Bacteria",
+		dna_size => 4000000,
+		num_contigs => 1,
+		gc_content => 0.5,
+		taxonomy => "Bacteria",
+		features => [{}]
+	}]]
 });
 ok defined($output->[0]), "Successfully ran save_objects action!";
 print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Creating shock nodes
 $output = $wsone->create({
-	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj","string",{"Description" => "My first shock object!"}]],
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj","genome",{"Description" => "My first shock object!"}]],
 	createUploadNodes => 1
 });
 ok defined($output->[0]), "Successfully ran create_upload_node action!";
