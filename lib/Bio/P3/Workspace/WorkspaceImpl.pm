@@ -1283,11 +1283,12 @@ create_params is a reference to a hash where the following keys are defined:
 	createUploadNodes has a value which is a bool
 	downloadLinks has a value which is a bool
 	overwrite has a value which is a bool
+	adminmode has a value which is a bool
+	setowner has a value which is a string
 FullObjectPath is a string
 ObjectType is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 WorkspacePerm is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1329,11 +1330,12 @@ create_params is a reference to a hash where the following keys are defined:
 	createUploadNodes has a value which is a bool
 	downloadLinks has a value which is a bool
 	overwrite has a value which is a bool
+	adminmode has a value which is a bool
+	setowner has a value which is a string
 FullObjectPath is a string
 ObjectType is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 WorkspacePerm is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1441,6 +1443,7 @@ $output is a reference to a list where each element is a reference to a list con
 get_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	metadata_only has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1465,8 +1468,7 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 
 </pre>
 
@@ -1481,6 +1483,7 @@ $output is a reference to a list where each element is a reference to a list con
 get_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	metadata_only has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1505,8 +1508,7 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 
 
 =end text
@@ -1840,6 +1842,7 @@ list_params is a reference to a hash where the following keys are defined:
 	recursive has a value which is a bool
 	fullHierachicalOutput has a value which is a bool
 	query has a value which is a reference to a hash where the key is a string and the value is a string
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1880,6 +1883,7 @@ list_params is a reference to a hash where the following keys are defined:
 	recursive has a value which is a bool
 	fullHierachicalOutput has a value which is a bool
 	query has a value which is a reference to a hash where the key is a string and the value is a string
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1998,6 +2002,7 @@ copy_params is a reference to a hash where the following keys are defined:
 	overwrite has a value which is a bool
 	recursive has a value which is a bool
 	move has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2039,6 +2044,7 @@ copy_params is a reference to a hash where the following keys are defined:
 	overwrite has a value which is a bool
 	recursive has a value which is a bool
 	move has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2133,6 +2139,7 @@ delete_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	deleteDirectories has a value which is a bool
 	force has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2170,6 +2177,7 @@ delete_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	deleteDirectories has a value which is a bool
 	force has a value which is a bool
+	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -2293,9 +2301,11 @@ set_permissions_params is a reference to a hash where the following keys are def
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
+	adminmode has a value which is a bool
 FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectName
 	1: an ObjectType
@@ -2332,9 +2342,11 @@ set_permissions_params is a reference to a hash where the following keys are def
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
+	adminmode has a value which is a bool
 FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
+bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectName
 	1: an ObjectType
@@ -2440,7 +2452,9 @@ $output is a reference to a hash where the key is a string and the value is a re
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
 FullObjectPath is a string
+bool is an int
 Username is a string
 WorkspacePerm is a string
 
@@ -2456,7 +2470,9 @@ $output is a reference to a hash where the key is a string and the value is a re
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
 FullObjectPath is a string
+bool is an int
 Username is a string
 WorkspacePerm is a string
 
@@ -2814,18 +2830,14 @@ Generic type containing object data
 =begin html
 
 <pre>
-a reference to a hash where the following keys are defined:
-id has a value which is a string
-
+a string
 </pre>
 
 =end html
 
 =begin text
 
-a reference to a hash where the following keys are defined:
-id has a value which is a string
-
+a string
 
 =end text
 
@@ -3023,6 +3035,8 @@ permission has a value which is a WorkspacePerm
 createUploadNodes has a value which is a bool
 downloadLinks has a value which is a bool
 overwrite has a value which is a bool
+adminmode has a value which is a bool
+setowner has a value which is a string
 
 </pre>
 
@@ -3041,6 +3055,8 @@ permission has a value which is a WorkspacePerm
 createUploadNodes has a value which is a bool
 downloadLinks has a value which is a bool
 overwrite has a value which is a bool
+adminmode has a value which is a bool
+setowner has a value which is a string
 
 
 =end text
@@ -3068,6 +3084,7 @@ overwrite has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 metadata_only has a value which is a bool
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3078,6 +3095,7 @@ metadata_only has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 metadata_only has a value which is a bool
+adminmode has a value which is a bool
 
 
 =end text
@@ -3198,6 +3216,7 @@ bool excludeObjects - don't return objects with output (optional; default = "0")
 bool recursive - recursively list contents of all subdirectories; will not work above top level directory (optional; default "0")
 bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
 mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
+bool adminmode - run this command as an admin, meaning you can see anything anywhere
 
 
 =item Definition
@@ -3212,6 +3231,7 @@ excludeObjects has a value which is a bool
 recursive has a value which is a bool
 fullHierachicalOutput has a value which is a bool
 query has a value which is a reference to a hash where the key is a string and the value is a string
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3226,6 +3246,7 @@ excludeObjects has a value which is a bool
 recursive has a value which is a bool
 fullHierachicalOutput has a value which is a bool
 query has a value which is a reference to a hash where the key is a string and the value is a string
+adminmode has a value which is a bool
 
 
 =end text
@@ -3258,6 +3279,7 @@ objects has a value which is a reference to a list where each element is a refer
 overwrite has a value which is a bool
 recursive has a value which is a bool
 move has a value which is a bool
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3273,6 +3295,7 @@ objects has a value which is a reference to a list where each element is a refer
 overwrite has a value which is a bool
 recursive has a value which is a bool
 move has a value which is a bool
+adminmode has a value which is a bool
 
 
 =end text
@@ -3301,6 +3324,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 deleteDirectories has a value which is a bool
 force has a value which is a bool
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3312,6 +3336,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 deleteDirectories has a value which is a bool
 force has a value which is a bool
+adminmode has a value which is a bool
 
 
 =end text
@@ -3343,6 +3368,7 @@ permissions has a value which is a reference to a list where each element is a r
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3357,6 +3383,7 @@ permissions has a value which is a reference to a list where each element is a r
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
+adminmode has a value which is a bool
 
 
 =end text
@@ -3379,6 +3406,7 @@ This function lists permissions for the specified objects
 
 Parameters:
 list<FullObjectPath> objects - path to objects for which permissions are to be listed
+bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
 
 
 =item Definition
@@ -3388,6 +3416,7 @@ list<FullObjectPath> objects - path to objects for which permissions are to be l
 <pre>
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
 
 </pre>
 
@@ -3397,6 +3426,7 @@ objects has a value which is a reference to a list where each element is a FullO
 
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
 
 
 =end text

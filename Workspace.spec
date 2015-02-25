@@ -24,9 +24,7 @@ typedef string ObjectType;
 typedef int ObjectSize;
 
 /* Generic type containing object data */
-typedef structure {
-	string id;
-} ObjectData;
+typedef string ObjectData;
 
 /* Path to any object in workspace database */
 typedef string FullObjectPath;
