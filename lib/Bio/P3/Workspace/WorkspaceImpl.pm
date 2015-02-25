@@ -1335,8 +1335,7 @@ create_params is a reference to a hash where the following keys are defined:
 FullObjectPath is a string
 ObjectType is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 WorkspacePerm is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1383,8 +1382,7 @@ create_params is a reference to a hash where the following keys are defined:
 FullObjectPath is a string
 ObjectType is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 WorkspacePerm is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
@@ -1684,8 +1682,7 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 
 </pre>
 
@@ -1725,8 +1722,7 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-ObjectData is a reference to a hash where the following keys are defined:
-	id has a value which is a string
+ObjectData is a string
 
 
 =end text
@@ -3192,18 +3188,14 @@ Generic type containing object data
 =begin html
 
 <pre>
-a reference to a hash where the following keys are defined:
-id has a value which is a string
-
+a string
 </pre>
 
 =end html
 
 =begin text
 
-a reference to a hash where the following keys are defined:
-id has a value which is a string
-
+a string
 
 =end text
 

@@ -44,6 +44,11 @@ TESTS = $(wildcard t/client-tests/*.t)
 
 all: bin compile-typespec service
 
+jarfile:
+	gen_java_client $(SERVER_SPEC) org.patricbrc.Workspace java
+	javac java/org/patricbrc/Workspace/*java
+	cd java; jar cf ../Workspace.jar org/patricbrc/Workspace/*.class
+
 test:
 	# run each test
 	echo "RUNTIME=$(DEPLOY_RUNTIME)\n"
