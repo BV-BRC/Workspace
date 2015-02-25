@@ -32,10 +32,50 @@ my $ctxtwo = Bio::P3::Workspace::ServiceContext->new("un=chenry|tokenid=03B0C858
 my $ws = Bio::P3::Workspace::WorkspaceImpl->new();
 
 #Setting context to authenticated user one
+$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
+
+#Clearing out previous test results
+my $output = $ws->ls({
+	paths => [""],
+	adminmode => 1
+});
+if (defined($output->{""})) {
+	my $hash = {};
+	for (my $i=0; $i < @{$output->{""}}; $i++) {
+		my $item = $output->{""}->[$i];
+		print $item->[2].$item->[0]."\n";
+		$hash->{$item->[2].$item->[0]} = 1;
+	}
+	if (defined($hash->{"/chenry/TestWorkspace"})) {
+		$output = $ws->delete({
+			objects => ["/chenry/TestWorkspace"],
+			force => 1,
+			deleteDirectories => 1,
+			adminmode => 1
+		});
+	}
+	if (defined($hash->{"/reviewer/TestWorkspace"})) {
+		$output = $ws->delete({
+			objects => ["/reviewer/TestWorkspace"],
+			force => 1,
+			deleteDirectories => 1,
+			adminmode => 1
+		});
+	}
+	if (defined($hash->{"/reviewer/TestAdminWorkspace"})) {
+		$output = $ws->delete({
+			objects => ["/reviewer/TestAdminWorkspace"],
+			force => 1,
+			deleteDirectories => 1,
+			adminmode => 1
+		});
+	}
+}
+delete $ctxtwo->{_wscache};
+delete $ctxone->{_wscache};
+
+#Setting context to authenticated user one
 $Bio::P3::Workspace::Service::CallContext = $ctxone;
-rmtree($ws->_db_path());
-$ws->_mongodb()->get_collection('workspaces')->remove({});
-$ws->_mongodb()->get_collection('objects')->remove({});
 
 can_ok("Bio::P3::Workspace::WorkspaceImpl", qw(
     create
@@ -119,7 +159,7 @@ $output = $ws->ls({
 });
 delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
-ok defined($output->{""}->[1]), "Successfully ran ls function on got two workspaces back!";
+ok defined($output->{""}->[2]), "Successfully ran ls function on got three workspaces back!";
 print "ls output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Listing workspaces as "$testuserone" but restricting to owned only
@@ -128,7 +168,7 @@ $output = $ws->ls({
 });
 delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
-ok defined($output->{"/$testuserone/"}->[0]) && !defined($output->{"/$testuserone/"}->[1]), "Successfully ran ls function and got one workspace back!";
+ok defined($output->{"/$testuserone/"}->[1]) && !defined($output->{"/$testuserone/"}->[2]), "Successfully ran ls function and got two workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Saving an object
