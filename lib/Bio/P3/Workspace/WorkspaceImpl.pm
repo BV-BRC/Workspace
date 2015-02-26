@@ -303,32 +303,7 @@ sub _validate_object_type {
 	if ($type eq "directory") {
 		$type = "folder";
 	}
-	my $types = {
-		string => 0,
-		genome => 0,
-		unspecified => 0,
-		folder => 1,
-		transcriptomics_experiment => 1,
-		proteomics_experiment => 1,
-		genome_group => 0,
-		feature_group => 0,
-		experiment_group => 0,
-		contigs => 0,
-		genome_annotation_result => 1,
-		reads => 0,
-		job_result => 1,
-		expression_gene_list => 0,
-		expression_gene_matrix => 0,
-		expression_experiment_metadata => 0,
-		genbank_file => 0,
-		feature_protein_fasta => 0,
-		feature_dna_fasta => 0,
-		feature_table => 0,
-		gff => 0,
-		embl => 0
-	};
-	
-	if (!defined($types->{$type})) {
+	if (!defined($self->{_types}->{$type})) {
 		$self->_error("Invalid type submitted!");
 	}
 	return $type;
@@ -1243,6 +1218,7 @@ sub new
     	adminlist
         download-lifetime
         download-url-base
+        types-file
     )];
     if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 		my $service = $ENV{KB_SERVICE_NAME};
@@ -1262,8 +1238,8 @@ sub new
 			    }
 			}
 		}
-    }    
-	$params = $self->_validateargs($params,["db-path","wsuser","wspassword"],{
+    } 
+	$params = $self->_validateargs($params,["db-path","wsuser","wspassword","types-file"],{
 		"script-path" => "/kb/deployment/plbin/",
 		"job-directory" => "/tmp/wsjobs/",
 		"update-interval" => 1800,
@@ -1274,6 +1250,13 @@ sub new
 		url => "http://kbase.us/services/P3workspace"
 	});
 	$params->{"db-path"} .= "/P3WSDB/";
+	open (my $fh,"<",$params->{"types-file"});
+	while (my $line = <$fh>) {
+		chomp($line);
+		$self->{_types}->{$line} = 1;
+	}
+	print Data::Dumper->Dump([$self->{_types}]);
+	close($fh);
 	my $config = {
 		host => $params->{"mongodb-host"},
 		db_name => $params->{"mongodb-database"},
