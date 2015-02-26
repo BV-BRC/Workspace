@@ -16,9 +16,9 @@ BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceImpl );
 }
 
-#if (!defined $ENV{KB_DEPLOYMENT_CONFIG} || !-e $ENV{KB_DEPLOYMENT_CONFIG}) {
+if (!defined $ENV{KB_DEPLOYMENT_CONFIG} || !-e $ENV{KB_DEPLOYMENT_CONFIG}) {
     $ENV{KB_DEPLOYMENT_CONFIG}=$Bin."/../../configs/test.cfg";
-#}
+}
 print "Loading server with this config: ".$Bin."/../configs/test.cfg\n";
 
 my $testuserone = "reviewer";
