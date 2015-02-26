@@ -22,7 +22,7 @@ DOWNLOAD_SERVICE_NAME = WorkspaceDownload
 SERVICE_PSGI_FILE = $(SERVICE_NAME).psgi
 DOWNLOAD_SERVICE_PSGI_FILE = $(DOWNLOAD_SERVICE_NAME).psgi
 
-SRC_SERVICE_PERL = $(wildcard internal-scripts/*.pl)
+SRC_SERVICE_PERL = $(wildcard service-scripts/*.pl)
 BIN_SERVICE_PERL = $(addprefix $(BIN_DIR)/,$(basename $(notdir $(SRC_SERVICE_PERL))))
 DEPLOY_SERVICE_PERL = $(addprefix $(SERVICE_DIR)/bin/,$(basename $(notdir $(SRC_SERVICE_PERL))))
 
