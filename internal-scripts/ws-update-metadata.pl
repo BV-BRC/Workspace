@@ -34,25 +34,35 @@ my($opt, $usage) = describe_options("%c %o",
 print($usage->text), exit if $opt->help;
 
 my $directory = $ARGV[0];
-my $scriptpath = $ARGV[2];
-my $datapath = $ARGV[1];
-my $url = $ARGV[3];
-
+my $url = $ARGV[1];
+#Reading config file
+my $config;
+my $service = $ENV{KB_SERVICE_NAME};
+if (!defined($service)) {
+	$service = "Workspace";
+}
+if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
+	$config = Config::Simple->new();
+	$config->read($e);
+}
+#Getting script path and data path
+my $scriptpath = $config->param("$service.script-path");
+my $datapath = $config->param("$service.db-path")."/P3WSDB/";
+#Logging in workspace user
+my $tokenObj = Bio::KBase::AuthToken->new(
+	user_id => $config->param("$service.wsuser"), password => $config->param("$service.wspassword"),ignore_authrc => 1
+);
+#Creating workspace object
 my $ws;
 our $ctxtwo;
 if ($url eq "impl") {
-	#$ENV{KB_DEPLOYMENT_CONFIG}="/Users/chenry/code/Workspace/configs/test.cfg";
-	#my $tokenObj = Bio::KBase::AuthToken->new(
-   	#	user_id => "reviewer", password => 'reviewer',ignore_authrc => 1
-	#);
-	#$ENV{WS_AUTH_TOKEN} = $tokenObj->token();
-	$ctxtwo = Bio::P3::Workspace::ServiceContext->new($ENV{WS_AUTH_TOKEN},"test","reviewer");
+	$ctxtwo = Bio::P3::Workspace::ServiceContext->new($tokenObj->token(),"test",$config->param("$service.wsuser"));
 	$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
 	$ws = Bio::P3::Workspace::WorkspaceImpl->new();
 } else {
-	$ws = Bio::P3::Workspace::WorkspaceClient->new($url,$ENV{WS_AUTH_TOKEN});
+	$ws = Bio::P3::Workspace::WorkspaceClient->new($url,$tokenObj->token());
 }
-
+#Opening object file
 open (my $fh,"<",$directory."/objects.json");
 my $data;
 while (my $line = <$fh>) {
@@ -61,12 +71,12 @@ while (my $line = <$fh>) {
 close($fh);
 my $JSON = JSON::XS->new->utf8(1);
 my $objs = $JSON->decode($data);
-
+#Iterating over objects and computing metadata
 for (my $i=0; $i < @{$objs}; $i++) {
 	if (-e $scriptpath."/ws-autometa-".$objs->[$i]->{type}.".pl") {
 		if ($objs->[$i]->{shock} == 1 && $objs->[$i]->{size} > 0) {
-			print 'curl -X GET -H "Authorization: OAuth '.$ENV{WS_AUTH_TOKEN}.'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt'."\n";
-			system('curl -X GET -H "Authorization: OAuth '.$ENV{WS_AUTH_TOKEN}.'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt');
+			print 'curl -X GET -H "Authorization: OAuth '.$tokenObj->token().'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt'."\n";
+			system('curl -X GET -H "Authorization: OAuth '.$tokenObj->token().'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt');
 		} elsif ($objs->[$i]->{shock} == 0 && $objs->[$i]->{folder} == 0) {
 			my $filename = $datapath."/".$objs->[$i]->{wsobj}->{owner}."/".$objs->[$i]->{wsobj}->{name}."/".$objs->[$i]->{path}."/".$objs->[$i]->{name};
 			print "cp \"".$filename."\" \"".$directory."/object.txt\"\n";

@@ -276,10 +276,10 @@ class Application(object):
                              name='Workspace.get',
                              types=[dict])
         self.method_authentication['Workspace.get'] = 'required'
-        self.rpc_service.add(impl_Workspace.update_shock_meta,
-                             name='Workspace.update_shock_meta',
+        self.rpc_service.add(impl_Workspace.update_auto_meta,
+                             name='Workspace.update_auto_meta',
                              types=[dict])
-        self.method_authentication['Workspace.update_shock_meta'] = 'required'
+        self.method_authentication['Workspace.update_auto_meta'] = 'required'
         self.rpc_service.add(impl_Workspace.get_download_url,
                              name='Workspace.get_download_url',
                              types=[dict])

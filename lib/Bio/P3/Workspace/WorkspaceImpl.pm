@@ -1203,8 +1203,8 @@ sub _compute_autometadata {
 		print $fh $JSON->encode($finalobj);
 		close($fh);
 		$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
-		print "\nperl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->_db_path()." ".$self->{_params}->{"script-path"}." impl\n\n";
-		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->_db_path()." ".$self->{_params}->{"script-path"}." impl");
+		print "\nperl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl\n\n";
+		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl");
 	} else {
 		File::Path::rmtree($fulldir);
 	}
@@ -1487,14 +1487,16 @@ sub create
 $input is an update_metadata_params
 $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
-	objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+	objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
 	0: a FullObjectPath
 	1: a UserMetadata
+	2: an ObjectType
 
 	autometadata has a value which is a bool
 	adminmode has a value which is a bool
 FullObjectPath is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
+ObjectType is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectName
@@ -1510,7 +1512,6 @@ ObjectMeta is a reference to a list containing 12 items:
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
 ObjectName is a string
-ObjectType is a string
 Timestamp is a string
 ObjectID is a string
 Username is a string
@@ -1527,14 +1528,16 @@ WorkspacePerm is a string
 $input is an update_metadata_params
 $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
-	objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+	objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
 	0: a FullObjectPath
 	1: a UserMetadata
+	2: an ObjectType
 
 	autometadata has a value which is a bool
 	adminmode has a value which is a bool
 FullObjectPath is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
+ObjectType is a string
 bool is an int
 ObjectMeta is a reference to a list containing 12 items:
 	0: an ObjectName
@@ -1550,7 +1553,6 @@ ObjectMeta is a reference to a list containing 12 items:
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
 ObjectName is a string
-ObjectType is a string
 Timestamp is a string
 ObjectID is a string
 Username is a string
@@ -1612,18 +1614,24 @@ sub update_metadata
 	    		name => $name
 	    	});
     	}
-    	my $key = "metadata";
-    	if ($input->{autometadata} == 1) {
-    		$key = "autometadata";
+    	if (defined($input->{objects}->[$i]->[1])) {
+	    	my $key = "metadata";
+	    	if ($input->{autometadata} == 1) {
+	    		$key = "autometadata";
+	    	}
+	    	if ($input->{append} == 1) {
+	    		foreach my $item (keys(%{$input->{objects}->[$i]->[1]})) {
+	    			$obj->{$key}->{$item} = $input->{objects}->[$i]->[1]->{$item};
+	    		}
+	    	} else {
+	    		$obj->{$key} = $input->{objects}->[$i]->[1];
+	    	}
+	    	$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {$key => $obj->{$key}}});
     	}
-    	if ($input->{append} == 1) {
-    		foreach my $item (keys(%{$input->{objects}->[$i]->[1]})) {
-    			$obj->{$key}->{$item} = $input->{objects}->[$i]->[1]->{$item};
-    		}
-    	} else {
-    		$obj->{$key} = $input->{objects}->[$i]->[1];
+    	if (defined($input->{objects}->[$i]->[2])) {
+    		$obj->{type} = $input->{objects}->[$i]->[2];
+    		$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {type => $input->{objects}->[$i]->[2]}});
     	}
-    	$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {$key => $obj->{$key}}});
 	    push(@{$output},$self->_generate_object_meta($obj));
     }
     #END update_metadata
@@ -1798,9 +1806,9 @@ sub get
 
 
 
-=head2 update_shock_meta
+=head2 update_auto_meta
 
-  $output = $obj->update_shock_meta($input)
+  $output = $obj->update_auto_meta($input)
 
 =over 4
 
@@ -1809,9 +1817,9 @@ sub get
 =begin html
 
 <pre>
-$input is an update_shock_meta_params
+$input is an update_auto_meta_params
 $output is a reference to a list where each element is an ObjectMeta
-update_shock_meta_params is a reference to a hash where the following keys are defined:
+update_auto_meta_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	adminmode has a value which is a bool
 FullObjectPath is a string
@@ -1845,9 +1853,9 @@ WorkspacePerm is a string
 
 =begin text
 
-$input is an update_shock_meta_params
+$input is an update_auto_meta_params
 $output is a reference to a list where each element is an ObjectMeta
-update_shock_meta_params is a reference to a hash where the following keys are defined:
+update_auto_meta_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	adminmode has a value which is a bool
 FullObjectPath is a string
@@ -1888,7 +1896,7 @@ WorkspacePerm is a string
 
 =cut
 
-sub update_shock_meta
+sub update_auto_meta
 {
     my $self = shift;
     my($input) = @_;
@@ -1896,14 +1904,14 @@ sub update_shock_meta
     my @_bad_arguments;
     (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
     if (@_bad_arguments) {
-	my $msg = "Invalid arguments passed to update_shock_meta:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	my $msg = "Invalid arguments passed to update_auto_meta:\n" . join("", map { "\t$_\n" } @_bad_arguments);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-							       method_name => 'update_shock_meta');
+							       method_name => 'update_auto_meta');
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
-    #BEGIN update_shock_meta
+    #BEGIN update_auto_meta
     $input = $self->_validateargs($input,["objects"],{});
     for (my $i=0; $i < @{$input->{objects}}; $i++) {
     	my ($user,$ws,$path,$name) = $self->_parse_ws_path($input->{objects}->[$i]);
@@ -1913,7 +1921,7 @@ sub update_shock_meta
     	my $wsobj = $self->_wscache($user,$ws);
     	$self->_check_ws_permissions($wsobj,"r",1);
     	if (length($path) == 0 && length($name) == 0) {
-    		$self->_error("Path does not point to a shock object!");
+    		$self->_error("Path does not point to an object!");
     	} else {
 	    	my $obj = $self->_get_db_object({
 	    		workspace_uuid => $wsobj->{uuid},
@@ -1921,20 +1929,22 @@ sub update_shock_meta
 	    		name => $name
 	    	});
 	    	if ($obj->{shock} == 0) {
-		    	$self->_error("Path does not point to a shock object!");
+	    		$obj->{autometadata}->{inspection_started} = DateTime->now()->datetime();
+		    	$self->_compute_autometadata($obj,1);
+	    		push(@{$output},$self->_generate_object_meta($obj)); 
 	    	} else {
 	    		$self->_update_shock_node($obj,1);
 	    		push(@{$output},$self->_generate_object_meta($obj)); 
 	    	}
     	}
     }
-    #END update_shock_meta
+    #END update_auto_meta
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
-	my $msg = "Invalid returns passed to update_shock_meta:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	my $msg = "Invalid returns passed to update_auto_meta:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-							       method_name => 'update_shock_meta');
+							       method_name => 'update_auto_meta');
     }
     return($output);
 }
@@ -3448,9 +3458,10 @@ bool adminmode - run this command as an admin, meaning you can set permissions o
 
 <pre>
 a reference to a hash where the following keys are defined:
-objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
 0: a FullObjectPath
 1: a UserMetadata
+2: an ObjectType
 
 autometadata has a value which is a bool
 adminmode has a value which is a bool
@@ -3462,9 +3473,10 @@ adminmode has a value which is a bool
 =begin text
 
 a reference to a hash where the following keys are defined:
-objects has a value which is a reference to a list where each element is a reference to a list containing 2 items:
+objects has a value which is a reference to a list where each element is a reference to a list containing 3 items:
 0: a FullObjectPath
 1: a UserMetadata
+2: an ObjectType
 
 autometadata has a value which is a bool
 adminmode has a value which is a bool
@@ -3515,7 +3527,7 @@ adminmode has a value which is a bool
 
 
 
-=head2 update_shock_meta_params
+=head2 update_auto_meta_params
 
 =over 4
 
@@ -3525,7 +3537,7 @@ adminmode has a value which is a bool
 
 "update_shock_meta" command
 Description:
-Call this function to trigger an immediate update of workspace metadata for a shock object,
+Call this function to trigger an immediate update of workspace metadata for an object,
 which should typically take place once the upload of a file into shock has completed
 
 Parameters:

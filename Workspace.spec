@@ -88,7 +88,7 @@ funcdef create(create_params input) returns (list<ObjectMeta> output) authentica
 	bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
 */
 typedef structure {
-	list<tuple<FullObjectPath,UserMetadata>> objects;
+	list<tuple<FullObjectPath,UserMetadata,ObjectType>> objects;
 	bool autometadata;
 	bool adminmode;
 } update_metadata_params;
@@ -114,7 +114,7 @@ funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output
 
 /* "update_shock_meta" command
 	Description:
-	Call this function to trigger an immediate update of workspace metadata for a shock object,
+	Call this function to trigger an immediate update of workspace metadata for an object,
 	which should typically take place once the upload of a file into shock has completed
 
 	Parameters:
@@ -123,8 +123,8 @@ funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output
 typedef structure {
 	list<FullObjectPath> objects;
 	bool adminmode;
-} update_shock_meta_params;
-funcdef update_shock_meta(update_shock_meta_params input) returns (list<ObjectMeta> output) authentication required;
+} update_auto_meta_params;
+funcdef update_auto_meta(update_auto_meta_params input) returns (list<ObjectMeta> output) authentication required;
 
 /* "get_download_url" command
 	Description:
