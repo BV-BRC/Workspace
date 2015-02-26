@@ -319,7 +319,13 @@ sub _validate_object_type {
 		job_result => 1,
 		expression_gene_list => 0,
 		expression_gene_matrix => 0,
-		expression_experiment_metadata => 0
+		expression_experiment_metadata => 0,
+		genbank_file => 0,
+		feature_protein_fasta => 0,
+		feature_dna_fasta => 0,
+		feature_table => 0,
+		gff => 0,
+		embl => 0
 	};
 	
 	if (!defined($types->{$type})) {

@@ -88,6 +88,10 @@ sub save_data_to_file
 					      Content => [upload => [undef, 'file', Content => $data]]);
 	$req->method('PUT');
 	my $sres = $ua->request($req);
+	if (!$sres->is_success)
+	{
+	    die "Failure writing to shock at $shock_url: " . $sres->code . " " . $sres->content;
+	}
 	print STDERR Dumper($sres->content);
     }
     else
