@@ -63,14 +63,17 @@ my $JSON = JSON::XS->new->utf8(1);
 my $objs = $JSON->decode($data);
 
 for (my $i=0; $i < @{$objs}; $i++) {
-	if (-e $scriptpath."ws-autometa-".$objs->[$i]->{type}.".pl") {
+	if (-e $scriptpath."/ws-autometa-".$objs->[$i]->{type}.".pl") {
 		if ($objs->[$i]->{shock} == 1 && $objs->[$i]->{size} > 0) {
+			print 'curl -X GET -H "Authorization: OAuth '.$ENV{WS_AUTH_TOKEN}.'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt'."\n";
 			system('curl -X GET -H "Authorization: OAuth '.$ENV{WS_AUTH_TOKEN}.'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt');
 		} elsif ($objs->[$i]->{shock} == 0 && $objs->[$i]->{folder} == 0) {
 			my $filename = $datapath."/".$objs->[$i]->{wsobj}->{owner}."/".$objs->[$i]->{wsobj}->{name}."/".$objs->[$i]->{path}."/".$objs->[$i]->{name};
+			print "cp \"".$filename."\" \"".$directory."/object.txt\"\n";
 			system("cp \"".$filename."\" \"".$directory."/object.txt\"");
 		}
 		if (-e $directory."/object.txt") {
+			print "perl ".$scriptpath."/ws-autometa-".$objs->[$i]->{type}.".pl ".$directory."\n";
 			system("perl ".$scriptpath."/ws-autometa-".$objs->[$i]->{type}.".pl ".$directory);
 			open (my $fh,"<",$directory."/meta.json");
 			my $data;
