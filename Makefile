@@ -97,6 +97,7 @@ deploy-service-scripts:
 	export KB_RUNTIME=$(DEPLOY_RUNTIME); \
 	export KB_PERL_PATH=$(TARGET)/lib ; \
 	export PATH_PREFIX=$(TARGET)/services/$(SERVICE)/bin:$(TARGET)/services/cdmi_api/bin; \
+	cp internal-scripts/*.pl $(TARGET)/plbin/
 	for src in $(SRC_SERVICE_PERL) ; do \
 	        basefile=`basename $$src`; \
 	        base=`basename $$src .pl`; \
