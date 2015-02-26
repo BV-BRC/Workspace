@@ -1203,7 +1203,7 @@ sub _compute_autometadata {
 		print $fh $JSON->encode($finalobj);
 		close($fh);
 		$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
-		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->_db_path()." ".$self->{_params}->{"script-path"}." impl");
+		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." ".$self->_db_path()." ".$self->{_params}->{"script-path"}." impl > ".$fulldir."log.out");
 	} else {
 		File::Path::rmtree($fulldir);
 	}
