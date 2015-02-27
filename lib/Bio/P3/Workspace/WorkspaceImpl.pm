@@ -243,10 +243,6 @@ sub _retrieve_object_data {
 			$data .= $line;	
 		}
 		close($fh);
-		if ($data =~ m/^[\{\[].+[\}\]]$/) {
-			my $JSON = JSON::XS->new->utf8(1);
-			$data = $JSON->decode($data);
-		}
 	} else {
 		my $ua = LWP::UserAgent->new();
 		my $res = $ua->put($obj->{shocknode}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
@@ -858,10 +854,10 @@ sub _create_object {
 		$object->{downloaded} == 0;
 	} else {
 		#Writing data to file system directly and setting file size
-		my $JSON = JSON::XS->new->utf8(1);
 		my $data = $specs->{data};
 		open (my $fh,">",$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
 		if (ref($data) eq 'ARRAY' || ref($data) eq 'HASH') {
+			my $JSON = JSON::XS->new->utf8(1);
 			$data = $JSON->encode($data);	
 		}
 		print $fh $data;
