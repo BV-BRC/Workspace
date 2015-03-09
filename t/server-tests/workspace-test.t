@@ -10,15 +10,15 @@ use REST::Client;
 use LWP::UserAgent;
 use JSON::XS;
 use HTTP::Request::Common;
-my $test_count = 31;
+my $test_count = 34;
 
 BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceImpl );
 }
 
-if (!defined $ENV{KB_DEPLOYMENT_CONFIG} || !-e $ENV{KB_DEPLOYMENT_CONFIG}) {
+#if (!defined $ENV{KB_DEPLOYMENT_CONFIG} || !-e $ENV{KB_DEPLOYMENT_CONFIG}) {
     $ENV{KB_DEPLOYMENT_CONFIG}=$Bin."/../../configs/test.cfg";
-}
+#}
 print "Loading server with this config: ".$ENV{KB_DEPLOYMENT_CONFIG}."\n";
 
 my $testuserone = "reviewer";
@@ -147,7 +147,7 @@ $output = $ws->ls({
 });
 delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
-ok defined($output->{""}->[0]) && !defined($output->{""}->[1]), "Successfully ran ls function on got one workspace back!";
+ok defined($output->{""}->[0]) && !defined($output->{""}->[2]), "Successfully ran ls function on got one workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Setting context to authenticated user one
@@ -183,6 +183,40 @@ $output = $ws->create({
 		taxonomy => "Bacteria",
 		features => [{}]
 	}]]
+});
+delete $ctxtwo->{_wscache};
+delete $ctxone->{_wscache};
+ok defined($output->[0]), "Successfully ran save_objects action!";
+print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Saving contigs
+$output = $ws->create({
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/contigs","contigs",{"Description" => "My first contigs!"},">gi|284931009|gb|CP001873.1| Mycoplasma gallisepticum str. F, complete genome
+TTTTTATTATTAACCATGAGAATTGTTGATAAATCTGTGGATAACTCTAAAAAAATTCCGGATTTATAAA
+AGTACATTAAAATATTTATATTTTAATGTAAATATTATATCACTTTTTCACAAAAACGTGTATTATATAT
+AAGGAGTTTTGTAAATTATTTAACTATATTACTATGTAATATAGTTATTATATCAAAACAAACTAAAACA
+GTAGAGCAACCTTTAAAAATTAACTAAAAACTAAATACAAATTTGTTTATAGACGAAAGTTTTTCTATTA
+ATATCCCCACATTAACTCTATCAAAACCCCTATACTAAAAAAAACACACTCTGAATACATAACTTGTATG
+TAAAGTTTGAGTGAAGTTAAATCGCTTTAATATTGTAACAATATTGTTTGTAAAAATATTTATTTAATAT
+GAAAAAAATATTGTGATTTTTATCGGAAATATTGTGATTTTCTAATTCAGGCCAATTAAAAATATCAAAA
+CTAATTACTTAAATAAAAATATCAATAAATAAATTAAAAAACTTATTAACATTTCTACTAAGAGAGTTCG
+TATTTGGAAATAATATTAAAGTAATACACAATATTAAAAAAATATTATTAGTATTTAAACGATTAAGTAC
+TTTTTCATTCTTTTGTCTATCTGTAAAAGACACTAGGTAAGGATTACTTTATTAACAAGATAAAGAGAAA
+AGAATTTATTTTTAATAATACGATTTTAATATTTTTAAAATATTATTCAATTTACGTTGTTTTATTACCA
+AAAATAGAATATTAAAACAATATTTATAAGTTAATTAAAATTAATACTTTTTAAAACAAAACAACAATAT
+TATTTCAATATGGTCACAGTAGTCACAATAAAGTTGATAATATTTAAATAATATTAATTAAATATTTATT
+CAAGAATTTATTATTCTTGAATAACAGCAAAAAACTTTTATAGAACTGAAGAGCATTCTTAAAAAAGAAA
+AAACCTAATGCTAACGGCATCAGAACTAACTAATACGAAAATAATATTTGATTACAAGAGAAGCAAATAA
+TATTGTTAAGGGATCAATATTGTAATAATATTAAAATCATATCATAGAAGGTTAATGCTTACCAGTAATA
+CTACTAACAGATAGTTTAATGTAGATGTATTAATATTGTAATAATATTAAAGTCATATTGTAAAAAGTTT
+ATCTTTAGCAAAAAATACTACTAAACGGAGAATTTAATATAGATATATCATTAATATTTAAATAATATTA
+CTTCATAAGGAAGCAATAATAACAAATATTCTTAACTTATAAATAAGCAATATATTAATAATATGGTAAC
+AATATTGTTTTAATACTACATTCGTAATAAAGCTAGTTTAAGAGAATATTAAAATAATATTGGTTTGAAA
+CTGTTAAAAATTATCTTTCTTAACAATATTGCCAAATCCGATTTTGCTTTACTTCAACGGGAATAAGTTT
+TTAACTAAACTTTGCACTCTAATTACTAAAATATAAAAACAAACTTAGGACTAAAAAGATTTGAAATGAT
+TAGCGTAAGGCTGAGGTTTTAGTTTAAATATACAAAGTAAAGTATTTTTTATTTAAAACAAGTTTTAAAA
+ATACCAAAATGATATTTTATTAATATTGTTATCTATATCAAGATTTATAATATGTTTTCTTGAGCACTTT
+TTTTCAAGATTGCCTAATAATAATATATTTTTAATATTTAATTACTAGGAAAATAATATTGCGAAAATTA"]]
 });
 delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
@@ -246,7 +280,7 @@ $output = $ws->ls({
 });
 delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
-ok defined($output->{"/$testuserone/TestWorkspace"}->[0]) && !defined($output->{"/$testuserone/TestWorkspace"}->[2]), "Successfully listed workspace contents without directories!";
+ok defined($output->{"/$testuserone/TestWorkspace"}->[0]) && !defined($output->{"/$testuserone/TestWorkspace"}->[3]), "Successfully listed workspace contents without directories!";
 print "list_workspace_contents output:\n".Data::Dumper->Dump([$output])."\n\n";
 $output = $ws->ls({
 	paths => ["/$testuserone/TestWorkspace"],
@@ -368,6 +402,7 @@ print "delete_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
 $output = $ws->delete({
 	objects => ["/$testuserone/TestWorkspace/movedir/testdir2/testdir3"],
+	force => 1,
 	deleteDirectories => 1
 });
 delete $ctxtwo->{_wscache};

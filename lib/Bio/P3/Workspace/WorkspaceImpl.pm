@@ -818,6 +818,9 @@ sub _create_object {
 		shock => 0,
 		metadata => $specs->{metadata}
 	};
+	if (!-e $self->{_params}->{"script-path"}."/ws-autometa-".$specs->{type}.".pl") {
+		$object->{autometadata} = {};
+	}
 	if ($specs->{type} eq "folder") {
 		#Creating folder on file system
 		$object->{autometadata} = {};
@@ -1164,13 +1167,19 @@ sub _compute_autometadata {
 	my $finalobj = [];
 	for (my $i=0; $i < @{$objs}; $i++){
 		if ($objs->[$i]->{folder} == 0 && defined($objs->[$i]->{autometadata}->{inspection_started})) {
-			if (defined($objs->[$i]->{_id})) {
-				delete $objs->[$i]->{_id};
+			if (-e $self->{_params}->{"script-path"}."/ws-autometa-".$objs->[$i]->{type}.".pl") {
+				if (defined($objs->[$i]->{_id})) {
+					delete $objs->[$i]->{_id};
+				}
+				if (defined($objs->[$i]->{wsobj}->{_id})) {
+					delete $objs->[$i]->{wsobj}->{_id};
+				}
+				push(@{$finalobj},$objs->[$i]);
+			} else {
+				if (defined($objs->[$i]->{autometadata}->{inspection_started})) {
+					$self->_updateDB("objects",{uuid => $objs->[$i]->{uuid}},{'$set' => {"autometadata" => {}}});
+				}
 			}
-			if (defined($objs->[$i]->{wsobj}->{_id})) {
-				delete $objs->[$i]->{wsobj}->{_id};
-			}
-			push(@{$finalobj},$objs->[$i]);
 		}
 	}
 	my $size = @{$finalobj};
