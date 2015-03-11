@@ -348,6 +348,7 @@ print "delete_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
 $output = $wsone->delete({
 	objects => ["/$testuserone/TestWorkspace/movedir/testdir2/testdir3"],
+	force => 1,
 	deleteDirectories => 1
 });
 ok defined($output), "Successfully ran delete_objects function on directory!";
