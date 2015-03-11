@@ -542,9 +542,9 @@ sub _create_shock_node {
 	my $res = $ua->post($self->_shockurl()."/node",Authorization => "OAuth ".$self->_wsauth());
 	my $json = JSON::XS->new;
 	my $data = $json->decode($res->content);
-	print "create shock node output:\n".Data::Dumper->Dump([$data])."\n\n";
+	#print "create shock node output:\n".Data::Dumper->Dump([$data])."\n\n";
 	my $res = $ua->put($self->_shockurl()."/node/".$data->{data}->{id}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
-	print "authorizing shock node output:\n".Data::Dumper->Dump([$res])."\n\n";
+	#print "authorizing shock node output:\n".Data::Dumper->Dump([$res])."\n\n";
 	return $data->{data}->{id};
 }
 
@@ -1429,6 +1429,7 @@ sub create
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN create
+    $output = [];
     $input = $self->_validateargs($input,["objects"],{
 		createUploadNodes => 0,
 		downloadFromLinks => 0,

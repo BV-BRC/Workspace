@@ -10,15 +10,15 @@ use REST::Client;
 use LWP::UserAgent;
 use JSON::XS;
 use HTTP::Request::Common;
-my $test_count = 34;
+my $test_count = 35;
 
 BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceImpl );
 }
 
-if (!defined $ENV{KB_DEPLOYMENT_CONFIG} || !-e $ENV{KB_DEPLOYMENT_CONFIG}) {
+#if (!defined $ENV{KB_DEPLOYMENT_CONFIG} || !-e $ENV{KB_DEPLOYMENT_CONFIG}) {
     $ENV{KB_DEPLOYMENT_CONFIG}=$Bin."/../../configs/test.cfg";
-}
+#}
 print "Loading server with this config: ".$ENV{KB_DEPLOYMENT_CONFIG}."\n";
 
 my $testuserone = "reviewer";
@@ -188,6 +188,14 @@ delete $ctxtwo->{_wscache};
 delete $ctxone->{_wscache};
 ok defined($output->[0]), "Successfully ran save_objects action!";
 print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Recreating an existing folder
+$output = $ws->create({
+	objects => [["/$testuserone/TestWorkspace/testdir","folder",{"Description" => "My recreated folder!"},undef]]
+});
+delete $ctxtwo->{_wscache};
+delete $ctxone->{_wscache};
+ok !defined($output->[0]), "Successfully ran save_objects action!";
 
 #Saving contigs
 $output = $ws->create({
