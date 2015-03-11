@@ -10,7 +10,7 @@ use REST::Client;
 use LWP::UserAgent;
 use JSON::XS;
 use HTTP::Request::Common;
-my $test_count = 31;
+my $test_count = 39;
 
 BEGIN {
 	use_ok( Bio::P3::Workspace::WorkspaceClient );
@@ -133,7 +133,7 @@ print "get output:\n".Data::Dumper->Dump($output)."\n\n";
 $output = $wstwo->ls({
 	paths => [""]
 });
-ok defined($output->{""}->[0]) && !defined($output->{""}->[1]), "Successfully ran ls function on got one workspace back!";
+ok defined($output->{""}->[0]), "Successfully ran ls function on got one workspace back!";
 print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Listing workspaces as "$testuserone"
