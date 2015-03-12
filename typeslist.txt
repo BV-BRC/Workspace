@@ -11,9 +11,8 @@ contigs
 genome_annotation_result
 reads
 job_result
-expression_gene_list
-expression_gene_matrix
-expression_experiment_metadata
+diffexp_input_data
+diffexp_input_metadata
 genbank_file
 feature_protein_fasta
 feature_dna_fasta
