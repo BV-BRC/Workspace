@@ -28,7 +28,7 @@ public class ObjectMeta_deserializer extends JsonDeserializer<ObjectMeta>
 	res.object_owner = p.readValueAs(String.class);
 	res.e_7 = p.readValueAs(Integer.class);
 	res.e_8 = p.readValueAs(new TypeReference<Map<String, String>>(){});
-	res.e_9 = p.readValueAs(new TypeReference<Map<String, String>>(){});
+	res.e_9 = p.readValueAs(new TypeReference<Map<String, Object>>(){});
 	res.user_permission = p.readValueAs(String.class);
 	res.global_permission = p.readValueAs(String.class);
 	res.shockurl = p.readValueAs(String.class);
