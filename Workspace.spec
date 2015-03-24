@@ -68,7 +68,7 @@ typedef tuple<ObjectName,ObjectType,FullObjectPath,Timestamp creation_time,Objec
 	string setowner - use this parameter as an administrator to set the own of the created objects
 */
 typedef structure {
-		list<tuple<FullObjectPath,ObjectType,UserMetadata,ObjectData>> objects;
+		list<tuple<FullObjectPath,ObjectType,UserMetadata,ObjectData,Timestamp creation_time>> objects;
 		WorkspacePerm permission;
 		bool createUploadNodes;
 		bool downloadLinks;
@@ -88,7 +88,7 @@ funcdef create(create_params input) returns (list<ObjectMeta> output) authentica
 	bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
 */
 typedef structure {
-	list<tuple<FullObjectPath,UserMetadata,ObjectType>> objects;
+	list<tuple<FullObjectPath,UserMetadata,ObjectType,Timestamp creation_time>> objects;
 	bool autometadata;
 	bool adminmode;
 } update_metadata_params;

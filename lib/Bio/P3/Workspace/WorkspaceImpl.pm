@@ -480,7 +480,7 @@ sub _copy_or_move_objects {
     			$delhash->{$user}->{$ws}->{$path}->{$name} = $wsobj;
     		}
     		#Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],"folder",$wsobj->{metadata},$wsobj,1,$move]);
+    		push(@{$saveobjs},[$objects->[$i]->[1],"folder",$wsobj->{metadata},$wsobj,undef,1,$move]);
     		if ($recursive == 1) {
     			my $subobjs = $self->_query_database({workspace_uuid => $wsobj->{uuid}},0);
     			for (my $j=0; $j < @{$subobjs}; $j++) {
@@ -488,7 +488,7 @@ sub _copy_or_move_objects {
     				my $dpath = $objects->[$i]->[1]."/".$subobjs->[$j]->{path}."/".$subobjs->[$j]->{name};
     				$dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
-    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],1,$move]);
+    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
     			}
     		}
     	} else {
@@ -503,7 +503,7 @@ sub _copy_or_move_objects {
     			$delhash->{$user}->{$ws}->{$path}->{$name} = $obj;
 		    }
 		    #Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],$obj->{type},$obj->{metadata},$obj,1,$move]);
+    		push(@{$saveobjs},[$objects->[$i]->[1],$obj->{type},$obj->{metadata},$obj,undef,1,$move]);
     		#Checking if object being copied is a directory
     		if	($obj->{folder} == 1 && $recursive == 1) {
     			my $subobjs = $self->_get_directory_contents($obj,1);
@@ -517,7 +517,7 @@ sub _copy_or_move_objects {
 	    			my $dpath = $objects->[$i]->[1]."/".$partialpath."/".$subobjs->[$j]->{name};
     				$dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
-    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],1,$move]);
+    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
 	    		}
     		}
     	}
@@ -749,8 +749,17 @@ sub _create_validated_object_set {
     					downloadFromLinks => $downloadFromLinks,
     				};
     				if (defined($objspec->[4])) {
-    					$createinput->{copy} = $objspec->[4];
-    					$createinput->{move} = $objspec->[5];
+    					if ($self->_getUsername() ne $self->{_params}->{wsuser} && $self->_adminmode() eq 0) {
+			    			$self->_error("Only the workspace or admin can set creation date!");	
+			    		}
+			    		if ($objspec->[4] =~ m/^\d+$/) {
+			    			$objspec->[4] = DateTime->from_epoch( epoch => $objspec->[4] )->datetime();
+			    		}
+    					$createinput->{creation_date} = $objspec->[4];
+    				}
+    				if (defined($objspec->[5])) {
+    					$createinput->{copy} = $objspec->[5];
+    					$createinput->{move} = $objspec->[6];
     				}
     				my $obj = $self->_create($createinput);
     				push(@{$output},$obj);
@@ -779,8 +788,11 @@ sub _create_workspace {
     if (defined($specs->{move}) && $specs->{move} == 1) {
     	$uuid = $specs->{data}->{uuid};
     }
+    if (!defined($specs->{creation_date})) {
+    	$specs->{creation_date} = DateTime->now()->datetime();
+    }
     $self->_mongodb()->get_collection('workspaces')->insert({
-		creation_date => DateTime->now()->datetime(),
+		creation_date => $specs->{creation_date},
 		uuid => $uuid,
 		name => $specs->{workspace},
 		owner => $specs->{user},
@@ -802,6 +814,9 @@ sub _create_object {
 	if (defined($specs->{move}) && $specs->{move} == 1) {
     	$uuid = $specs->{data}->{uuid};
     }
+    if (!defined($specs->{creation_date})) {
+    	$specs->{creation_date} = DateTime->now()->datetime();
+    }
     my $wsobj = $self->_wscache($specs->{user},$specs->{workspace});
 	my $object = {
 		wsobj => $wsobj,
@@ -812,7 +827,7 @@ sub _create_object {
 		name => $specs->{name},
 		workspace_uuid => $wsobj->{uuid},
 		uuid => $uuid,
-		creation_date => DateTime->now()->datetime(),
+		creation_date => $specs->{creation_date},
 		owner => $self->_get_newobject_owner(),
 		autometadata => {inspection_started => DateTime->now()->datetime()},
 		shock => 0,
@@ -1626,6 +1641,16 @@ sub update_metadata
     	if (defined($input->{objects}->[$i]->[2])) {
     		$obj->{type} = $input->{objects}->[$i]->[2];
     		$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {type => $input->{objects}->[$i]->[2]}});
+    	}
+    	if (defined($input->{objects}->[$i]->[3])) {
+    		if ($self->_getUsername() ne $self->{_params}->{wsuser} && $self->_adminmode() eq 0) {
+    			$self->_error("Only the workspace or admin can set creation date!");	
+    		}
+    		if ($input->{objects}->[$i]->[3] =~ m/^\d+$/) {
+    			$input->{objects}->[$i]->[3] = DateTime->from_epoch( epoch => $input->{objects}->[$i]->[3] )->datetime();
+    		}
+    		$obj->{creation_date} = $input->{objects}->[$i]->[3];
+    		$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {creation_date => $input->{objects}->[$i]->[3]}});
     	}
 	    push(@{$output},$self->_generate_object_meta($obj));
     }

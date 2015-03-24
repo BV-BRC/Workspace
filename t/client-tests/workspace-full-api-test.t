@@ -105,7 +105,7 @@ ok defined($output), "Successfully created a top level directory!";
 print "create output:\n".Data::Dumper->Dump($output)."\n\n";
 #Testing testusertwo acting as an adminitrator
 $output = $wstwo->create({
-	objects => [["/reviewer/TestAdminWorkspace","folder",{description => "My first admin workspace!"},undef]],
+	objects => [["/reviewer/TestAdminWorkspace","folder",{description => "My first admin workspace!"},undef,0]],
 	permission => "r",
 	adminmode => 1,
 	setowner => "reviewer"
@@ -218,6 +218,15 @@ $req->method('PUT');
 my $ua = LWP::UserAgent->new();
 my $res = $ua->request($req);
 print "File uploaded:\n".Data::Dumper->Dump([$res])."\n\n";
+
+#Updating metadata
+$output = $wstwo->update_metadata({
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj",undef,undef,0]],
+	autometadata => 0,
+	adminmode => 1
+});
+ok defined($output->[0]), "Successfully ran update_metadata action!";
+print "update_metadata output:\n".Data::Dumper->Dump($output)."\n\n";
 
 #Retrieving shock object through workspace API
 $output = $wsone->get({

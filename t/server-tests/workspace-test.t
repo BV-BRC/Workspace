@@ -113,7 +113,7 @@ ok defined($output), "Successfully created a top level directory!";
 print "create output:\n".Data::Dumper->Dump($output)."\n\n";
 #Testing testusertwo acting as an adminitrator
 $output = $ws->create({
-	objects => [["/reviewer/TestAdminWorkspace","folder",{description => "My first admin workspace!"},undef]],
+	objects => [["/reviewer/TestAdminWorkspace","folder",{description => "My first admin workspace!"},undef,0]],
 	permission => "r",
 	adminmode => 1,
 	setowner => "reviewer"
@@ -249,6 +249,19 @@ my $res = $ua->request($req);
 print "File uploaded:\n".Data::Dumper->Dump([$res])."\n\n";
 $output = $ws->update_auto_meta({objects => ["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj"]});
 print "update_auto_meta output:\n".Data::Dumper->Dump($output)."\n\n";
+
+#Updating metadata
+$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
+$output = $ws->update_metadata({
+	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/shockobj",undef,undef,0]],
+	autometadata => 0,
+	adminmode => 1
+});
+delete $ctxtwo->{_wscache};
+delete $ctxone->{_wscache};
+ok defined($output->[0]), "Successfully ran update_metadata action!";
+print "update_metadata output:\n".Data::Dumper->Dump($output)."\n\n";
+$Bio::P3::Workspace::Service::CallContext = $ctxone;
 
 #Retrieving shock object through workspace API
 $output = $ws->get({
