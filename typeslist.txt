@@ -23,3 +23,17 @@ diffexp_experiment
 diffexp_expression
 diffexp_mapping
 diffexp_sample
+pdf
+xls
+xlsx
+doc
+docx
+ppt
+pptx
+html
+gif
+jpg
+png
+txt
+csv 
+tar_gz
