@@ -443,12 +443,28 @@ sub _query_database {
 	}
 	my $output = [];
 	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
+	my $hash;
 	while (my $object = $cursor->next) {
 		$object->{wsobj} = $self->_wscache("_uuid",$object->{workspace_uuid});
 		if ($object->{shock} == 1 && $object->{size} == 0) {			
 			$self->_update_shock_node($object);
 		}
-		push(@{$output},$object);
+		if (defined($hash->{$object->{workspace_uuid}}->{$object->{path}}->{$object->{name}})) {
+			for (my $i=0; $i < @{$output}; $i++) {
+				if ($output->[$i] == $hash->{$object->{workspace_uuid}}->{$object->{path}}->{$object->{name}}) {
+					$self->_mongodb()->get_collection('objects')->remove({
+						uuid => $output->[$i]->{uuid},
+						workspace_uuid => $output->[$i]->{workspace_uuid},
+						path => $output->[$i]->{path},
+						name => $output->[$i]->{name}
+					});
+					$output->[$i] = $object;
+				}
+			}
+		} else {
+			push(@{$output},$object);
+		}
+		$hash->{$object->{workspace_uuid}}->{$object->{path}}->{$object->{name}} = $object;
 	}
 	return $output;
 }
@@ -603,7 +619,7 @@ sub _validate_save_objects_before_saving {
 		    		}
 		    	} elsif ($user ne $self->_getUsername() && $self->_adminmode() == 0) {
 		    		#Users can only create their own workspaces
-			    print STDERR "user=$user username=" . $self->_getUsername() . "\n";
+			    	print STDERR "user=$user username=" . $self->_getUsername() . "\n";
 		    		$self->_error("Insufficient permissions to create ".$objects->[$i]->[0]);
 		    	} elsif ($objects->[$i]->[1] ne "folder") {
 		    		#Workspace must be a folder
@@ -1275,7 +1291,6 @@ sub new
 		chomp($line);
 		$self->{_types}->{$line} = 1;
 	}
-	print Data::Dumper->Dump([$self->{_types}]);
 	close($fh);
 	my $config = {
 		host => $params->{"mongodb-host"},
