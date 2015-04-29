@@ -135,7 +135,7 @@ sub save_file_to_file
     }
     else
     {
-	my $res = $self->create({ objects => [[$path, $type, $metadata, read_file($local_file) ]],
+	my $res = $self->create({ objects => [[$path, $type, $metadata, scalar read_file($local_file) ]],
 				overwrite => ($overwrite ? 1 : 0) });
 	print STDERR Dumper($res);
     }
