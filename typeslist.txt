@@ -41,3 +41,5 @@ modeltemplate
 model
 fba
 media
+biochemistry
+mapping
