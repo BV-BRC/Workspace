@@ -37,3 +37,7 @@ png
 txt
 csv 
 tar_gz
+modeltemplate
+model
+fba
+media
