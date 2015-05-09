@@ -28,6 +28,7 @@ ws-ls path [long options...]
 =cut
 
 my @options = (["url=s", 'Service URL'],
+	       ['recursive|r', 'List subdirectory contents'],
 	       ['shock', 'Include Shock URLs'],
 	       ["help|h", "Show this usage message"]);
 
@@ -40,7 +41,11 @@ my $ws = Bio::P3::Workspace::ScriptHelpers::wsClient($opt->url);
 
 my @paths = @ARGV;
 
-my $res = $ws->ls({ paths => \@paths });
+my $input = { paths => \@paths };
+if ($opt->recursive) {
+	$input->{recursive} = 1;
+}
+my $res = $ws->ls($input);
 
 
 for my $p (@paths)

@@ -19,38 +19,38 @@ Create a workspace
 
 =head1 COMMAND-LINE OPTIONS
 
-ws-create workspace [long options...]
+ws-rm path [long options...]
 	--url      URL to use for workspace service
 	--help     print usage message and exit
 	
 =cut
 
 my @options = (["url=s", 'Service URL'],
-		   ["permission|p", "Permissions for folders created"],
+		   ["recursive|r", "Recursive delete"],
+		   ["force|f", "Delete directories"],
+		   ["adminmode|a", "Run as administrator"],
 	       ["help|h", "Show this usage message"],
 	       );
 
-my($opt, $usage) = describe_options("%c %o ws-name",
+my($opt, $usage) = describe_options("%c %o <path>",
 				    @options);
 
 my $name = shift;
-my $type = shift;
-my $filename = shift;
-open (my $fh, "<", $filename);
-my $data = "";
-while (my $line = <$fh>) {
-    $data .= $line;
+
+if (!defined($name)) {
+	print($usage->text);
+	exit;
 }
-close($fh);
 
 print($usage->text), exit if $opt->help;
 
 my $ws = Bio::P3::Workspace::ScriptHelpers::wsClient($opt->url);
 
-my $list = $ws->create({
-	objects => [[$name,$type,{},$data]],
-	permission => $opt->permission,
-	overwrite => 1
+my $list = $ws->delete({
+	objects => [$name],
+	deleteDirectories => $opt->recursive,
+	adminmode => $opt->adminmode,
+	force => $opt->force
 });
 my $tbl = [];
 for my $file (@$list) {
