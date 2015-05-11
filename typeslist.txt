@@ -28,6 +28,7 @@ gif
 html
 job_result
 jpg
+json
 mapping
 media
 model
