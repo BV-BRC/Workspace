@@ -46,5 +46,6 @@ transcriptomics_experiment
 transcripts
 txt
 unspecified
+wig
 xls
 xlsx
