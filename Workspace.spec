@@ -179,7 +179,7 @@ typedef structure {
 		bool excludeObjects;
 		bool recursive;
 		bool fullHierachicalOutput;
-		mapping<string,string> query;
+		mapping<string,list<string>> query;
 		bool adminmode;
 } list_params;
 funcdef ls(list_params input) returns (mapping<FullObjectPath,list<ObjectMeta>> output) authentication required;

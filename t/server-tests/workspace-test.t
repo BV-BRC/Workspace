@@ -252,6 +252,15 @@ TTTTCAAGATTGCCTAATAATAATATATTTTTAATATTTAATTACTAGGAAAATAATATTGCGAAAATTA"]]
 ok defined($output->[0]), "Successfully ran save_objects action!";
 print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
 
+#Querying multiple objects
+$output = $ws->ls({
+	paths => ["/$testuserone/TestWorkspace/"],
+	query => {type => ["genome","contigs"]},
+	recursive => 1
+});
+ok defined($output->{"/$testuserone/TestWorkspace/"}->[0]), "Successfully ran ls with multiple types!";
+print "ls output:\n".Data::Dumper->Dump([$output])."\n\n";
+
 #Creating shock nodes
 setcontext(1);
 $output = $ws->create({
