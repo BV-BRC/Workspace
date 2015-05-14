@@ -38,7 +38,7 @@ public class ObjectMeta
     public String object_owner;
     public Integer e_7;
     public Map<String, String> e_8;
-    public Map<String, String> e_9;
+    public Map<String, Object> e_9;
     public String user_permission;
     public String global_permission;
     public String shockurl;
