@@ -891,6 +891,9 @@ sub _create_object {
 	} else {
 		#Writing data to file system directly and setting file size
 		my $data = $specs->{data};
+		if (!-d $self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}) {
+			File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path});
+		}
 		open (my $fh,">",$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
 		if (ref($data) eq 'ARRAY' || ref($data) eq 'HASH') {
 			my $JSON = JSON::XS->new->utf8(1);
@@ -1227,7 +1230,7 @@ sub _compute_autometadata {
 		print $fh $JSON->encode($finalobj);
 		close($fh);
 		$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
-		print "\nperl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl\n\n";
+		#print "\nperl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl\n\n";
 		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl");
 	} else {
 		File::Path::rmtree($fulldir);
@@ -1827,7 +1830,7 @@ sub get
 	    		workspace_uuid => $wsobj->{uuid},
 	    		path => $path,
 	    		name => $name
-	    	});
+	    	},1);
 	    	if ($input->{metadata_only} == 1) {
 		    	push(@{$output},[$self->_generate_object_meta($obj)]); 
 	    	} else {
