@@ -1,8 +1,6 @@
 
 use strict;
-use Getopt::Long::Descriptive;
-use Data::Dumper;
-use Bio::P3::Workspace::WorkspaceClient;
+use Bio::P3::Workspace::ScriptHelpers;
 
 =head1 NAME
 
@@ -25,15 +23,17 @@ ws-cp [-h] [long options...]
 	-h --help   Show this usage message
 =cut
 
-my @options = (
-	       ["url=s", 'Service URL'],
-	       ["help|h", "Show this usage message"],
-	      );
-
-my($opt, $usage) = describe_options("%c %o",
-				    @options);
-
-print($usage->text), exit if $opt->help;
-
-my $ws = Bio::P3::Workspace::WorkspaceClient->new($opt->url);
-
+my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <source> <destination>",[
+	["overwrite|o", "Overwirte existing destination object"],
+	["recursive|r", "Copy all directory contents"],
+	["move|m", "Perform a move rather than a copy"]
+]);
+my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([$ARGV[0],$ARGV[1]]);
+my $res = Bio::P3::Workspace::ScriptHelpers::wscall("copy",{
+	objects => [$paths]
+	overwrite => $opt->overwrite,
+	recursive => $opt->recursive,
+	move => $ops->move
+});
+print "Files copied to new destinations:\n";
+Bio::P3::Workspace::ScriptHelpers::print_wsmeta_table($res);

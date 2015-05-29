@@ -1,10 +1,6 @@
 
 use strict;
-use Getopt::Long::Descriptive;
-use Data::Dumper;
-use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::ScriptHelpers;
-use Text::Table;
 
 =head1 NAME
 
@@ -27,42 +23,17 @@ ws-ls path [long options...]
 
 =cut
 
-my @options = (["url=s", 'Service URL'],
-	       ['recursive|r', 'List subdirectory contents'],
-	       ['shock', 'Include Shock URLs'],
-	       ["help|h", "Show this usage message"]);
-
-my($opt, $usage) = describe_options("%c %o path",
-				    @options);
-
-print($usage->text), exit if $opt->help;
-
-my $ws = Bio::P3::Workspace::ScriptHelpers::wsClient($opt->url);
-
-my @paths = @ARGV;
-
-my $input = { paths => \@paths };
-if ($opt->recursive) {
-	$input->{recursive} = 1;
-}
-my $res = $ws->ls($input);
-
-
-for my $p (@paths)
-{
+my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <path>",[
+	["recursive|r", "Recursively list subdirectory contents"],
+	["shock|s", "Include shock URLs"],
+]);
+my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([@ARGV]);
+my $res = Bio::P3::Workspace::ScriptHelpers::wscall("ls",{
+	paths => $paths,
+	recursive => $opt->recursive
+});
+for my $p (@{$paths}) {
     my $x = $res->{$p};
-    print "$p:\n" if @paths > 1;
-    my $tbl = [];
-    
-    for my $file (@$x)
-    {
-	my($name, $type, $path, $created, $id, $owner, $size, $user_meta, $auto_meta, $user_perm,
-	   $global_perm, $shockurl) = @$file;
-	push(@$tbl, [$name, $owner, $type, $created, $size, $user_perm, $global_perm, ($opt->shock ? $shockurl  : ())]);
-    }
-    my $table = Text::Table->new(
-				 "Name","Owner","Type","Moddate","Size","User perm","Global perm", ($opt->shock ? "Shock URL" : ())
-				);
-    $table->load(@{$tbl});
-    print $table."\n";
+    print "\n$p:\n" if @{$paths} > 1;
+    Bio::P3::Workspace::ScriptHelpers::print_wsmeta_table($x,$opt->shock);
 }

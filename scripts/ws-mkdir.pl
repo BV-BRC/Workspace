@@ -1,10 +1,6 @@
 
-use Try::Tiny;
 use strict;
-use Getopt::Long::Descriptive;
-use Data::Dumper;
-use Bio::P3::Workspace::WorkspaceClient;
-use Bio::P3::Workspace::WorkspaceClientExt;
+use Bio::P3::Workspace::ScriptHelpers;
 use Bio::P3::Workspace::Utils;
 
 =head1 NAME
@@ -31,51 +27,18 @@ rast-annotate-proteins-kmer-v2 [-io] [long options...] < input > output
 
 =cut
 
-my @options = (["url=s", 'Service URL'],
-	       ["help|h", "Show this usage message"],
-	      );
-
-my($opt, $usage) = describe_options("%c %o path [path ...]",
-				    @options);
-
-print($usage->text), exit if $opt->help;
-
-my $ws = Bio::P3::Workspace::WorkspaceClient->new($opt->url);
-my $wsutil = Bio::P3::Workspace::Utils->new($ws);
-
-for my $fullpath (@ARGV)
-{
-    if ($fullpath !~ m,^/,)
-    {
-	warn "ws-mkdir $fullpath: Currently all paths must be absolute\n";
-	next;
-    }
-
-    my $cur;
-    eval {
-	$cur = $ws->get({ objects => \@ARGV, metadata_only => 0 });
-    };
-    if ($@)
-    {
-	$cur = [];
-    }
-    $cur = $cur->[0]->[0];
-    if ($cur)
-    {
-	bless $cur, 'Bio::P3::Workspace::ObjectMeta';
-	if (defined($cur->name))
-	{
-	    warn "ws-mkdir $fullpath: path already exists\n";
-	    print Dumper($cur);
-	    next;
-	}
-    }
-    eval {
-	$ws->create({ objects => [[$fullpath, 'folder']] });
-    };
-    if ($@)
-    {
-	warn "Error creating $fullpath\n$@\n";
-    }
-
+my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <path> [<path> ...]",[
+	["permission|p", "Permissions for folders created"],
+]);
+my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([@ARGV]);
+my $input = {
+	objects => [[$paths->[0],$type,{},$data]],
+	permission => $opt->permission,
+	overwrite => 0
+};
+for (my $i=0; $i < @{$paths}, $i++) {
+	push(@{$input->{objects}},[$paths->[$i],"folder"]);
 }
+my $res = Bio::P3::Workspace::ScriptHelpers::wscall("create",$input);
+print "Folders created:\n";
+Bio::P3::Workspace::ScriptHelpers::print_wsmeta_table($res);

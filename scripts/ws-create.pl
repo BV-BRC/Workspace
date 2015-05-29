@@ -1,10 +1,6 @@
 
 use strict;
-use Getopt::Long::Descriptive;
-use Data::Dumper;
-use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::ScriptHelpers;
-use Text::Table;
 =head1 NAME
 
 ws-create
@@ -25,41 +21,47 @@ ws-create workspace [long options...]
 	
 =cut
 
-my @options = (["url=s", 'Service URL'],
-		   ["permission|p", "Permissions for folders created"],
-	       ["help|h", "Show this usage message"],
-	       );
+my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <name> <type> <filename>",[
+	["permission|p", "Permissions for folders created"],
+	["useshock|u", "Upload file to shock and store link in workspace"],
+	["overwrite|o", "Overwirte existing destination object"],
+]);
 
-my($opt, $usage) = describe_options("%c %o ws-name",
-				    @options);
-
-my $name = shift;
-my $type = shift;
-my $filename = shift;
-open (my $fh, "<", $filename);
-my $data = "";
-while (my $line = <$fh>) {
-    $data .= $line;
+my $type = $ARGV[1];
+my $filename = $ARGV[2];
+my $data = undef;
+if (!$opt->useshock) {
+	open (my $fh, "<", $filename);
+	$data = "";
+	while (my $line = <$fh>) {
+	    $data .= $line;
+	}
+	close($fh);
 }
-close($fh);
-
-print($usage->text), exit if $opt->help;
-
-my $ws = Bio::P3::Workspace::ScriptHelpers::wsClient($opt->url);
-
-my $list = $ws->create({
-	objects => [[$name,$type,{},$data]],
+my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([$ARGV[0]]);
+my $res = Bio::P3::Workspace::ScriptHelpers::wscall("create",{
+	objects => [[$paths->[0],$type,{},$data]],
 	permission => $opt->permission,
-	overwrite => 1
+	overwrite => $opt->overwrite,
+	createUploadNodes => $opt->useshock
 });
-my $tbl = [];
-for my $file (@$list) {
-	my($name, $type, $path, $created, $id, $owner, $size, $user_meta, $auto_meta, $user_perm,
-	$global_perm, $shockurl) = @$file;
-	push(@$tbl, [$name, $owner, $type, $created, $size, $user_perm, $global_perm]);
+
+if ($opt->useshock) {
+	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
+	my $ua = LWP::UserAgent->new();
+	$res = $res->[0];
+	my $shock_url = $res->[11];
+	my $req = HTTP::Request::Common::POST($shock_url, 
+					  Authorization => "OAuth " . Bio::P3::Workspace::ScriptHelpers::token(),
+					  Content_Type => 'multipart/form-data',
+					  Content => [upload => [$filename]]);
+    $req->method('PUT');
+    my $sres = $ua->request($req);
 }
-my $table = Text::Table->new(
-	"Name","Owner","Type","Moddate","Size","User perm","Global perm"
-);
-$table->load(@{$tbl});
-print $table."\n";
+
+print "File created:\n";
+Bio::P3::Workspace::ScriptHelpers::print_wsmeta_table($res);
+
+
+
+
