@@ -49,8 +49,8 @@ my $res = Bio::P3::Workspace::ScriptHelpers::wscall("create",{
 if ($opt->useshock) {
 	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
 	my $ua = LWP::UserAgent->new();
-	$res = $res->[0];
-	my $shock_url = $res->[11];
+	my $item = $res->[0];
+	my $shock_url = $item->[11];
 	my $req = HTTP::Request::Common::POST($shock_url, 
 					  Authorization => "OAuth " . Bio::P3::Workspace::ScriptHelpers::token(),
 					  Content_Type => 'multipart/form-data',
@@ -60,7 +60,7 @@ if ($opt->useshock) {
 }
 
 print "File created:\n";
-Bio::P3::Workspace::ScriptHelpers::print_wsmeta_table($res);
+Bio::P3::Workspace::ScriptHelpers::print_wsmeta_table($res,$opt->useshock);
 
 
 
