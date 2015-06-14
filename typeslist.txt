@@ -1,3 +1,4 @@
+bam
 biochemistry
 contigs
 csv
@@ -47,6 +48,8 @@ transcriptomics_experiment
 transcripts
 txt
 unspecified
+vcf
 wig
 xls
 xlsx
+zip
