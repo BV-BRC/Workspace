@@ -41,6 +41,7 @@ ppt
 pptx
 proteomics_experiment
 reads
+rxnprobs
 string
 svg
 tar_gz
