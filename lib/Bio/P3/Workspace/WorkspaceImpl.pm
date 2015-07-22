@@ -359,7 +359,7 @@ sub _parse_ws_path {
 	#<obj uuid>
 	
 	#<obj uuid>
-	$input =~ s/\/\//\//g;
+	$input =~ s/\/+/\//g;
 	
 	if ($input =~ m/^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/) {
 		my $obj = $self->_query_database({uuid => $input});
@@ -1479,6 +1479,7 @@ sub create
 		permission => "n",
 		setowner => undef
 	});
+	
 	if (defined($input->{setowner})) {
 		if ($self->_adminmode() == 0) {
 			$self->_error("Cannot set owner unless adminmode is active!");
