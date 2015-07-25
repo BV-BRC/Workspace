@@ -5,11 +5,15 @@ use Getopt::Long::Descriptive;
 use Data::Dumper;
 use Text::Table;
 use JSON::XS;
+use HTTP::Request::Common;
+use LWP::UserAgent;
 use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::WorkspaceClientExt;
+use Bio::ModelSEED::ProbModelSEED::ProbModelSEEDClient;
 
 our $defaultWSURL   = "http://p3.theseed.org/services/Workspace";
 our $defaultAPPURL = "http://p3.theseed.org/services/app_service";
+our $defaultMSURL = "https://p3.theseed.org/services/ProbModelSEED";
 our $overrideWSURL = undef;
 our $adminmode = undef;
 
@@ -184,6 +188,24 @@ sub wsURL {
 	return $currentURL;
 }
 
+sub msurl {
+	my $newUrl = shift;
+	my $currentURL;
+	if (defined($newUrl)) {
+		if ($newUrl eq "default") {
+			$newUrl = $Bio::P3::Workspace::ScriptHelpers::defaultMSURL;
+		}
+		Bio::P3::Workspace::ScriptHelpers::SetConfig({msurl => $newUrl});
+		$currentURL = $newUrl;
+	} else {
+		if (defined($overrideWSURL)) {
+			return $currentURL;
+		}
+		$currentURL =Bio::P3::Workspace::ScriptHelpers::GetConfigParam("P3Client.msurl");
+	}
+	return $currentURL;
+}
+
 sub appurl {
 	my $newUrl = shift;
 	my $currentURL;
@@ -205,7 +227,7 @@ sub appurl {
 sub process_paths {
 	my $paths = shift;
 	for (my $i=0; $i < @{$paths}; $i++) {
-		if ($paths->[$i] !~ /^\//) {
+		if ($paths->[$i] !~ /^\// && $paths->[$i] !~ /^PATRICSOLR/) {
 			$paths->[$i] = Bio::P3::Workspace::ScriptHelpers::directory().$paths->[$i];
 		}
 	}
@@ -245,21 +267,40 @@ sub directory {
 
 sub login {
 	my $params = shift;
-	my $token = Bio::KBase::AuthToken->new(user_id => $params->{user_id}, password => $params->{password});
-	if (!defined($token->token())) {
-		Bio::P3::Workspace::ScriptHelpers::SetConfig({
+	my $url = "http://tutorial.theseed.org/Sessions/Login";
+	my $content = {
+		user_id => $params->{user_id},
+		password => $params->{password},
+		status => 1,
+		cookie => 1,
+		fields => "name,user_id,token"
+	};
+	if ($params->{user_id} =~ m/^(.+)\@patricbrc\.org$/) {
+		$url = "https://user.patricbrc.org/authenticate";
+		$content = { username => $1, password => $params->{password} };
+	}
+	my $ua = LWP::UserAgent->new();
+	my $res = $ua->post($url,$content);
+	if (!$res->is_success) {
+    	Bio::P3::Workspace::ScriptHelpers::SetConfig({
 			token => undef,
 			user_id => undef
 		});
 		return undef;
-	} else {
-		Bio::P3::Workspace::ScriptHelpers::SetConfig({
-			token => $token->token(),
-			user_id => $ARGV[0],
-			password => undef
-		});
-		return $token->token();
 	}
+	my $token;
+	if ($params->{user_id} =~ m/^(.+)\@patricbrc\.org$/) {
+		$token = $res->content;
+	} else {
+		my $data = decode_json $res->content;
+		$token = $data->{token};
+	}
+	Bio::P3::Workspace::ScriptHelpers::SetConfig({
+		token => $token,
+		user_id => $params->{user_id},
+		password => undef
+	});
+	return $token;
 }
 
 sub logout {
@@ -267,6 +308,21 @@ sub logout {
 		token => undef,
 		user_id => undef
 	});
+}
+
+sub msClient {
+	my $url = shift;
+	if (!defined($url)) {
+		$url = msurl();
+	}
+	if ($url eq "impl") {
+		require "Bio/ModelSEED/ProbModelSEED/ProbModelSEEDImpl.pm";
+		$ENV{KB_DEPLOYMENT_CONFIG} = "/Users/chenry/code/ProbModelSEED/configs/test.cfg";
+		$Bio::ModelSEED::ProbModelSEED::Service::CallContext = Bio::ModelSEED::ProbModelSEED::Service::CallContext->new(Bio::P3::Workspace::ScriptHelpers::token(),"unknown",Bio::P3::Workspace::ScriptHelpers::user());
+		my $client = Bio::ModelSEED::ProbModelSEED::ProbModelSEEDImpl->new();
+		return $client;
+	}
+	return Bio::ModelSEED::ProbModelSEED::ProbModelSEEDClient->new($url,token => Bio::P3::Workspace::ScriptHelpers::token());
 }
 
 sub wsClient {
@@ -317,4 +373,37 @@ sub token {
 sub user {
 	Bio::P3::Workspace::ScriptHelpers::GetConfigParam("P3Client.user_id");
 }
+
+{
+	package Bio::ModelSEED::ProbModelSEED::Service::CallContext;
+	
+	use strict;
+	
+	sub new {
+	    my($class,$token,$method,$user) = @_;
+	    my $self = {
+	        token => $token,
+	        method => $method,
+	        user_id => $user
+	    };
+	    return bless $self, $class;
+	}
+	sub user_id {
+		my($self) = @_;
+		return $self->{user_id};
+	}
+	sub token {
+		my($self) = @_;
+		return $self->{token};
+	}
+	sub method {
+		my($self) = @_;
+		return $self->{method};
+	}
+	sub log_debug {
+		my($self,$msg) = @_;
+		print STDERR $msg."\n";
+	}
+}
+
 1;

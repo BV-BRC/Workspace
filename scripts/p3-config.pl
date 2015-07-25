@@ -30,6 +30,6 @@ if (defined($opt->{appurl})) {
 if (defined($opt->{print})) {
 	print "wsurl:".Bio::P3::Workspace::ScriptHelpers::wsURL()."\n";
 	print "appurl:".Bio::P3::Workspace::ScriptHelpers::appurl()."\n";
-#	print "msurl:".Bio::P3::Workspace::ScriptHelpers::msurl()."\n";
+	print "msurl:".Bio::P3::Workspace::ScriptHelpers::msurl()."\n";
 }
 exit 0;

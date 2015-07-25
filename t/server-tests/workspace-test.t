@@ -155,18 +155,45 @@ ok defined($output->{"/$testuserone/"}->[1]) && !defined($output->{"/$testuseron
 print "list_workspaces output:\n".Data::Dumper->Dump([$output])."\n\n";
 
 #Saving an object
+open ( my $fh, "<", $Bin."/testmodel");
+my $data = "";
+while (my $line = <$fh>) {
+	$data .= $line;
+}
+close($fh);
 setcontext(1);
 $output = $ws->create({
-	objects => [["/$testuserone/TestWorkspace/testdir/testdir2/testdir3/testobj","genome",{"Description" => "My first object!"},{
-		id => "83333.1",
-		scientific_name => "Escherichia coli",
-		domain => "Bacteria",
-		dna_size => 4000000,
-		num_contigs => 1,
-		gc_content => 0.5,
-		taxonomy => "Bacteria",
-		features => [{}]
-	}]]
+	objects => [["/$testuserone/TestWorkspace/models/testmodel","model",{"Description" => "My first object!"},$data]]
+});
+ok defined($output->[0]), "Successfully ran save_objects action!";
+print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+open ( my $fh, "<", $Bin."/fba");
+$data = "";
+while (my $line = <$fh>) {
+	$data .= $line;
+}
+close($fh);
+sleep(10);
+$output = $ws->ls({
+	paths => ["/$testuserone/TestWorkspace/models/"]
+});
+print "ls of uploaded objects:\n".Data::Dumper->Dump($output->{"/$testuserone/TestWorkspace/models/"})."\n\n";
+exit;
+setcontext(1);
+$output = $ws->create({
+	objects => [["/$testuserone/TestWorkspace/models/fba","fba",{"Description" => "My first object!"},$data]]
+});
+ok defined($output->[0]), "Successfully ran save_objects action!";
+print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";
+open ( my $fh, "<", $Bin."/gf");
+$data = "";
+while (my $line = <$fh>) {
+	$data .= $line;
+}
+close($fh);
+setcontext(1);
+$output = $ws->create({
+	objects => [["/$testuserone/TestWorkspace/models/gf","fba",{"Description" => "My first object!"},$data]]
 });
 ok defined($output->[0]), "Successfully ran save_objects action!";
 print "save_objects output:\n".Data::Dumper->Dump($output)."\n\n";

@@ -30,10 +30,10 @@ my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <source> <d
 ]);
 my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([$ARGV[0],$ARGV[1]]);
 my $res = Bio::P3::Workspace::ScriptHelpers::wscall("copy",{
-	objects => [$paths]
+	objects => [$paths],
 	overwrite => $opt->overwrite,
 	recursive => $opt->recursive,
-	move => $ops->move
+	move => $opt->move
 });
 print "Files copied to new destinations:\n";
 Bio::P3::Workspace::ScriptHelpers::print_wsmeta_table($res);

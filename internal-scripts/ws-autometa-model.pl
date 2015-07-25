@@ -89,11 +89,7 @@ for (my $i=0; $i < @{$data->{modelreactions}}; $i++) {
 		}
 	}
 }
-$metadata->{biomasscpds} = join("/",keys(%{$biocpdhash}));
-$metadata->{biomasses} = join("/",keys(%{$biomasshash}));
 $metadata->{num_genes} = keys(%{$genehash});
-$metadata->{genes} = join("/",keys(%{$genehash}));
-$metadata->{reactions} = join("/",keys(%{$rxnhash}));
 #*******************************************************************
 #End type specific code to generate automated metadata
 #*******************************************************************
