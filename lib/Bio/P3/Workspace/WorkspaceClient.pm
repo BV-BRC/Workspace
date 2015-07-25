@@ -35,6 +35,10 @@ sub new
 {
     my($class, $url, @args) = @_;
     
+    if (!defined($url))
+    {
+	$url = 'http://p3.theseed.org/services/Workspace';
+    }
 
     my $self = {
 	client => Bio::P3::Workspace::WorkspaceClient::RpcClient->new,
@@ -82,7 +86,7 @@ sub new
 
     {
 	my $token = Bio::KBase::AuthToken->new(@args);
-
+	
 	if (!$token->error_message)
 	{
 	    $self->{token} = $token->token;
