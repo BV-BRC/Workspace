@@ -621,7 +621,6 @@ sub _validate_save_objects_before_saving {
 		    		}
 		    	} elsif ($user ne $self->_getUsername() && $self->_adminmode() == 0) {
 		    		#Users can only create their own workspaces
-			    	print STDERR "user=$user username=" . $self->_getUsername() . "\n";
 		    		$self->_error("Insufficient permissions to create ".$objects->[$i]->[0]);
 		    	} elsif ($objects->[$i]->[1] ne "folder") {
 		    		#Workspace must be a folder
@@ -722,7 +721,6 @@ sub _delete_object {
     #Ensuring all parts of object path have nonzero length
     if (!defined($obj->{wsobj}->{owner}) || length($obj->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in deletion!");}
     if (!defined($obj->{wsobj}->{name}) || length($obj->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in deletion!");}
-    if (!defined($obj->{path}) || length($obj->{path}) == 0) {$self->_error("Path not specified in deletion!");}
     if (!defined($obj->{name}) || length($obj->{name}) == 0) {$self->_error("Name not specified in deletion!");}
     if ($obj->{folder} == 1) {
 		my $objs = $self->_get_directory_contents($obj,0);
@@ -866,7 +864,6 @@ sub _create_object {
 	}
 	if (!defined($object->{wsobj}->{owner}) || length($object->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in creation!");}
     if (!defined($object->{wsobj}->{name}) || length($object->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in creation!");}
-    if (!defined($object->{path}) || length($object->{path}) == 0) {$self->_error("Path not specified in creation!");}
     if (!defined($object->{name}) || length($object->{name}) == 0) {$self->_error("Name not specified in creation!");}
 	if ($specs->{type} eq "folder") {
 		#Creating folder on file system

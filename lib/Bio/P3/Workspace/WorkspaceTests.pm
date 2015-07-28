@@ -10,10 +10,11 @@
 	sub new {
 	    my($class,$bin) = @_;
 	    my $c = Config::Simple->new();
-		$c->read($bin."/test.cfg");
+		$c->read($bin."test.cfg");
 	    my $self = {
 			testcount => 0,
-			dumpoutput => 0,
+			dumpoutput => $c->param("WorkspaceTest.dumpoutput"),
+			showerrors => $c->param("WorkspaceTest.showerrors"),
 			user => $c->param("WorkspaceTest.user"),
 			password => $c->param("WorkspaceTest.password"),
 			usertwo => $c->param("WorkspaceTest.adminuser"),
@@ -31,10 +32,7 @@
 		});
 	    $ENV{KB_INTERACTIVE} = 1;
 	    if (defined($c->param("WorkspaceTest.serverconfig"))) {
-	    	$ENV{KB_DEPLOYMENT_CONFIG} = $c->param("WorkspaceTest.serverconfig");
-	    }
-	    if (defined($c->param("WorkspaceTest.dumpoutput"))) {
-	    	$self->{dumpoutput} = $c->param("WorkspaceTest.dumpoutput");
+	    	$ENV{KB_DEPLOYMENT_CONFIG} = $bin.$c->param("WorkspaceTest.serverconfig");
 	    }
 	    if (!defined($self->{url}) || $self->{url} eq "impl") {
 	    	print "Loading server with this config: ".$ENV{KB_DEPLOYMENT_CONFIG}."\n";
@@ -95,6 +93,10 @@
 				$output = $self->{obj}->$function();
 			}
 		};
+		my $errors;
+		if ($@) {
+			$errors = $@;
+		}
 		$self->{completetestcount}++;
 		if (defined($output)) {
 			$self->{testoutput}->{$name}->{output} = $output;
@@ -119,12 +121,15 @@
 			$self->{testoutput}->{$name}->{function} = 0;
 			if (defined($fail_to_pass) && $fail_to_pass == 1) {
 				$self->{testoutput}->{$name}->{pass} = 1;
-				$self->{testoutput}->{$name}->{status} = "Command failed as expected!";
+				$self->{testoutput}->{$name}->{status} = $name." failed as expected!";
 			} else {
 				$self->{testoutput}->{$name}->{pass} = 0;
-				$self->{testoutput}->{$name}->{status} = "Command failed to function at all!";
+				$self->{testoutput}->{$name}->{status} = $name." failed to function at all!";
 			}
 			ok $self->{testoutput}->{$name}->{pass} == 1, $self->{testoutput}->{$name}->{status};
+			if ($self->{showerrors} && $self->{testoutput}->{$name}->{pass} == 0 && defined($errors)) {
+				print "Errors:\n".$errors."\n";
+			}
 		}
 		if ($self->{dumpoutput}) {
 			print "$function output:\n".Data::Dumper->Dump([$output])."\n\n";
@@ -134,9 +139,6 @@
 	
 	sub run_tests {
 		my($self) = @_;
-		ok(system("curl -h > /dev/null 2>&1") == 0, "curl is installed");
-		ok(system("curl $url > /dev/null 2>&1") == 0, "$url is reachable");
-		$self->{completetestcount} += 2;
 		
 		#Clearing out previous test results
 		my $output = $self->test_harness("ls",{
@@ -202,7 +204,7 @@
 			permission => "r",
 			adminmode => 1,
 			setowner => $self->{user}
-		},"Creating top level TestAdminWorkspace for ".$self->{user}." as ".$self->{usertwo}." as admin",[],0,undef,2);
+		},"Creating top level TestAdminWorkspace for ".$self->{user}." with ".$self->{usertwo}." as admin",[],0,undef,2);
 		
 		#Attempting to make a workspace for another user
 		$output = $self->test_harness("create",{
@@ -213,18 +215,24 @@
 		#Listing workspaces as user one
 		$output = $self->test_harness("ls",{
 			paths => ["/".$self->{user}]
-		},"Using ls function as user one",["\$output->{\"/".$self->{user}."\"}->[0]->[5] eq ".$self->{user}],0,undef,1);
+		},"Using ls function as ".$self->{user},[
+			["\$output->{\"/".$self->{user}."\"}->[0]->[5] eq \"".$self->{user}."\"","First workspace returned is owned by ".$self->{user}]
+		],0,undef,1);
 		
 		#Listing workspaces as user two
 		$output = $self->test_harness("ls",{
 			paths => ["/".$self->{usertwo}]
-		},"Using ls function as user two",["\$output->{\"/".$self->{usertwo}."\"}->[0]->[5] eq \"".$self->{usertwo}."\""],0,undef,2);
+		},"Using ls function as ".$self->{usertwo},[
+			["\$output->{\"/".$self->{usertwo}."\"}->[0]->[5] eq \"".$self->{usertwo}."\"","First workspace returned is owned by ".$self->{usertwo}]
+		],0,undef,2);
 		
 		#Getting workspace metadata
 		$output = $self->test_harness("get",{
 			metadata_only => 1,
 			objects => ["/".$self->{usertwo}."/TestWorkspace"]
-		},"Using get function to retrieve TestWorkspace metadata only",[["defined(\$output->[0]->[0])","Metadata for object contained in output"]],0,undef,2);
+		},"Using get function to retrieve TestWorkspace metadata only",[
+			["defined(\$output->[0]->[0])","Metadata for object contained in output"]
+		],0,undef,2);
 		
 		#Saving an object
 		$output = $self->test_harness("create",{
@@ -239,8 +247,8 @@
 				features => [{}]
 			}]]
 		},"Creating a genome object",[
-			["defined(\$output->[0])","Getting metadata for created object back"],
-			["\$output->[0]->[1] eq \"genome\"","Object has type genome"]
+			["defined(\$output->[3])","Getting metadata for created objects back"],
+			["\$output->[3]->[1] eq \"genome\"","Object has type genome"]
 		],0,undef,1);
 		
 		#Recreating an existing folder
@@ -294,8 +302,8 @@
 		],0,undef,1);
 		
 		#Uploading file to newly created shock node
-		print "Filename:".$self->{bin}."/testdata.txt\n";
-		my $req = HTTP::Request::Common::POST($output->[0]->[11],Authorization => "OAuth ".$self->{token},Content_Type => 'multipart/form-data',Content => [upload => [$self->{bin}."/testdata.txt"]]);
+		print "Filename:".$self->{bin}."testdata.txt\n";
+		my $req = HTTP::Request::Common::POST($output->[0]->[11],Authorization => "OAuth ".$self->{token},Content_Type => 'multipart/form-data',Content => [upload => [$self->{bin}."testdata.txt"]]);
 		$req->method('PUT');
 		my $ua = LWP::UserAgent->new();
 		my $res = $ua->request($req);
@@ -344,7 +352,7 @@
 			excludeObjects => 0,
 			recursive => 1
 		},"Running ls on workspace recursively with directories excluded",[
-			["defined(\$output->{\"/".$self->{user}."/TestWorkspace\"}->[0]) && !defined(\$output->{\"/".$self->{user}."/TestWorkspace\"}->[2])","Returns contents with only two items"]
+			["defined(\$output->{\"/".$self->{user}."/TestWorkspace\"}->[2]) && !defined(\$output->{\"/".$self->{user}."/TestWorkspace\"}->[3])","Returns contents with only three items"]
 		],0,undef,1);
 		
 		$output = $self->test_harness("ls",{
@@ -374,7 +382,7 @@
 		},"Copying to read only workspace fails",[],1,undef,1);
 				
 		#Changing workspace permissions
-		$output = $self->test_harness("copy",{
+		$output = $self->test_harness("set_permissions",{
 			path => "/".$self->{usertwo}."/TestWorkspace",
 			permissions => [[$self->{user},"w"]]
 		},"Resetting permissions on workspace",[],0,undef,2);
