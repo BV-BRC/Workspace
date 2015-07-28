@@ -380,6 +380,7 @@ sub _parse_ws_path {
 		return ($wsobj->{owner},$wsobj->{name},$2,$3);
 	}
 	#/<username>/<workspace>
+	$input =~ s/\/+/\//g;
 	if ($input =~ m/^\/([^\/]+)\/([^\/]+)\/*$/) {
 		return ($1,$2,"","");
 	}
@@ -435,7 +436,7 @@ sub _get_directory_contents {
 
 #Retrive objects from mongodb based on input query**
 sub _query_database {
-	my ($self,$query,$count) = @_;
+	my ($self,$query,$count,$update_shock) = @_;
 	if (defined($query->{path})) {
 		$query->{path} =~ s/^\///;
 		$query->{path} =~ s/\/$//;
@@ -449,7 +450,7 @@ sub _query_database {
 	while (my $object = $cursor->next) {
 		$object->{wsobj} = $self->_wscache("_uuid",$object->{workspace_uuid});
 		if ($object->{shock} == 1 && $object->{size} == 0) {			
-			$self->_update_shock_node($object);
+			$self->_update_shock_node($object,$update_shock);
 		}
 		if (defined($hash->{$object->{workspace_uuid}}->{$object->{path}}->{$object->{name}})) {
 			for (my $i=0; $i < @{$output}; $i++) {
@@ -1004,7 +1005,7 @@ sub _list_objects {
 	} else {
 		$query->{path} = $path;
 	}
-	return $self->_query_database($query,0);
+	return $self->_query_database($query,0, 1);
 }
 
 #Formating queries to support direct mongo queries - this will need to get far more sophisticated**
