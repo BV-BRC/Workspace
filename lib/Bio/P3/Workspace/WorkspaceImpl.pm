@@ -380,6 +380,7 @@ sub _parse_ws_path {
 		return ($wsobj->{owner},$wsobj->{name},$2,$3);
 	}
 	#/<username>/<workspace>
+	$input =~ s/\/+/\//g;
 	if ($input =~ m/^\/([^\/]+)\/([^\/]+)\/*$/) {
 		return ($1,$2,"","");
 	}
