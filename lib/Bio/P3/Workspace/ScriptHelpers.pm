@@ -282,10 +282,12 @@ sub login {
 	my $ua = LWP::UserAgent->new();
 	my $res = $ua->post($url,$content);
 	if (!$res->is_success) {
-    	Bio::P3::Workspace::ScriptHelpers::SetConfig({
-			token => undef,
-			user_id => undef
-		});
+    	if (!defined($params->{tokenonly}) || $params->{tokenonly} == 0) {
+	    	Bio::P3::Workspace::ScriptHelpers::SetConfig({
+				token => undef,
+				user_id => undef
+			});
+    	}
 		return undef;
 	}
 	my $token;
@@ -295,11 +297,13 @@ sub login {
 		my $data = decode_json $res->content;
 		$token = $data->{token};
 	}
-	Bio::P3::Workspace::ScriptHelpers::SetConfig({
-		token => $token,
-		user_id => $params->{user_id},
-		password => undef
-	});
+	if (!defined($params->{tokenonly}) || $params->{tokenonly} == 0) {
+		Bio::P3::Workspace::ScriptHelpers::SetConfig({
+			token => $token,
+			user_id => $params->{user_id},
+			password => undef
+		});
+	}
 	return $token;
 }
 

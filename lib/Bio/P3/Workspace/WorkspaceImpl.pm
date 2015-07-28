@@ -710,6 +710,8 @@ sub _delete_validated_object_set {
 #Delete the specified workspace and all the objects it contains**
 sub _delete_workspace {
 	my ($self,$wsobj) = @_;
+    if (!defined($wsobj->{owner}) || length($wsobj->{owner}) == 0) {$self->_error("Owner not specified in deletion!");}
+    if (!defined($wsobj->{name}) || length($wsobj->{name}) == 0) {$self->_error("Top directory not specified in deletion!");}
     rmtree($self->_db_path()."/".$wsobj->{owner}."/".$wsobj->{name});
 	$self->_mongodb()->get_collection('workspaces')->remove({uuid => $wsobj->{uuid}});
 	$self->_mongodb()->get_collection('objects')->remove({workspace_uuid => $wsobj->{uuid}});
@@ -717,6 +719,11 @@ sub _delete_workspace {
 #Delete the specified object**
 sub _delete_object {
 	my ($self,$obj,$nodeletefiles) = @_;
+    #Ensuring all parts of object path have nonzero length
+    if (!defined($obj->{wsobj}->{owner}) || length($obj->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in deletion!");}
+    if (!defined($obj->{wsobj}->{name}) || length($obj->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in deletion!");}
+    if (!defined($obj->{path}) || length($obj->{path}) == 0) {$self->_error("Path not specified in deletion!");}
+    if (!defined($obj->{name}) || length($obj->{name}) == 0) {$self->_error("Name not specified in deletion!");}
     if ($obj->{folder} == 1) {
 		my $objs = $self->_get_directory_contents($obj,0);
 		for (my $i=0; $i < @{$objs}; $i++) {
@@ -799,6 +806,8 @@ sub _create {
 #This function creates workspaces**
 sub _create_workspace {
 	my ($self,$specs) = @_;
+    if (!defined($specs->{user}) || length($specs->{user}) == 0) {$self->_error("Owner not specified in creation!");}
+    if (!defined($specs->{workspace}) || length($specs->{workspace}) == 0) {$self->_error("Top directory not specified in creation!");}
     #Creating workspace directory on disk
     File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace});
     #Creating workspace object in mongodb
@@ -828,6 +837,7 @@ sub _create_object {
 	my ($self,$specs) = @_;
 	$specs->{path} =~ s/^\/+//;
 	$specs->{path} =~ s/\/+$//;
+	
 	my $uuid = Data::UUID->new()->create_str();
 	if (defined($specs->{move}) && $specs->{move} == 1) {
     	$uuid = $specs->{data}->{uuid};
@@ -854,6 +864,10 @@ sub _create_object {
 	if (!-e $self->{_params}->{"script-path"}."/ws-autometa-".$specs->{type}.".pl") {
 		$object->{autometadata} = {};
 	}
+	if (!defined($object->{wsobj}->{owner}) || length($object->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in creation!");}
+    if (!defined($object->{wsobj}->{name}) || length($object->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in creation!");}
+    if (!defined($object->{path}) || length($object->{path}) == 0) {$self->_error("Path not specified in creation!");}
+    if (!defined($object->{name}) || length($object->{name}) == 0) {$self->_error("Name not specified in creation!");}
 	if ($specs->{type} eq "folder") {
 		#Creating folder on file system
 		$object->{autometadata} = {};
