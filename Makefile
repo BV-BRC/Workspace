@@ -84,7 +84,7 @@ bin: $(BIN_PERL) $(BIN_SERVICE_PERL)
 
 deploy: deploy-client deploy-service
 deploy-all: deploy-client deploy-service
-deploy-client: deploy-docs deploy-libs deploy-scripts 
+deploy-client: deploy-libs deploy-scripts 
 
 deploy-service: deploy-dir deploy-monit deploy-libs deploy-service-scripts
 	$(TPAGE) $(TPAGE_ARGS) service/start_service.tt > $(TARGET)/services/$(SERVICE)/start_service
