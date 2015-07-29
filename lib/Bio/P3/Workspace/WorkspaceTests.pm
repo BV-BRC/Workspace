@@ -28,7 +28,7 @@
 			user_id => $self->{user}, password => $self->{password},tokenonly => 1
 		});
 		$self->{tokentwo} = Bio::P3::Workspace::ScriptHelpers::login({
-			user_id => $self->{adminuser}, password => $self->{adminpassword},tokenonly => 1
+			user_id => $self->{usertwo}, password => $self->{passwordtwo},tokenonly => 1
 		});
 	    $ENV{KB_INTERACTIVE} = 1;
 	    if (defined($c->param("WorkspaceTest.serverconfig"))) {
