@@ -42,7 +42,7 @@ TPAGE_ARGS = --define kb_top=$(TARGET) \
 
 TESTS = $(wildcard t/client-tests/*.t)
 
-all: bin service
+all: bin compile-typespec service
 
 jarfile:
 	gen_java_client $(SERVER_SPEC) org.patricbrc.Workspace java
@@ -84,7 +84,7 @@ bin: $(BIN_PERL) $(BIN_SERVICE_PERL)
 
 deploy: deploy-client deploy-service
 deploy-all: deploy-client deploy-service
-deploy-client: deploy-libs deploy-scripts 
+deploy-client: compile-typespec deploy-docs deploy-libs deploy-scripts 
 
 deploy-service: deploy-dir deploy-monit deploy-libs deploy-service-scripts
 	$(TPAGE) $(TPAGE_ARGS) service/start_service.tt > $(TARGET)/services/$(SERVICE)/start_service
