@@ -1,7 +1,6 @@
 
 use strict;
 use Bio::P3::Workspace::ScriptHelpers;
-use Bio::P3::Workspace::Utils;
 
 =head1 NAME
 
@@ -28,16 +27,16 @@ rast-annotate-proteins-kmer-v2 [-io] [long options...] < input > output
 =cut
 
 my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <path> [<path> ...]",[
-	["permission|p", "Permissions for folders created"],
+	["permission|p:s", "Permissions for folders created"]
 ]);
 my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([@ARGV]);
 my $input = {
-	objects => [[$paths->[0],$type,{},$data]],
+	objects => [],
 	permission => $opt->permission,
 	overwrite => 0
 };
-for (my $i=0; $i < @{$paths}, $i++) {
-	push(@{$input->{objects}},[$paths->[$i],"folder"]);
+for (my $i=0; $i < @{$paths}; $i++) {
+	push(@{$input->{objects}},[$paths->[$i],"folder",{}]);
 }
 my $res = Bio::P3::Workspace::ScriptHelpers::wscall("create",$input);
 print "Folders created:\n";
