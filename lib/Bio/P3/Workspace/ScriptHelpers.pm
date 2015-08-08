@@ -321,12 +321,32 @@ sub msClient {
 	}
 	if ($url eq "impl") {
 		require "Bio/ModelSEED/ProbModelSEED/ProbModelSEEDImpl.pm";
-		$ENV{KB_DEPLOYMENT_CONFIG} = "/Users/chenry/code/ProbModelSEED/configs/test.cfg";
 		$Bio::ModelSEED::ProbModelSEED::Service::CallContext = Bio::ModelSEED::ProbModelSEED::Service::CallContext->new(Bio::P3::Workspace::ScriptHelpers::token(),"unknown",Bio::P3::Workspace::ScriptHelpers::user());
 		my $client = Bio::ModelSEED::ProbModelSEED::ProbModelSEEDImpl->new();
 		return $client;
 	}
 	return Bio::ModelSEED::ProbModelSEED::ProbModelSEEDClient->new($url,token => Bio::P3::Workspace::ScriptHelpers::token());
+}
+
+sub get_workspace_object {
+	my $ref = shift;
+	my $options = shift;
+	my $input = {objects => [$ref]};
+	if ($options->{adminmode}) {
+		$input->{adminmode} = $options->{adminmode};
+	}
+	if ($options->{metadata_only}) {
+		$input->{metadata_only} = $options->{metadata_only};
+	}
+	my $wc = wsClient();
+	my $output = $wc->get($input);
+	if (defined($output->[0]->[11])) {
+		my $ua = LWP::UserAgent->new();
+		$ua->default_header( "Authorization" => $options->{token} );
+		my $res = $ua->get($options->{url});
+		$output->[1] = $res->{content};
+	}
+	return $output;
 }
 
 sub wsClient {

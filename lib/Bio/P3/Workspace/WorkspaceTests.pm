@@ -7,6 +7,9 @@
 	use Data::Dumper;
 	use Config::Simple;
 	
+	my $serverclass = "Bio::P3::Workspace::WorkspaceImpl";
+	my $clientclass = "Bio::P3::Workspace::WorkspaceClient";
+	
 	sub new {
 	    my($class,$bin) = @_;
 	    my $c = Config::Simple->new();
@@ -36,12 +39,16 @@
 	    }
 	    if (!defined($self->{url}) || $self->{url} eq "impl") {
 	    	print "Loading server with this config: ".$ENV{KB_DEPLOYMENT_CONFIG}."\n";
-	    	require "Bio/P3/Workspace/WorkspaceImpl.pm";
-	    	$self->{obj} = Bio::P3::Workspace::WorkspaceImpl->new();
+	    	my $classpath = $serverclass;
+	    	$classpath =~ s/::/\//g;
+	    	require $classpath.".pm";
+	    	$self->{obj} = $serverclass->new();
 	    } else {
-	    	require "Bio/P3/Workspace/WorkspaceClient.pm";
-	    	$self->{clientobj} = Bio::P3::Workspace::WorkspaceClient->new($self->{url},token => $self->{token});
-	    	$self->{clientobjtwo} = Bio::P3::Workspace::WorkspaceClient->new($self->{url},token => $self->{tokentwo});
+	    	my $classpath = $clientclass;
+	    	$classpath =~ s/::/\//g;
+	    	require $classpath.".pm";
+	    	$self->{clientobj} = $clientclass->new($self->{url},token => $self->{token});
+	    	$self->{clientobjtwo} = $clientclass->new($self->{url},token => $self->{tokentwo});
 	    }
 	    return bless $self, $class;
 	}
@@ -50,9 +57,9 @@
 		my($self,$user) = @_;
 		if (!defined($self->{url}) || $self->{url} eq "impl") {
 			if ($user == 2) {
-				$Bio::P3::Workspace::WorkspaceImpl::CallContext = Bio::P3::Workspace::WorkspaceImpl::CallContext->new($self->{tokentwo},"test",$self->{usertwo});
+				$Bio::P3::Workspace::WorkspaceImpl::CallContext = CallContext->new($self->{tokentwo},"test",$self->{usertwo});
 			} else {
-				$Bio::P3::Workspace::WorkspaceImpl::CallContext = Bio::P3::Workspace::WorkspaceImpl::CallContext->new($self->{token},"test",$self->{user});
+				$Bio::P3::Workspace::WorkspaceImpl::CallContext = CallContext->new($self->{token},"test",$self->{user});
 			}
 		} else {
 			if ($user == 2) {
@@ -478,7 +485,7 @@
 }	
 
 {
-	package Bio::P3::Workspace::WorkspaceImpl::CallContext;
+	package CallContext;
 	
 	use strict;
 	
