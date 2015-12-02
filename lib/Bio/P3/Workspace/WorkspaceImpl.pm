@@ -1009,7 +1009,6 @@ sub _list_workspaces {
 			$query->{'$or'} = [ {owner => $self->_getUsername()},{global_permission =>  {'$ne' => "n"}},{"permissions.".$self->_getUsername() =>  {'$exists' => 1 }} ]
 		}
 	}
-	print STDERR Data::Dumper->Dump([$query])."\n";
     my $objs = [];
     my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
 	while (my $object = $cursor->next) {
