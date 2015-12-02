@@ -1032,7 +1032,7 @@ sub _formatQuery {
 		}
 	}
 	foreach my $term (keys(%{$inquery})) {
-		if (ref($inquery->{$term}) eq "ARRAY") {
+		if (ref($inquery->{$term}) eq "ARRAY" && $term ne '$or') {
 			$inquery->{$term} = {'$in' => $inquery->{$term}};
 		}
 	}
