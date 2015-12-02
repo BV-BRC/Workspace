@@ -950,19 +950,34 @@ sub _wscache {
 
 #List all workspaces matching input query**
 sub _list_workspaces {
-	my ($self,$user) = @_;
-	my $query = { '$or' => [ {owner => $self->_getUsername()},{global_permission => {'$ne' => "n"} },{"permissions.".$self->_getUsername() => {'$exists' => 1 } } ] };
-	if ($self->_adminmode() == 1) {
-		$query = {};
-	}
+	my ($self,$user,$query) = @_;
 	if (defined($user)) {
-		if ($user eq $self->_getUsername()) {
-			$query = {owner => $self->_getUsername()};
-		} else {
-			$query = { '$and' => [ {owner => $user },{ '$or' => [ {global_permission => {'$ne' => "n"} },{"permissions.".$self->_getUsername() => {'$exists' => 1 } } ] } ] };
-			if ($self->_adminmode() == 1) {
-				$query = {owner => $user};
+		$query->{owner} = $user;
+	}
+	if ($self->_adminmode() != 1) {
+		if (defined($query->{'$or'})) {
+			my $oldarray = $query->{'$or'};
+			$query->{'$or'} = [];
+			for (my $i=0; $i < @{$oldarray}; $i++) {
+				my $hash = {};
+				foreach my $key (keys(%{$oldarray->[$i]})) {
+					$hash->{$key} = $oldarray->[$i]->{$key};
+				}
+				if (!defined($oldarray->[$i]->{owner})) {
+					$hash->{owner} = $self->_getUsername();
+					push(@{$query->{'$or'}},$hash);
+				}
+				if (!defined($oldarray->[$i]->{global_permission})) {
+					$hash->{global_permission} = {'$ne' => "n"};
+					push(@{$query->{'$or'}},$hash);
+				}
+				if (!defined($oldarray->[$i]->{"permissions.".$self->_getUsername()})) {
+					$hash->{"permissions.".$self->_getUsername()} = {'$exists' => 1 };
+					push(@{$query->{'$or'}},$hash);
+				}
 			}
+		} else {
+			$query->{'$or'} = [ {owner => $self->_getUsername()},{global_permission =>  {'$ne' => "n"}},{"permissions.".$self->_getUsername() =>  {'$exists' => 1 }} ]
 		}
 	}
     my $objs = [];
