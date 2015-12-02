@@ -27,6 +27,9 @@ my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <path>",[
 	["recursive|r", "Recursively list subdirectory contents"],
 	["shock|s", "Include shock URLs"],
 ]);
+if (!defined($ARGV[0])) {
+	$ARGV[0] = "";
+}
 my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([@ARGV]);
 my $res = Bio::P3::Workspace::ScriptHelpers::wscall("ls",{
 	paths => $paths,

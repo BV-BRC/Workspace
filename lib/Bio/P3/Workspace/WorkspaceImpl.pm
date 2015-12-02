@@ -134,7 +134,7 @@ sub _url {
 sub _error {
 	my($self,$msg) = @_;
 	$msg = "_ERROR_".$msg."_ERROR_";
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,method_name => $self->_current_method());
+	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,method_name => "");#$self->_current_method());
 }
 
 sub _db_path {
@@ -165,14 +165,7 @@ sub _user_is_admin {
 
 sub _updateDB {
 	my ($self,$name,$query,$update) = @_;
-	my $data = $self->_mongodb()->run_command({
-		findAndModify => $name,
-		query => $query,
-		update => $update
-	});
-	if (ref($data) ne "HASH" || !defined($data->{value})) {
-		return 0;
-	}
+	$self->_mongodb()->get_collection($name)->update($query,$update);
 	return 1;
 }
 
@@ -257,7 +250,7 @@ sub _retrieve_object_data {
 #Validating that the input permissions have a recognizable value**
 sub _validate_workspace_permission {
 	my ($self,$input) = @_;
-	if ($input !~ m/^[awron]$/) {
+	if ($input !~ m/^[awronp]$/) {
 		$self->_error("Input permissions ".$input." invalid!");
 	}
 	return $input;
@@ -308,12 +301,16 @@ sub _validate_object_type {
 
 sub _get_ws_permission {
 	my ($self,$wsobj) = @_;
+	if ($wsobj->{global_permission} eq "p") {
+		return "p";
+	}
 	my $curruser = $self->_getUsername();
 	if ($wsobj->{owner} eq $curruser) {
 		return "o";
 	}
 	my $values = {
 		n => 0,
+		p => 1,
 		r => 1,
 		w => 2,
 		a => 3,
@@ -336,6 +333,7 @@ sub _check_ws_permissions {
 	my $perm = $self->_get_ws_permission($wsobj);
 	my $values = {
 		n => 0,
+		p => 1,
 		r => 1,
 		w => 2,
 		a => 3,
@@ -561,9 +559,7 @@ sub _create_shock_node {
 	my $res = $ua->post($self->_shockurl()."/node",Authorization => "OAuth ".$self->_wsauth());
 	my $json = JSON::XS->new;
 	my $data = $json->decode($res->content);
-	#print "create shock node output:\n".Data::Dumper->Dump([$data])."\n\n";
 	my $res = $ua->put($self->_shockurl()."/node/".$data->{data}->{id}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
-	#print "authorizing shock node output:\n".Data::Dumper->Dump([$res])."\n\n";
 	return $data->{data}->{id};
 }
 
@@ -574,7 +570,6 @@ sub _update_shock_node {
 		my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
 		my $json = JSON::XS->new;
 		my $data = $json->decode($res->content);
-		print Data::Dumper->Dump([$data])."\n";
 		if (length($data->{data}->{file}->{name}) == 0) {
 			$self->{_shockupdate}->{$object->{uuid}} = time();
 		} else {
@@ -807,6 +802,10 @@ sub _create_workspace {
 	my ($self,$specs) = @_;
     if (!defined($specs->{user}) || length($specs->{user}) == 0) {$self->_error("Owner not specified in creation!");}
     if (!defined($specs->{workspace}) || length($specs->{workspace}) == 0) {$self->_error("Top directory not specified in creation!");}
+    if ($specs->{user} ne $self->_getUsername() && $self->_adminmode() == 0) {
+    	$self->_error("User does not have permission to create workspace!");
+    }
+    
     #Creating workspace directory on disk
     File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace});
     #Creating workspace object in mongodb
@@ -845,6 +844,7 @@ sub _create_object {
     	$specs->{creation_date} = DateTime->now()->datetime();
     }
     my $wsobj = $self->_wscache($specs->{user},$specs->{workspace});
+    $self->_check_ws_permissions($wsobj,"w",1);
 	my $object = {
 		wsobj => $wsobj,
 		size => 0,
@@ -2833,12 +2833,30 @@ sub set_permissions
     	new_global_permission => undef
     });
     my ($user,$ws,$path,$name) = $self->_parse_ws_path($input->{path});
+    #Checking that workspace exists and a top lever directory is being adjusted
     my $wsobj = $self->_wscache($user,$ws,1);
     if (length($path) + length($name) > 0) {
     	$self->_error("Can only set permissions on top-level folders!");
     }
-    $self->_check_ws_permissions($wsobj,"a",1);
+    #Checking that user has permissions to change permissions
+    if ($wsobj->{global_permission} eq "p") {
+    	if ($wsobj->{owner} ne $self->_getUsername() && $self->_adminmode() == 0) {
+    		$self->_error("Only owner and administrators can change permissions on a published workspace!");
+    	}
+    } else {
+    	$self->_check_ws_permissions($wsobj,"a",1);
+    }
+    #Checking that none of the user-permissions are "p"
+    for (my $i=0; $i < @{$input->{permissions}}; $i++) {
+    	if ($input->{permissions}->[$i]->[1] eq "p") {
+    		$self->_error("Cannot set user-specific permissions to publish!");
+    	}
+    }
     if (defined($input->{new_global_permission})) {
+    	#Only workspace owner or administrator can set global permissions to "p"
+    	if ($input->{new_global_permission} eq "p") {
+    		$self->_check_ws_permissions($wsobj,"o",1);
+    	}
     	$input->{new_global_permission} = $self->_validate_workspace_permission($input->{new_global_permission});
     	$self->_updateDB("workspaces",{uuid => $wsobj->{uuid}},{'$set' => {global_permission => $input->{new_global_permission}}});
     	$wsobj->{global_permission} = $input->{new_global_permission};
@@ -2847,8 +2865,10 @@ sub set_permissions
     	$input->{permissions}->[$i]->[1] = $self->_validate_workspace_permission($input->{permissions}->[$i]->[1]);
     	if ($input->{permissions}->[$i]->[1] eq "n" && defined($wsobj->{permissions}->{$input->{permissions}->[$i]->[0]})) {
     		$self->_updateDB("workspaces",{uuid => $wsobj->{uuid}},{'$unset' => {'permissions.'.$input->{permissions}->[$i]->[0] => $wsobj->{permissions}->{$input->{permissions}->[$i]->[0]}}});
+    		delete $wsobj->{permissions}->{$input->{permissions}->[$i]->[0]};
     	} else {
     		$self->_updateDB("workspaces",{uuid => $wsobj->{uuid}},{'$set' => {'permissions.'.$input->{permissions}->[$i]->[0] => $input->{permissions}->[$i]->[1]}});
+    		$wsobj->{permissions}->{$input->{permissions}->[$i]->[0]} = $input->{permissions}->[$i]->[1];
     	}
     }
     $output = $self->_generate_object_meta($wsobj);
@@ -2937,6 +2957,7 @@ sub list_permissions
     my($output);
     #BEGIN list_permissions
     $input = $self->_validateargs($input,["objects"],{});
+    $output = {};
     for (my $i=0; $i < @{$input->{objects}}; $i++) {
     	my ($user,$ws,$path,$name) = $self->_parse_ws_path($input->{objects}->[$i]);
    		my $wsobj = $self->_wscache($user,$ws,1);

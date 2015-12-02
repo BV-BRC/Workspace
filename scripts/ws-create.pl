@@ -57,6 +57,7 @@ if ($opt->useshock) {
 					  Content => [upload => [$filename]]);
     $req->method('PUT');
     my $sres = $ua->request($req);
+    print Data::Dumper->Dump([$sres]);
 }
 
 print "File created:\n";

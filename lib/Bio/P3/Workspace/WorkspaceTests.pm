@@ -13,7 +13,7 @@
 	sub new {
 	    my($class,$bin) = @_;
 	    my $c = Config::Simple->new();
-		$c->read($bin."test.cfg");
+		$c->read($bin."/test.cfg");
 	    my $self = {
 			testcount => 0,
 			dumpoutput => $c->param("WorkspaceTest.dumpoutput"),
@@ -35,14 +35,19 @@
 		});
 	    $ENV{KB_INTERACTIVE} = 1;
 	    if (defined($c->param("WorkspaceTest.serverconfig"))) {
-	    	$ENV{KB_DEPLOYMENT_CONFIG} = $bin.$c->param("WorkspaceTest.serverconfig");
+	    	$ENV{KB_DEPLOYMENT_CONFIG} = $bin."/".$c->param("WorkspaceTest.serverconfig");
 	    }
 	    if (!defined($self->{url}) || $self->{url} eq "impl") {
 	    	print "Loading server with this config: ".$ENV{KB_DEPLOYMENT_CONFIG}."\n";
 	    	my $classpath = $serverclass;
 	    	$classpath =~ s/::/\//g;
 	    	require $classpath.".pm";
-	    	$self->{obj} = $serverclass->new();
+	    	$self->{obj} = $serverclass->new({
+	    		"db-path" => $c->param("WorkspaceTest.db-path"),
+	    		"wsuser" => $c->param("WorkspaceTest.wsuser"),
+	    		"wspassword" => $c->param("WorkspaceTest.wspassword"),
+	    		"types-file" => $c->param("WorkspaceTest.types-file")
+	    	});
 	    } else {
 	    	my $classpath = $clientclass;
 	    	$classpath =~ s/::/\//g;
@@ -57,8 +62,10 @@
 		my($self,$user) = @_;
 		if (!defined($self->{url}) || $self->{url} eq "impl") {
 			if ($user == 2) {
+				$Bio::P3::Workspace::WorkspaceImpl::CallContext = undef;
 				$Bio::P3::Workspace::WorkspaceImpl::CallContext = CallContext->new($self->{tokentwo},"test",$self->{usertwo});
 			} else {
+				$Bio::P3::Workspace::WorkspaceImpl::CallContext = undef;
 				$Bio::P3::Workspace::WorkspaceImpl::CallContext = CallContext->new($self->{token},"test",$self->{user});
 			}
 		} else {
@@ -309,7 +316,6 @@
 		],0,undef,1);
 		
 		#Uploading file to newly created shock node
-		print "Filename:".$self->{bin}."testdata.txt\n";
 		my $req = HTTP::Request::Common::POST($output->[0]->[11],Authorization => "OAuth ".$self->{token},Content_Type => 'multipart/form-data',Content => [upload => [$self->{bin}."testdata.txt"]]);
 		$req->method('PUT');
 		my $ua = LWP::UserAgent->new();
@@ -466,6 +472,23 @@
 		},"Successfully retrieved an object by UUID!",[
 			["defined(\$output->[0]->[1])","Object retrieved with all data"]
 		],0,undef,1);
+		
+		#Publishing workspace
+		$output = $self->test_harness("set_permissions",{
+			path => "/".$self->{usertwo}."/TestWorkspace",
+			new_global_permission => "p"
+		},"Publishing workspace",[],0,undef,2);
+		
+		#Attempting to write to published workspace
+		$output = $self->test_harness("create",{
+			objects => [["/".$self->{usertwo}."/TestWorkspace/test_write_published_workspace","folder",{},undef]]
+		},"Cannot write to published workspace",[],1,undef,2);
+		
+		#Unpublishing workspace
+		$output = $self->test_harness("set_permissions",{
+			path => "/".$self->{usertwo}."/TestWorkspace",
+			new_global_permission => "r"
+		},"Unpublishing workspace",[],0,undef,2);
 		
 		#Deleting workspaces
 		$output = $self->test_harness("delete",{

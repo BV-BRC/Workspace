@@ -230,6 +230,9 @@ sub process_paths {
 		if ($paths->[$i] !~ /^\// && $paths->[$i] !~ /^PATRICSOLR/) {
 			$paths->[$i] = Bio::P3::Workspace::ScriptHelpers::directory().$paths->[$i];
 		}
+		while ($paths->[$i] =~ m/[^\/]+\/\.\.\/*/) {
+			$paths->[$i] =~ s/[^\/]+\/\.\.\/*//g;
+		}
 	}
 	return $paths;
 }

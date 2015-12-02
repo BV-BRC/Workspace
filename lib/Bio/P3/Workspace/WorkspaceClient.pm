@@ -84,15 +84,17 @@ sub new
     #
     # We create an auth token, passing through the arguments that we were (hopefully) given.
 
-    {
-	my $token = Bio::KBase::AuthToken->new(@args);
+    #{
+	#my $token = Bio::KBase::AuthToken->new(@args);
 	
-	if (!$token->error_message)
-	{
-	    $self->{token} = $token->token;
-	    $self->{client}->{token} = $token->token;
-	}
-    }
+	#if (!$token->error_message)
+	#{
+	#    $self->{token} = $token->token;
+	#    $self->{client}->{token} = $token->token;
+	#}
+    #}
+    $self->{token} = $args[1];
+	$self->{client}->{token} = $args[1];
 
     my $ua = $self->{client}->ua;	 
     my $timeout = $ENV{CDMI_TIMEOUT} || (30 * 60);	 
