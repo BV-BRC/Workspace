@@ -2871,7 +2871,11 @@ sub set_permissions
     		$wsobj->{permissions}->{$input->{permissions}->[$i]->[0]} = $input->{permissions}->[$i]->[1];
     	}
     }
-    $output = $self->_generate_object_meta($wsobj);
+    $output = [];
+    foreach my $puser (keys(%{$wsobj->{permissions}})) {
+    	push(@{$output},[$puser,$wsobj->{permissions}->{$puser}]);
+	}
+	push(@{$output},["global_permission",$wsobj->{global_permission}]);
     #END set_permissions
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -2965,6 +2969,7 @@ sub list_permissions
 	    foreach my $puser (keys(%{$wsobj->{permissions}})) {
 		    push(@{$output->{$input->{objects}->[$i]}},[$puser,$wsobj->{permissions}->{$puser}]);
 	    }
+	    push(@{$output->{$input->{objects}->[$i]}},["global_permission",$wsobj->{global_permission}]);
     }
     #END list_permissions
     my @_bad_returns;

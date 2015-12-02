@@ -22,7 +22,7 @@ ws-create workspace [long options...]
 =cut
 
 my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <name> <type> <filename>",[
-	["permission|p", "Permissions for folders created"],
+	["permission|p=s", "Permissions for folders created"],
 	["useshock|u", "Upload file to shock and store link in workspace"],
 	["overwrite|o", "Overwirte existing destination object"],
 ]);

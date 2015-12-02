@@ -244,7 +244,7 @@ typedef structure {
 	WorkspacePerm new_global_permission;
 	bool adminmode;
 } set_permissions_params;
-funcdef set_permissions(set_permissions_params input) returns (ObjectMeta output) authentication required;
+funcdef set_permissions(set_permissions_params input) returns (list<tuple<Username,WorkspacePerm> > output) authentication required;
 
 /* "list_permissions" command
 	Description: 
