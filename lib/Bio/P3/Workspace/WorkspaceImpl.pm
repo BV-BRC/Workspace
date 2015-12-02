@@ -959,19 +959,27 @@ sub _list_workspaces {
 			my $oldarray = $query->{'$or'};
 			$query->{'$or'} = [];
 			for (my $i=0; $i < @{$oldarray}; $i++) {
-				my $hash = {};
-				foreach my $key (keys(%{$oldarray->[$i]})) {
-					$hash->{$key} = $oldarray->[$i]->{$key};
-				}
 				if (!defined($oldarray->[$i]->{owner})) {
+					my $hash = {};
+					foreach my $key (keys(%{$oldarray->[$i]})) {
+						$hash->{$key} = $oldarray->[$i]->{$key};
+					}
 					$hash->{owner} = $self->_getUsername();
 					push(@{$query->{'$or'}},$hash);
 				}
 				if (!defined($oldarray->[$i]->{global_permission})) {
+					my $hash = {};
+					foreach my $key (keys(%{$oldarray->[$i]})) {
+						$hash->{$key} = $oldarray->[$i]->{$key};
+					}
 					$hash->{global_permission} = {'$ne' => "n"};
 					push(@{$query->{'$or'}},$hash);
 				}
 				if (!defined($oldarray->[$i]->{"permissions.".$self->_getUsername()})) {
+					my $hash = {};
+					foreach my $key (keys(%{$oldarray->[$i]})) {
+						$hash->{$key} = $oldarray->[$i]->{$key};
+					}
 					$hash->{"permissions.".$self->_getUsername()} = {'$exists' => 1 };
 					push(@{$query->{'$or'}},$hash);
 				}
