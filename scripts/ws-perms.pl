@@ -43,5 +43,5 @@ if (defined($opt->{perm})) {
 	print Data::Dumper->Dump([$res]);
 } else {
 	my $res = Bio::P3::Workspace::ScriptHelpers::wscall("list_permissions",{objects => $paths});
-	print Data::Dumper->Dump([$res]);
+	print Data::Dumper->Dump([$res->{$paths->[0]}]);
 }
