@@ -9,7 +9,6 @@ use HTTP::Request::Common;
 use LWP::UserAgent;
 use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::WorkspaceClientExt;
-use ;
 
 our $defaultWSURL   = "http://p3.theseed.org/services/Workspace";
 our $defaultAPPURL = "http://p3.theseed.org/services/app_service";
