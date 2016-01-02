@@ -459,6 +459,20 @@
 			objects => [["/".$self->{user}."/TestWorkspace/emptydir","folder",{},undef]]
 		},"Successfully created a workspace directory!",[],0,undef,1);
 		
+		#Creating a model folder
+		$output = $self->test_harness("create",{
+			objects => [["/".$self->{user}."/TestWorkspace/emptydir/modelfolder","modelfolder",{},undef]]
+		},"Successfully created a folder with type other than folder!",[],0,undef,1);
+		
+		#Listing model folder
+		$output = $self->test_harness("ls",{
+			paths => ["/".$self->{user}."/TestWorkspace/emptydir/"],
+			excludeDirectories => 0,
+			excludeObjects => 0,
+			recursive => 1
+		},"Listing nonfolder directory",[
+			["\$output->{\"/".$self->{user}."/TestWorkspace/emptydir/\"}->[0]->[8]->{is_folder} == 1","ls indicates that object is a folder"]
+		],0,undef,1);
 		#Getting an object
 		$output = $self->test_harness("get",{
 			objects => ["/".$self->{user}."/TestWorkspace/testdir/testdir2/testdir3/testobj"]

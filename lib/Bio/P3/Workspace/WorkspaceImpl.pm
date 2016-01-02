@@ -215,6 +215,7 @@ sub _generate_object_meta {
 		if (defined($obj->{shocknode})) {
 			$shock = $obj->{shocknode};
 		}
+		$obj->{autometadata}->{is_folder} = $self->is_folder($obj->{type});
 		return [$obj->{name},$obj->{type},$path,$obj->{creation_date},$obj->{uuid},$obj->{owner},$obj->{size},$obj->{metadata},$obj->{autometadata},$self->_get_ws_permission($obj->{wsobj}),$obj->{wsobj}->{global_permission},$shock];
 	} else {
 		return [$obj->{name},"folder","/".$obj->{owner}."/",$obj->{creation_date},$obj->{uuid},$obj->{owner},0,$obj->{metadata},{},$self->_get_ws_permission($obj),$obj->{global_permission},""];
@@ -608,7 +609,7 @@ sub _validate_save_objects_before_saving {
 	    		my $nocreate = 0;
 	    		#We are creating a workspace
 	    		if (defined($wsobj)) {
-		    		if ($objects->[$i]->[1] eq "folder") {
+		    		if ($self->is_folder($objects->[$i]->[1]) == 1) {
 		    			#We ignore creation of folders that already exist
 		    			$nocreate = 1;	
 		    		} else {
@@ -618,7 +619,7 @@ sub _validate_save_objects_before_saving {
 		    	} elsif ($user ne $self->_getUsername() && $self->_adminmode() == 0) {
 		    		#Users can only create their own workspaces
 		    		$self->_error("Insufficient permissions to create ".$objects->[$i]->[0]);
-		    	} elsif ($objects->[$i]->[1] ne "folder") {
+		    	} elsif ($self->is_folder($objects->[$i]->[1]) == 0) {
 		    		#Workspace must be a folder
 		    		$self->_error("Cannot create ".$objects->[$i]->[0]." because top level objects must be folders!");
 		    	}
@@ -645,7 +646,7 @@ sub _validate_save_objects_before_saving {
 			    my $nocreate = 0;
 			    if (defined($obj)) {
 		    		if ($obj->{folder} == 1) {
-		    			if ($objects->[$i]->[1] eq "folder") {
+		    			if ($self->is_folder($objects->[$i]->[1]) == 1) {
 		    				#We ignore creation of folders that already exist
 		    				$nocreate = 1;	
 		    			} else {
@@ -866,7 +867,7 @@ sub _create_object {
 	if (!defined($object->{wsobj}->{owner}) || length($object->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in creation!");}
     if (!defined($object->{wsobj}->{name}) || length($object->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in creation!");}
     if (!defined($object->{name}) || length($object->{name}) == 0) {$self->_error("Name not specified in creation!");}
-	if ($specs->{type} eq "folder") {
+	if ($self->is_folder($specs->{type}) == 1) {
 		#Creating folder on file system
 		$object->{autometadata} = {};
 		$object->{folder} = 1;
@@ -1293,6 +1294,14 @@ sub _compute_autometadata {
 	}
 };
 
+sub is_folder {
+	my($self, $type) = @_;
+	if (defined($self->{_foldertypes}->{lc($type)})) {
+		return 1;
+	}
+	return 0;
+}
+
 #END_HEADER
 
 sub new
@@ -1384,6 +1393,10 @@ sub new
 	$self->{_params} = $params;
 	$self->{_params}->{"db-path"} =~ s/\/\//\//g;
 	$self->{_params}->{"db-path"} =~ s/\/$//g;
+	$self->{_foldertypes} = {
+		folder => 1,
+		modelfolder => 1
+	};
     #END_CONSTRUCTOR
 
     if ($self->can('_init_instance'))

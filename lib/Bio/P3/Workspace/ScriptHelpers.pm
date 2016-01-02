@@ -9,7 +9,7 @@ use HTTP::Request::Common;
 use LWP::UserAgent;
 use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::WorkspaceClientExt;
-use Bio::ModelSEED::ProbModelSEED::ProbModelSEEDClient;
+use ;
 
 our $defaultWSURL   = "http://p3.theseed.org/services/Workspace";
 our $defaultAPPURL = "http://p3.theseed.org/services/app_service";
@@ -227,7 +227,7 @@ sub appurl {
 sub process_paths {
 	my $paths = shift;
 	for (my $i=0; $i < @{$paths}; $i++) {
-		if ($paths->[$i] !~ /^\// && $paths->[$i] !~ /^PATRICSOLR/) {
+		if ($paths->[$i] !~ /^\// && $paths->[$i] !~ /^PATRIC:/ && $paths->[$i] !~ /^PUBSEED:/ && $paths->[$i] !~ /^RAST:/ && $paths->[$i] !~ /^REFSEQ:/) {
 			$paths->[$i] = Bio::P3::Workspace::ScriptHelpers::directory().$paths->[$i];
 		}
 		while ($paths->[$i] =~ m/[^\/]+\/\.\.\/*/) {
@@ -328,6 +328,7 @@ sub msClient {
 		my $client = Bio::ModelSEED::ProbModelSEED::ProbModelSEEDImpl->new();
 		return $client;
 	}
+	require "Bio/ModelSEED/ProbModelSEED/ProbModelSEEDClient.pm";
 	return Bio::ModelSEED::ProbModelSEED::ProbModelSEEDClient->new($url,token => Bio::P3::Workspace::ScriptHelpers::token());
 }
 
