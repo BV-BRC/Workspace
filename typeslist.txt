@@ -55,3 +55,4 @@ wig
 xls
 xlsx
 zip
+contigset
