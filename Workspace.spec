@@ -110,7 +110,7 @@ typedef structure {
 		bool metadata_only;
 		bool adminmode;
 } get_params;
-funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output) authentication required;
+funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output) authentication optional;
 
 /* "update_shock_meta" command
 	Description:
@@ -138,7 +138,7 @@ funcdef update_auto_meta(update_auto_meta_params input) returns (list<ObjectMeta
 typedef structure {
 	list<FullObjectPath> objects;
 } get_download_url_params;
-funcdef get_download_url(get_download_url_params input) returns (list<string> urls) authentication required;
+funcdef get_download_url(get_download_url_params input) returns (list<string> urls) authentication optional;
 
 /* "get_archive_url" command
 	Description:
@@ -158,7 +158,7 @@ typedef structure {
 	string archive_name;
 	string archive_type;
 } get_archive_url_params;
-funcdef get_archive_url(get_archive_url_params input) returns (string url);
+funcdef get_archive_url(get_archive_url_params input) returns (string url)  authentication optional;
 
 /* "list" command
 	Description: 
@@ -182,7 +182,7 @@ typedef structure {
 		mapping<string,list<string>> query;
 		bool adminmode;
 } list_params;
-funcdef ls(list_params input) returns (mapping<FullObjectPath,list<ObjectMeta>> output) authentication required;
+funcdef ls(list_params input) returns (mapping<FullObjectPath,list<ObjectMeta>> output)  authentication optional;
 
 /********** REORGANIZATION FUNCTIONS *******************/
 
@@ -258,6 +258,6 @@ typedef structure {
 	list<FullObjectPath> objects;
 	bool adminmode;
 } list_permissions_params;
-funcdef list_permissions(list_permissions_params input) returns (mapping<string,list<tuple<Username,WorkspacePerm> > > output) authentication required;
+funcdef list_permissions(list_permissions_params input) returns (mapping<string,list<tuple<Username,WorkspacePerm> > > output) authentication optional;
 
 };

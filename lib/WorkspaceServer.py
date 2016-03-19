@@ -275,7 +275,7 @@ class Application(object):
         self.rpc_service.add(impl_Workspace.get,
                              name='Workspace.get',
                              types=[dict])
-        self.method_authentication['Workspace.get'] = 'required'
+        self.method_authentication['Workspace.get'] = 'optional'
         self.rpc_service.add(impl_Workspace.update_auto_meta,
                              name='Workspace.update_auto_meta',
                              types=[dict])
@@ -283,15 +283,15 @@ class Application(object):
         self.rpc_service.add(impl_Workspace.get_download_url,
                              name='Workspace.get_download_url',
                              types=[dict])
-        self.method_authentication['Workspace.get_download_url'] = 'required'
+        self.method_authentication['Workspace.get_download_url'] = 'optional'
         self.rpc_service.add(impl_Workspace.get_archive_url,
                              name='Workspace.get_archive_url',
                              types=[dict])
-        self.method_authentication['Workspace.get_archive_url'] = 'none'
+        self.method_authentication['Workspace.get_archive_url'] = 'optional'
         self.rpc_service.add(impl_Workspace.ls,
                              name='Workspace.ls',
                              types=[dict])
-        self.method_authentication['Workspace.ls'] = 'required'
+        self.method_authentication['Workspace.ls'] = 'optional'
         self.rpc_service.add(impl_Workspace.copy,
                              name='Workspace.copy',
                              types=[dict])
@@ -307,7 +307,7 @@ class Application(object):
         self.rpc_service.add(impl_Workspace.list_permissions,
                              name='Workspace.list_permissions',
                              types=[dict])
-        self.method_authentication['Workspace.list_permissions'] = 'required'
+        self.method_authentication['Workspace.list_permissions'] = 'optional'
         self.auth_client = biokbase.nexus.Client(
             config={'server': 'nexus.api.globusonline.org',
                     'verify_ssl': True,

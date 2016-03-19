@@ -224,7 +224,7 @@ sub _generate_object_meta {
 
 #Retrieving object data from filesystem or giving permission to download shock node**
 sub _retrieve_object_data {
-	my ($self,$obj) = @_;
+	my ($self,$obj,$wsobj) = @_;
 	if ($obj->{folder} == 1) {
 		return "";
 	}
@@ -238,8 +238,12 @@ sub _retrieve_object_data {
 		}
 		close($fh);
 	} else {
-		my $ua = LWP::UserAgent->new();
-		my $res = $ua->put($obj->{shocknode}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
+		if ($wsobj->{global_permission} ne "n") {
+			$self->_make_shock_node_public($obj->{shocknode});
+		} else {
+			my $ua = LWP::UserAgent->new();
+			my $res = $ua->put($obj->{shocknode}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
+		}
 		$data = $obj->{shocknode};
 	}
 	if (!defined($data)) {
@@ -562,6 +566,15 @@ sub _create_shock_node {
 	my $data = $json->decode($res->content);
 	my $res = $ua->put($self->_shockurl()."/node/".$data->{data}->{id}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
 	return $data->{data}->{id};
+}
+
+sub _make_shock_node_public {
+	my ($self,$url) = @_;
+	my $ua = LWP::UserAgent->new();
+	my $res = $ua->get($url."/acl/",Authorization => "OAuth ".$self->_wsauth());
+	my $json = JSON::XS->new;
+	my $data = $json->decode($res->content);
+	$res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
 }
 
 sub _update_shock_node {
@@ -1341,7 +1354,7 @@ sub new
 			$c->read($e);
 			for my $p (@{$paramlist}) {
 			  	my $v = $c->param("$service.$p");
-			    if ($v && !defined($params->{$p})) {
+			  	if ($v && !defined($params->{$p})) {
 					$params->{$p} = $v;
 					if ($v eq "null") {
 						$params->{$p} = undef;
@@ -1349,7 +1362,7 @@ sub new
 			    }
 			}
 		}
-    } 
+    }
 	$params = $self->_validateargs($params,["db-path","wsuser","wspassword","types-file"],{
 		"script-path" => "/kb/deployment/plbin/",
 		"job-directory" => "/tmp/wsjobs/",
@@ -1906,7 +1919,7 @@ sub get
 	    	} else {
 	    		push(@{$output},[
 		    		$self->_generate_object_meta($obj),
-	    			$self->_retrieve_object_data($obj)
+	    			$self->_retrieve_object_data($obj,$wsobj)
 		    	]);
 	    	}
     	}
@@ -2163,7 +2176,6 @@ sub get_download_url
 	    workspace_path => $ws_path,
 	};
 
-	print Dumper($obj);
 	if (!defined($obj->{shock}) || $obj->{shock} == 0) {
 	    my $filename = $self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name};
 	    $doc->{file_path} = $filename;
@@ -2781,7 +2793,9 @@ sub delete
 
 <pre>
 $input is a set_permissions_params
-$output is an ObjectMeta
+$output is a reference to a list where each element is a reference to a list containing 2 items:
+	0: a Username
+	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
@@ -2794,26 +2808,6 @@ FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
-	0: an ObjectName
-	1: an ObjectType
-	2: a FullObjectPath
-	3: (creation_time) a Timestamp
-	4: an ObjectID
-	5: (object_owner) a Username
-	6: an ObjectSize
-	7: a UserMetadata
-	8: an AutoMetadata
-	9: (user_permission) a WorkspacePerm
-	10: (global_permission) a WorkspacePerm
-	11: (shockurl) a string
-ObjectName is a string
-ObjectType is a string
-Timestamp is a string
-ObjectID is a string
-ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
-AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 </pre>
 
@@ -2822,7 +2816,9 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 =begin text
 
 $input is a set_permissions_params
-$output is an ObjectMeta
+$output is a reference to a list where each element is a reference to a list containing 2 items:
+	0: a Username
+	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
@@ -2835,26 +2831,6 @@ FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
-	0: an ObjectName
-	1: an ObjectType
-	2: a FullObjectPath
-	3: (creation_time) a Timestamp
-	4: an ObjectID
-	5: (object_owner) a Username
-	6: an ObjectSize
-	7: a UserMetadata
-	8: an AutoMetadata
-	9: (user_permission) a WorkspacePerm
-	10: (global_permission) a WorkspacePerm
-	11: (shockurl) a string
-ObjectName is a string
-ObjectType is a string
-Timestamp is a string
-ObjectID is a string
-ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
-AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 
 =end text

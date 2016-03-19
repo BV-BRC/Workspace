@@ -35,10 +35,6 @@ sub new
 {
     my($class, $url, @args) = @_;
     
-    if (!defined($url))
-    {
-	$url = 'http://p3.theseed.org/services/Workspace';
-    }
 
     my $self = {
 	client => Bio::P3::Workspace::WorkspaceClient::RpcClient->new,
@@ -84,17 +80,15 @@ sub new
     #
     # We create an auth token, passing through the arguments that we were (hopefully) given.
 
-    #{
-	#my $token = Bio::KBase::AuthToken->new(@args);
+    {
+	my $token = Bio::KBase::AuthToken->new(@args);
 	
-	#if (!$token->error_message)
-	#{
-	#    $self->{token} = $token->token;
-	#    $self->{client}->{token} = $token->token;
-	#}
-    #}
-    $self->{token} = $args[1];
-	$self->{client}->{token} = $args[1];
+	if (!$token->error_message)
+	{
+	    $self->{token} = $token->token;
+	    $self->{client}->{token} = $token->token;
+	}
+    }
 
     my $ua = $self->{client}->ua;	 
     my $timeout = $ENV{CDMI_TIMEOUT} || (30 * 60);	 
@@ -513,7 +507,7 @@ sub get
 {
     my($self, @args) = @_;
 
-# Authentication: required
+# Authentication: optional
 
     if ((my $n = @args) != 1)
     {
@@ -735,7 +729,7 @@ sub get_download_url
 {
     my($self, @args) = @_;
 
-# Authentication: required
+# Authentication: optional
 
     if ((my $n = @args) != 1)
     {
@@ -830,7 +824,7 @@ sub get_archive_url
 {
     my($self, @args) = @_;
 
-# Authentication: none
+# Authentication: optional
 
     if ((my $n = @args) != 1)
     {
@@ -975,7 +969,7 @@ sub ls
 {
     my($self, @args) = @_;
 
-# Authentication: required
+# Authentication: optional
 
     if ((my $n = @args) != 1)
     {
@@ -1316,7 +1310,9 @@ sub delete
 
 <pre>
 $input is a set_permissions_params
-$output is an ObjectMeta
+$output is a reference to a list where each element is a reference to a list containing 2 items:
+	0: a Username
+	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
@@ -1329,26 +1325,6 @@ FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
-	0: an ObjectName
-	1: an ObjectType
-	2: a FullObjectPath
-	3: (creation_time) a Timestamp
-	4: an ObjectID
-	5: (object_owner) a Username
-	6: an ObjectSize
-	7: a UserMetadata
-	8: an AutoMetadata
-	9: (user_permission) a WorkspacePerm
-	10: (global_permission) a WorkspacePerm
-	11: (shockurl) a string
-ObjectName is a string
-ObjectType is a string
-Timestamp is a string
-ObjectID is a string
-ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
-AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 </pre>
 
@@ -1357,7 +1333,9 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 =begin text
 
 $input is a set_permissions_params
-$output is an ObjectMeta
+$output is a reference to a list where each element is a reference to a list containing 2 items:
+	0: a Username
+	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
@@ -1370,26 +1348,6 @@ FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
-	0: an ObjectName
-	1: an ObjectType
-	2: a FullObjectPath
-	3: (creation_time) a Timestamp
-	4: an ObjectID
-	5: (object_owner) a Username
-	6: an ObjectSize
-	7: a UserMetadata
-	8: an AutoMetadata
-	9: (user_permission) a WorkspacePerm
-	10: (global_permission) a WorkspacePerm
-	11: (shockurl) a string
-ObjectName is a string
-ObjectType is a string
-Timestamp is a string
-ObjectID is a string
-ObjectSize is an int
-UserMetadata is a reference to a hash where the key is a string and the value is a string
-AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
 
 =end text
@@ -1505,7 +1463,7 @@ sub list_permissions
 {
     my($self, @args) = @_;
 
-# Authentication: required
+# Authentication: optional
 
     if ((my $n = @args) != 1)
     {

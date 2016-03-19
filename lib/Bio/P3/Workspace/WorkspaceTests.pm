@@ -42,18 +42,14 @@
 	    	my $classpath = $serverclass;
 	    	$classpath =~ s/::/\//g;
 	    	require $classpath.".pm";
-	    	$self->{obj} = $serverclass->new({
-	    		"db-path" => $c->param("WorkspaceTest.db-path"),
-	    		"wsuser" => $c->param("WorkspaceTest.wsuser"),
-	    		"wspassword" => $c->param("WorkspaceTest.wspassword"),
-	    		"types-file" => $c->param("WorkspaceTest.types-file")
-	    	});
+	    	$self->{obj} = $serverclass->new({});
 	    } else {
 	    	my $classpath = $clientclass;
 	    	$classpath =~ s/::/\//g;
 	    	require $classpath.".pm";
 	    	$self->{clientobj} = $clientclass->new($self->{url},token => $self->{token});
 	    	$self->{clientobjtwo} = $clientclass->new($self->{url},token => $self->{tokentwo});
+	    	$self->{clientobjthree} = $clientclass->new($self->{url},token => undef);
 	    }
 	    return bless $self, $class;
 	}
@@ -64,6 +60,9 @@
 			if ($user == 2) {
 				$Bio::P3::Workspace::WorkspaceImpl::CallContext = undef;
 				$Bio::P3::Workspace::WorkspaceImpl::CallContext = CallContext->new($self->{tokentwo},"test",$self->{usertwo});
+			} elsif ($user == 3) {
+				$Bio::P3::Workspace::WorkspaceImpl::CallContext = undef;
+				$Bio::P3::Workspace::WorkspaceImpl::CallContext = CallContext->new(undef,"test",undef);
 			} else {
 				$Bio::P3::Workspace::WorkspaceImpl::CallContext = undef;
 				$Bio::P3::Workspace::WorkspaceImpl::CallContext = CallContext->new($self->{token},"test",$self->{user});
@@ -71,6 +70,8 @@
 		} else {
 			if ($user == 2) {
 				$self->{obj} = $self->{clientobjtwo};
+			} elsif ($user == 3) {
+				$self->{obj} = $self->{clientobjthree};
 			} else {
 				$self->{obj} = $self->{clientobj};
 			}
@@ -312,7 +313,6 @@
 			["defined(\$output->[0])","Getting metadata for created object back"],
 			["\$output->[0]->[1] eq \"genome\"","Object has type genome"],
 			["defined(\$output->[0]->[11])","Shock URL is returned"]
-			
 		],0,undef,1);
 		
 		#Uploading file to newly created shock node
@@ -429,9 +429,15 @@
 			new_global_permission => "w"
 		},"Successfully changed global permissions!",[],0,undef,1);
 		
+		#Copy objects
+		$output = $self->test_harness("copy",{
+			objects => [["/".$self->{usertwo}."/TestWorkspace/copydir","/".$self->{usertwo}."/TestWorkspace/copydir_two"]],
+			recursive => 1
+		},"Successfully ran copy to move objects!",[],0,undef,2);
+		
 		#Moving objects
 		$output = $self->test_harness("copy",{
-			objects => [["/".$self->{usertwo}."/TestWorkspace/copydir","/".$self->{user}."/TestWorkspace/movedir"]],
+			objects => [["/".$self->{usertwo}."/TestWorkspace/copydir_two","/".$self->{user}."/TestWorkspace/movedir"]],
 			recursive => 1,
 			move => 1
 		},"Successfully ran copy to move objects!",[],0,undef,2);
@@ -498,11 +504,33 @@
 			objects => [["/".$self->{usertwo}."/TestWorkspace/test_write_published_workspace","folder",{},undef]]
 		},"Cannot write to published workspace",[],1,undef,2);
 		
+		#Listing public workspace
+		$output = $self->test_harness("ls",{
+			paths => ["/".$self->{usertwo}."/TestWorkspace"]
+		},"Using ls function on published workspace without auth",[],0,undef,3);
+		
+		#Getting object from public workspace
+		$output = $self->test_harness("get",{
+			objects => ["/".$self->{usertwo}."/TestWorkspace/copydir/testdir2/testdir3/shockobj"]
+		},"Using get function to retrieve object from published workspace without auth",[],0,undef,3);
+		system("curl ".$output->[0]->[0]->[11]."?download");
+		
 		#Unpublishing workspace
 		$output = $self->test_harness("set_permissions",{
 			path => "/".$self->{usertwo}."/TestWorkspace",
 			new_global_permission => "r"
 		},"Unpublishing workspace",[],0,undef,2);
+		
+		#Listing public workspace
+		$output = $self->test_harness("ls",{
+			paths => ["/".$self->{usertwo}."/TestWorkspace"]
+		},"Using ls function on public workspace without auth",[],0,undef,3);
+		
+		#Getting object from public workspace
+		$output = $self->test_harness("get",{
+			objects => ["/".$self->{usertwo}."/TestWorkspace/copydir/testdir2/testdir3/shockobj"]
+		},"Using get function to retrieve object from public workspace without auth",[],0,undef,3);
+		system("curl ".$output->[0]->[0]->[11]."?download");
 		
 		#Deleting workspaces
 		$output = $self->test_harness("delete",{
