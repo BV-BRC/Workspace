@@ -579,7 +579,9 @@ sub _make_shock_node_public {
 
 sub _update_shock_node {
 	my ($self,$object,$force) = @_;
-	if ($force == 1 || !defined($self->{_shockupdate}->{$object->{uuid}}) || (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
+	if ($force == 1 ||
+	    !defined($self->{_shockupdate}->{$object->{uuid}}) ||
+	    (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
 		my $ua = LWP::UserAgent->new();
 		my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
 		my $json = JSON::XS->new;
@@ -1191,8 +1193,13 @@ sub _download_request
 
 	    my $url = $res->{shock_node} . "?download";
 	    print STDERR "retrieve $url\n";
+	    my @headers;
+	    if ($res->{user_token})
+	    {
+		@headers = (headers => {Authorization => "OAuth $res->{user_token}" });
+	    }
 	    http_request(GET => $url,
-			 headers => {Authorization => "OAuth $res->{user_token}" },
+			 @headers,
 			 # handle_params => { max_read_size => 32768 },
 			 on_body => sub {
 			     my($data, $hdr) = @_;
@@ -1200,7 +1207,6 @@ sub _download_request
 			     {
 				 $writer->write($data);
 				 my $len = length($data);
-				 print STDERR "B $len\n";
 				 return 1;
 			     }
 			     else
@@ -1249,7 +1255,6 @@ sub _download_request
 					   if ($h->{rbuf})
 					   {
 					       my $len = length($h->{rbuf});
-					       print "R $len\n";
 					       $writer->write($h->{rbuf});
 					       $h->rbuf = '';
 					   }
