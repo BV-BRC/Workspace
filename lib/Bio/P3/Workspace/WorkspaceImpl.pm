@@ -2186,10 +2186,22 @@ sub get_download_url
 	    $doc->{file_path} = $filename;
 	} else {
 	    my $ua = LWP::UserAgent->new();
-	    my $res = $ua->put($obj->{shocknode}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
+	    my($user, $token);
+	    if (_authentication())
+	    {
+		$user = $self->_getUsername();
+		$token = _authentication();
+	    }
+	    else
+	    {
+		$user = $self->{_params}->{wsuser};
+		$token = $self->_wsauth();
+	    }
+	    
+	    my $res = $ua->put($obj->{shocknode}."/acl/read?users=$user", Authorization => "OAuth $token");
 
 	    $doc->{shock_node} = $obj->{shocknode};
-	    $doc->{user_token} = _authentication();
+	    $doc->{user_token} = $token;
 	}
 
 	push(@objs, [$ws_path, $name, $doc]);
