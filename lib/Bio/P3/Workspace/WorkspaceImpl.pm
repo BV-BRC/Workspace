@@ -173,7 +173,6 @@ sub _updateDB {
 #Retrieving workspace object from mongodb**
 sub _get_db_ws {
 	my ($self,$query,$throwerror) = @_;
-	print Dumper(get_db_ws => $query);
 	if (defined($query->{raw_id})) {
 		my $id = $query->{raw_id};
 		delete $query->{raw_id};
@@ -192,7 +191,6 @@ sub _get_db_ws {
 	if (!defined($object) && defined($throwerror) && $throwerror == 1) {
 		$self->_error("Workspace not found!");
 	}
-	print Dumper($object);
 	return $object;
 }
 
@@ -349,9 +347,7 @@ sub _check_ws_permissions {
 	};
 	if ($values->{$perm} < $values->{$minperm}) {
 		if ($throwerror == 1) {
-		    print STDERR Dumper($values, $perm, $wsobj);
 			$self->_error("User lacks permission to ".$wsobj->{owner}."/".$wsobj->{name}." for requested action!");
-
 		}
 		return 0;
 	}
@@ -944,7 +940,6 @@ sub _create_object {
 #Retreive a workspace from the database either by uuid or by name/user**
 sub _wscache {
 	my ($self,$user,$ws,$throwerror) = @_;
-
 	if (!defined($CallContext->{_wscache}->{$user}->{$ws})) {
 		if ($user eq "_uuid") {
 			my $obj = $self->_get_db_ws({
@@ -2245,7 +2240,6 @@ sub get_download_url
 	    path => $path,
 	    name => $name
 	    });
-	print Dumper($obj);
 	
 	if ($obj->{folder} == 1) {
 	    push(@objs, {});
