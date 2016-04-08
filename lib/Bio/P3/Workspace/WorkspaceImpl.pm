@@ -1196,7 +1196,7 @@ sub _download_request
     
     my $range_len = $range_end - $range_beg + 1;
 
-    print STDERR Dumper($range, $hdrs, $file_size, $range_beg, $range_end, $range_len);
+    # print STDERR Dumper($range, $hdrs, $file_size, $range_beg, $range_end, $range_len);
 
     if ($res->{shock_node})
     {
@@ -1280,7 +1280,7 @@ sub _download_request
 	    seek($fh, $range_beg, SEEK_SET);
 	}
 
-	print "Opened $res->{file_path} fh=$fh\n";
+	print STDERR "Opened $res->{file_path} fh=$fh\n";
 
 	return sub {
 	    my($responder) = @_;
