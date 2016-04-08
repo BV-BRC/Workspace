@@ -180,7 +180,7 @@ sub wsURL {
 		$currentURL = $newUrl;
 	} else {
 		if (defined($overrideWSURL)) {
-			return $currentURL;
+			return $overrideWSURL;
 		}
 		$currentURL =Bio::P3::Workspace::ScriptHelpers::GetConfigParam("P3Client.wsurl");
 	}

@@ -34,6 +34,7 @@ use AnyEvent;
 use AnyEvent::HTTP;
 use Config::Simple;
 use Plack::Request;
+use Fcntl ':seek';
 
 Log::Log4perl->easy_init($DEBUG);
 
@@ -172,6 +173,7 @@ sub _updateDB {
 #Retrieving workspace object from mongodb**
 sub _get_db_ws {
 	my ($self,$query,$throwerror) = @_;
+	print Dumper(get_db_ws => $query);
 	if (defined($query->{raw_id})) {
 		my $id = $query->{raw_id};
 		delete $query->{raw_id};
@@ -190,6 +192,7 @@ sub _get_db_ws {
 	if (!defined($object) && defined($throwerror) && $throwerror == 1) {
 		$self->_error("Workspace not found!");
 	}
+	print Dumper($object);
 	return $object;
 }
 
@@ -346,7 +349,9 @@ sub _check_ws_permissions {
 	};
 	if ($values->{$perm} < $values->{$minperm}) {
 		if ($throwerror == 1) {
+		    print STDERR Dumper($values, $perm, $wsobj);
 			$self->_error("User lacks permission to ".$wsobj->{owner}."/".$wsobj->{name}." for requested action!");
+
 		}
 		return 0;
 	}
@@ -939,6 +944,7 @@ sub _create_object {
 #Retreive a workspace from the database either by uuid or by name/user**
 sub _wscache {
 	my ($self,$user,$ws,$throwerror) = @_;
+
 	if (!defined($CallContext->{_wscache}->{$user}->{$ws})) {
 		if ($user eq "_uuid") {
 			my $obj = $self->_get_db_ws({
@@ -1172,6 +1178,31 @@ sub _download_request
 	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
     }
 
+    #
+    # Determine if we are being asked for a byte range.
+    # Right now we will just support a single range.
+    #
+    my $hdrs = $req->headers;
+    my $range = $hdrs->header("Range");
+    
+    my($range_beg, $range_end) = $range =~ /bytes=(\d+)-(\d*)\s*$/;
+    
+    my $file_size = $res->{size};
+
+    my $have_range;
+    if (defined($range_beg))
+    {
+	$have_range++;
+	if ($range_end eq '' || $range_end >= $file_size)
+	{
+	    $range_end = $file_size - 1;
+	}
+    }
+    
+    my $range_len = $range_end - $range_beg + 1;
+
+    print STDERR Dumper($range, $hdrs, $file_size, $range_beg, $range_end, $range_len);
+
     if ($res->{shock_node})
     {
 	#
@@ -1183,15 +1214,31 @@ sub _download_request
 	# sample code in http://cpansearch.perl.org/src/MIYAGAWA/Twiggy-0.1025/eg/chat-websocket/chat.psgi
 	# that uses the underlying socket to do this right. 
 	#
-
+	
 	return sub {
 	    my($responder) = @_;
 
-	    my $writer = $responder->([200,
-				       ['Content-type' => 'application/octet-stream',
-					'Content-Disposition' => "attachment; filename=$res->{name}"]]);
-
-	    my $url = $res->{shock_node} . "?download";
+	    my $writer;
+	    my $url;
+	    if ($have_range)
+	    {
+		$writer = $responder->([206,
+					['Content-type' => 'application/octet-stream',
+					 'Content-Disposition' => "attachment; filename=$res->{name}",
+					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
+					 'Content-Length' => $range_len,
+					 ]]);
+		
+		$url = $res->{shock_node} . "?download&seek=$range_beg&length=$range_len";
+	    }
+	    else
+	    {
+		$writer = $responder->([200,
+					['Content-type' => 'application/octet-stream',
+					 'Content-Disposition' => "attachment; filename=$res->{name}"]]);
+		$url = $res->{shock_node} . "?download";
+	    }
+	    
 	    print STDERR "retrieve $url\n";
 	    my @headers;
 	    if ($res->{user_token})
@@ -1233,30 +1280,62 @@ sub _download_request
 	    return [404, ['Content-Type' => 'text/plain' ], ["Not a file\n"]];
 	}
 
+	if ($have_range)
+	{
+	    seek($fh, $range_beg, SEEK_SET);
+	}
+
 	print "Opened $res->{file_path} fh=$fh\n";
 
 	return sub {
 	    my($responder) = @_;
-	    
-	    my $writer = $responder->([200,
-				       ['Content-type' => 'application/octet-stream',
+
+	    my $writer;
+
+	    if ($have_range)
+	    {
+		$writer = $responder->([206,
+					['Content-type' => 'application/octet-stream',
+					 'Content-Disposition' => "attachment; filename=$res->{name}",
+					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
+					 'Content-Length' => $range_len,
+					 ]]);
+	    }
+	    else
+	    {
+		$writer = $responder->([200,
+					['Content-type' => 'application/octet-stream',
 					'Content-Disposition' => "attachment; filename=$res->{name}"]]);
+	    }
 
 	    print STDERR "retrieve $res->{file_path}\n";
 	    my $ah;
 	    $ah = new AnyEvent::Handle(fh => $fh,
+				       on_error => sub { print STDERR "Error\n"; },
 				       on_eof => sub {
 					   $writer->close();
 					   undef $ah;
 				       },
 				       on_read => sub {
 					   my($h) = @_;
-					   
+
 					   if ($h->{rbuf})
 					   {
 					       my $len = length($h->{rbuf});
-					       $writer->write($h->{rbuf});
-					       $h->rbuf = '';
+
+					       if ($have_range && ($len > $range_len))
+					       {
+						   $writer->write(substr($h->{rbuf}, 0, $range_len));
+						   $h->rbuf = '';
+						   $writer->close();
+						   undef $ah;
+					       }
+					       else
+					       {
+						   $range_len -= $len if $have_range;
+						   $writer->write($h->{rbuf});
+						   $h->rbuf = '';
+					       }
 					   }
 					   else
 					   {
@@ -2166,6 +2245,7 @@ sub get_download_url
 	    path => $path,
 	    name => $name
 	    });
+	print Dumper($obj);
 	
 	if ($obj->{folder} == 1) {
 	    push(@objs, {});
@@ -2204,7 +2284,7 @@ sub get_download_url
 	    $doc->{user_token} = $token;
 	}
 
-	push(@objs, [$ws_path, $name, $doc]);
+	push(@objs, [$ws_path, $name, $doc, $obj->{size}]);
     }
 
     #
@@ -2227,7 +2307,7 @@ sub get_download_url
     
     for my $ent (@objs)
     {
-	my($obj, $name, $doc) = @$ent;
+	my($obj, $name, $doc, $size) = @$ent;
 	my $url;
 	if ($obj)
 	{
@@ -2238,6 +2318,7 @@ sub get_download_url
 	    $doc->{download_key} = $dlid;
 	    $doc->{expiration_time} = $expires;
 	    $doc->{name} = $name;
+	    $doc->{size} = $size;
 	    $coll->insert($doc);
 	    $url = $self->{_params}->{'download-url-base'} . "/$dlid/" . uri_escape($name);
 	}
