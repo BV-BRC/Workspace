@@ -580,6 +580,11 @@ sub _make_shock_node_public {
 
 sub _update_shock_node {
 	my ($self,$object,$force) = @_;
+        if ($object->{shocknode} !~ /[0-9a-f]$/i)
+	{
+	    warn "Bad workspace obj: bogus shock node " . Dumper($object);
+	    return;
+	}
 	if ($force == 1 ||
 	    !defined($self->{_shockupdate}->{$object->{uuid}}) ||
 	    (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
