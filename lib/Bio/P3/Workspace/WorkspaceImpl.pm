@@ -46,162 +46,167 @@ our $CallContext;
 
 #Returns the authentication token supplied to the service in the context object
 sub _authentication {
-	my($self) = @_;
-	return $CallContext->token;
+    my($self) = @_;
+    return $CallContext->token;
 }
 
 #Returns the username supplied to the service in the context object
 sub _getUsername {
-	my ($self) = @_;
-	return $CallContext->user_id;
+    my ($self) = @_;
+    return $CallContext->user_id;
 }
 
 sub _get_newobject_owner {
-	my ($self) = @_;
-	if (defined($CallContext->{_setowner}) && $self->_adminmode()) {
-		return $CallContext->{_setowner};
-	}
-	return $self->_getUsername();
+    my ($self) = @_;
+    if (defined($CallContext->{_setowner}) && $self->_adminmode()) {
+	return $CallContext->{_setowner};
+    }
+    return $self->_getUsername();
 }
 
 #Returns the method supplied to the service in the context object
 sub _current_method {
-	my ($self) = @_;
-	if (!defined($CallContext)) {
-		return undef;
-	}
-	return $CallContext->method;
+    my ($self) = @_;
+    if (!defined($CallContext)) {
+	return undef;
+    }
+    return $CallContext->method;
 }
 
 sub _validateargs {
-	my ($self,$args,$mandatoryArguments,$optionalArguments,$substitutions) = @_;
-	$CallContext->{_adminmode} = 0;
-	if (!defined($args)) {
-	    $args = {};
+    my ($self, $args, $mandatoryArguments, $optionalArguments, $substitutions) = @_;
+
+    $CallContext->{_adminmode} = 0;
+
+    $args //= {};
+
+    if (ref($args) ne "HASH") {
+	$self->_error("Arguments not hash");
+    }
+
+    if (defined($args->{adminmode}) && $args->{adminmode} == 1) {
+	if ($self->_user_is_admin() == 0) {
+	    $self->_error("Cannot run functions in admin mode. User is not an admin!");
 	}
-	if (ref($args) ne "HASH") {
-		$self->_error("Arguments not hash");
+	$CallContext->{_adminmode} = 1;
+    }
+    
+    if (defined($substitutions) && ref($substitutions) eq "HASH") {
+	foreach my $original (keys(%{$substitutions})) {
+	    $args->{$original} = $args->{$substitutions->{$original}};
 	}
-	if (defined($args->{adminmode}) && $args->{adminmode} == 1) {
-		if ($self->_user_is_admin() == 0) {
-			$self->_error("Cannot run functions in admin mode. User is not an admin!");
-		}
-		$CallContext->{_adminmode} = 1;
-	}
-	if (defined($substitutions) && ref($substitutions) eq "HASH") {
-		foreach my $original (keys(%{$substitutions})) {
-			$args->{$original} = $args->{$substitutions->{$original}};
-		}
-	}
-	if (defined($mandatoryArguments)) {
-		for (my $i=0; $i < @{$mandatoryArguments}; $i++) {
-			if (!defined($args->{$mandatoryArguments->[$i]})) {
-				push(@{$args->{_error}},$mandatoryArguments->[$i]);
-			}
-		}
+    }
+    if (defined($mandatoryArguments)) {
+	for my $arg (@$mandatoryArguments)
+	{
+	    if (!defined($args->{$arg})) {
+		push(@{$args->{_error}}, $arg);
+	    }
 	}
 	if (defined($args->{_error})) {
 		$self->_error("Mandatory arguments ".join("; ",@{$args->{_error}})." missing.");
 	}
 	if (defined($optionalArguments)) {
-		foreach my $argument (keys(%{$optionalArguments})) {
-			if (!defined($args->{$argument})) {
-				$args->{$argument} = $optionalArguments->{$argument};	
-			}
+	    foreach my $argument (keys(%{$optionalArguments})) {
+		if (!defined($args->{$argument})) {
+		    $args->{$argument} = $optionalArguments->{$argument};	
 		}
+	    }
 	}
 	return $args;
 }
 
 sub _shockurl {
-	my $self = shift;
-	return $self->{_params}->{"shock-url"};
+    my $self = shift;
+    return $self->{_params}->{"shock-url"};
 }
 
 sub _wsauth {
-	my $self = shift;
-	if (!defined($self->{_wsauth})) {
-		my $token = Bio::KBase::AuthToken->new(user_id =>  $self->{_params}->{wsuser}, password => $self->{_params}->{wspassword});
-		$self->{_wsauth} = $token->token();
-	}
-	return $self->{_wsauth};
+    my $self = shift;
+    if (!defined($self->{_wsauth})) {
+	my $token = Bio::KBase::AuthToken->new(user_id =>  $self->{_params}->{wsuser}, password => $self->{_params}->{wspassword});
+	$self->{_wsauth} = $token->token();
+    }
+    return $self->{_wsauth};
 }
 
+#
+# Not needed / used ?
 sub _url {
-	my $self = shift;
-	return $self->{_params}->{"url"};
+    my $self = shift;
+    return $self->{_params}->{"url"};
 }
 
 sub _error {
-	my($self,$msg) = @_;
-	$msg = "_ERROR_".$msg."_ERROR_";
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,method_name => "");#$self->_current_method());
+    my($self,$msg) = @_;
+    $msg = "_ERROR_".$msg."_ERROR_";
+    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,method_name => "");#$self->_current_method());
 }
 
 sub _db_path {
-	my($self) = @_;
-	return $self->{_params}->{"db-path"};
+    my($self) = @_;
+    return $self->{_params}->{"db-path"};
 }
 
 sub _mongodb {
-	my ($self) = @_;
-	return $self->{_mongodb};
+    my ($self) = @_;
+    return $self->{_mongodb};
 }
 
 sub _adminmode {
-	my ($self) = @_;
-	if (!defined($CallContext->{_adminmode})) {
-		$CallContext->{_adminmode} = 0;
-	}
-	return $CallContext->{_adminmode};
+    my ($self) = @_;
+    if (!defined($CallContext->{_adminmode})) {
+	$CallContext->{_adminmode} = 0;
+    }
+    return $CallContext->{_adminmode};
 }
 
 sub _user_is_admin {
-	my ($self) = @_;
-	if (defined($self->{_admins}->{$self->_getUsername()})) {
-		return 1;
-	}
-	return 0;
+    my ($self) = @_;
+    if (defined($self->{_admins}->{$self->_getUsername()})) {
+	return 1;
+    }
+    return 0;
 }
 
 sub _updateDB {
-	my ($self,$name,$query,$update) = @_;
-	$self->_mongodb()->get_collection($name)->update($query,$update);
-	return 1;
+    my ($self,$name,$query,$update) = @_;
+    $self->_mongodb()->get_collection($name)->update($query,$update);
+    return 1;
 }
 
 #Retrieving workspace object from mongodb**
 sub _get_db_ws {
-	my ($self,$query,$throwerror) = @_;
-	if (defined($query->{raw_id})) {
-		my $id = $query->{raw_id};
-		delete $query->{raw_id};
-		if ($id =~ m/^\/([^\/]+)\/([^\/]+)\/*$/) {
-			$query->{owner} = $1;
-			$query->{name} = $2;
-		} elsif ($id =~ m/^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/) {
-			$query->{uuid} = $id;
-		} elsif ($id =~ m/([^\/]+)\/*$/) {
-			$query->{owner} = $self->_getUsername();
-			$query->{name} = $1;
-		}
+    my ($self,$query,$throwerror) = @_;
+    if (defined($query->{raw_id})) {
+	my $id = $query->{raw_id};
+	delete $query->{raw_id};
+	if ($id =~ m,^/([^/]+)/([^/]+)/*$,) {
+	    $query->{owner} = $1;
+	    $query->{name} = $2;
+	} elsif ($id =~ m/^[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}$/) {
+	    $query->{uuid} = $id;
+	} elsif ($id =~ m,([^/]+)/*$,) {
+	    $query->{owner} = $self->_getUsername();
+	    $query->{name} = $1;
 	}
-	my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
-	my $object = $cursor->next;
-	if (!defined($object) && defined($throwerror) && $throwerror == 1) {
-		$self->_error("Workspace not found!");
-	}
-	return $object;
+    }
+    my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
+    my $object = $cursor->next;
+    if (!defined($object) $throwerror) {
+	$self->_error("Workspace not found!");
+    }
+    return $object;
 }
 
 #Retrive object from mongodb based on input query**
 sub _get_db_object {
-	my ($self,$query,$throwerror) = @_;
-	my $objects = $self->_query_database($query,0);
-	if (!defined($objects->[0]) && $throwerror == 1) {
-		$self->_error("Object not found!");
-	}
-	return $objects->[0];
+    my ($self,$query,$throwerror) = @_;
+    my $objects = $self->_query_database($query,0);
+    if (!defined($objects->[0]) && $throwerror) {
+	$self->_error("Object not found!");
+    }
+    return $objects->[0];
 }
 
 #Returns metadata tuple for input object or workspace**
@@ -440,53 +445,63 @@ sub _get_directory_contents {
 
 #Retrive objects from mongodb based on input query**
 sub _query_database {
-	my ($self,$query,$count,$update_shock) = @_;
-	if (defined($query->{path})) {
-		$query->{path} =~ s/^\///;
-		$query->{path} =~ s/\/$//;
+    my ($self, $query, $count, $update_shock) = @_;
+
+    if (defined($query->{path})) {
+	$query->{path} =~ s,^/,,;
+	$query->{path} =~ s,/$,,;
+    }
+    if ($count == 1) {
+	return $self->_mongodb()->get_collection('objects')->count($query);
+    }
+
+    my $output = [];
+    my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
+    my $hash;
+    while (my $object = $cursor->next) {
+	$object->{wsobj} = $self->_wscache("_uuid",$object->{workspace_uuid});
+	if ($object->{shock} == 1 && $object->{size} == 0) {			
+	    $self->_update_shock_node($object,$update_shock);
 	}
-	if ($count == 1) {
-		return $self->_mongodb()->get_collection('objects')->count($query);
-	}
-	my $output = [];
-	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
-	my $hash;
-	while (my $object = $cursor->next) {
-		$object->{wsobj} = $self->_wscache("_uuid",$object->{workspace_uuid});
-		if ($object->{shock} == 1 && $object->{size} == 0) {			
-			$self->_update_shock_node($object,$update_shock);
+	my $obj_path = $object->{path};
+	my $obj_name = $object->{name};
+	my $ws_uuid = $object->{workspace_uuid};
+
+	my $tmp_obj = $hash->{$ws_uuid}->{$obj_path}->{$obj_name};
+	if (defined($tmp_obj)) {
+	    for (my $i=0; $i < @{$output}; $i++) {
+		if ($output->[$i] == $tmp_obj) {
+		    $self->_mongodb()->get_collection('objects')->remove({
+			uuid => $output->[$i]->{uuid},
+			workspace_uuid => $output->[$i]->{workspace_uuid},
+			path => $output->[$i]->{path},
+			name => $output->[$i]->{name}
+		    });
+		    $output->[$i] = $object;
 		}
-		if (defined($hash->{$object->{workspace_uuid}}->{$object->{path}}->{$object->{name}})) {
-			for (my $i=0; $i < @{$output}; $i++) {
-				if ($output->[$i] == $hash->{$object->{workspace_uuid}}->{$object->{path}}->{$object->{name}}) {
-					$self->_mongodb()->get_collection('objects')->remove({
-						uuid => $output->[$i]->{uuid},
-						workspace_uuid => $output->[$i]->{workspace_uuid},
-						path => $output->[$i]->{path},
-						name => $output->[$i]->{name}
-					});
-					$output->[$i] = $object;
-				}
-			}
-		} else {
-			push(@{$output},$object);
-		}
-		$hash->{$object->{workspace_uuid}}->{$object->{path}}->{$object->{name}} = $object;
+	    }
+	} else {
+	    push(@{$output},$object);
 	}
-	return $output;
+	$hash->{$ws_uuid}->{$obj_path}->{$obj_name} = $object;
+    }
+    return $output;
 }
 
 #Copy of move a set of objects in the database**
 sub _copy_or_move_objects {
-	my ($self,$objects, $overwrite, $recursive,$move) = @_;
-	my $output = [];
+    my ($self, $objects, $overwrite, $recursive, $move) = @_;
+    my $output = [];
     my $wshash = {};
     my $destinations;
     my $objdest;
     my $delhash = {};
     my $saveobjs = [];
-    for (my $i=0; $i < @{$objects}; $i++) {
-    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($objects->[$i]->[0]);
+
+    for my $obj (@$objects)
+    {
+	my($src, $dest) = @$obj;
+    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($src);
     	my $wsobj = $self->_wscache($user,$ws);
     	if ($move == 0) {
     		$self->_check_ws_permissions($wsobj,"r",1);
@@ -503,12 +518,12 @@ sub _copy_or_move_objects {
     			$delhash->{$user}->{$ws}->{$path}->{$name} = $wsobj;
     		}
     		#Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],"folder",$wsobj->{metadata},$wsobj,undef,1,$move]);
+    		push(@{$saveobjs},[$dest,"folder",$wsobj->{metadata},$wsobj,undef,1,$move]);
     		if ($recursive == 1) {
     			my $subobjs = $self->_query_database({workspace_uuid => $wsobj->{uuid}},0);
     			for (my $j=0; $j < @{$subobjs}; $j++) {
     				#Computing destination path
-    				my $dpath = $objects->[$i]->[1]."/".$subobjs->[$j]->{path}."/".$subobjs->[$j]->{name};
+    				my $dpath = $dest."/".$subobjs->[$j]->{path}."/".$subobjs->[$j]->{name};
     				$dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
     				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
@@ -526,7 +541,7 @@ sub _copy_or_move_objects {
     			$delhash->{$user}->{$ws}->{$path}->{$name} = $obj;
 		    }
 		    #Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],$obj->{type},$obj->{metadata},$obj,undef,1,$move]);
+    		push(@{$saveobjs},[$dest,$obj->{type},$obj->{metadata},$obj,undef,1,$move]);
     		#Checking if object being copied is a directory
     		if	($obj->{folder} == 1 && $recursive == 1) {
     			my $subobjs = $self->_get_directory_contents($obj,1);
@@ -537,7 +552,7 @@ sub _copy_or_move_objects {
 		    			$subpath = $obj->{name};
 		    		}
     				my $partialpath = substr($subobjs->[$j]->{path},length($subpath));
-	    			my $dpath = $objects->[$i]->[1]."/".$partialpath."/".$subobjs->[$j]->{name};
+	    			my $dpath = $obj->[1]."/".$partialpath."/".$subobjs->[$j]->{name};
     				$dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
     				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
@@ -575,7 +590,7 @@ sub _make_shock_node_public {
 	my $res = $ua->get($url."/acl/",Authorization => "OAuth ".$self->_wsauth());
 	my $json = JSON::XS->new;
 	my $data = $json->decode($res->content);
-	$res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
+sear	$res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
 }
 
 sub _update_shock_node {
@@ -607,105 +622,113 @@ sub _update_shock_node {
 
 #This function clears away any exiting objects before saving new objects. Returns a hash of all objects involved**
 sub _validate_save_objects_before_saving {
-	my ($self,$objects,$overwrite) = @_;
+    my ($self,$objects,$overwrite) = @_;
     my $output = {};
-    for (my $i=0; $i < @{$objects}; $i++) {
+    for my $obj (@$objects)
+    {
+	my($obj_path, $obj_type, $user_metadata, $obj_data, $creation_time) = @$obj;
+	
     	#Parsing path
-    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($objects->[$i]->[0]);
+    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($obj_path);
     	if (!defined($output->{create}->{$user}->{$ws}->{$path}->{$name})) {
-	    	#Checking metadata
-	    	if (!defined($objects->[$i]->[2])) {
-	    		$objects->[$i]->[2] = {};
-	    	} elsif (ref($objects->[$i]->[2]) ne 'HASH') {
-	    		$self->_error("Meta data for ".$objects->[$i]->[0]." is not a valid type!");	
-	    	}
-	    	#Checking object type
-	    	$objects->[$i]->[1] = $self->_validate_object_type($objects->[$i]->[1],$objects->[$i]->[0]);
-	    	#Checking if any workspace is listed
-	    	if (length($ws) == 0) {
-	    		$self->_error($objects->[$i]->[0]." is not a valid object path!");	
-	    	}
-	    	#Attempting to retrieve workspace object
-	    	my $wsobj = $self->_wscache($user,$ws);
-	    	if ((length($path)+length($name)) == 0) {
-	    		my $nocreate = 0;
-	    		#We are creating a workspace
-	    		if (defined($wsobj)) {
-		    		if ($self->is_folder($objects->[$i]->[1]) == 1) {
-		    			#We ignore creation of folders that already exist
-		    			$nocreate = 1;	
-		    		} else {
-		    			#Cannot overwrite a workspace on creation
-		    			$self->_error("Cannot overwrite existing top level folder:".$objects->[$i]->[0]);
-		    		}
-		    	} elsif ($user ne $self->_getUsername() && $self->_adminmode() == 0) {
-		    		#Users can only create their own workspaces
-		    		$self->_error("Insufficient permissions to create ".$objects->[$i]->[0]);
-		    	} elsif ($self->is_folder($objects->[$i]->[1]) == 0) {
-		    		#Workspace must be a folder
-		    		$self->_error("Cannot create ".$objects->[$i]->[0]." because top level objects must be folders!");
-		    	}
-		    	#Checking workspace name
-		    	$ws = $self->_validate_workspace_name($ws);
-		    	#Adding workspace to creation list
-		    	if ($nocreate == 0) {
-		    		$output->{create}->{$user}->{$ws}->{$path}->{$name} = $objects->[$i];
-		    	}
-	    	} elsif (!defined($wsobj)) {
-	    		#Saving to nonexistent workspace - adding workspace to creation list
-	    		$output->{create}->{$user}->{$ws}->{""}->{""} = [$user."/".$ws,"folder",{},undef];
-	    	} else {
-	    		#Saving to existing workspace - checking permissions
-	    		$self->_check_ws_permissions($wsobj,"w",1);
-	    		#Checking object name
-		    	$name = $self->_validate_object_name($name);
-	    		#Checking for potential overwritten objects
-	    		my $obj = $self->_get_db_object({
-			    	workspace_uuid => $wsobj->{uuid},
-			    	path => $path,
+	    
+	    #Checking metadata
+	    $user_metadata //= {};
+
+	    if (ref($user_metadata) ne 'HASH') {
+		$self->_error("Meta data for ".$obj_path." is not a valid type!");	
+	    }
+
+	    #Checking object type
+	    $obj_type = $self->_validate_object_type($obj_type);
+
+	    #Checking if any workspace is listed
+	    if (length($ws) == 0) {
+		$self->_error($obj_path." is not a valid object path!");	
+	    }
+
+	    #Attempting to retrieve workspace object
+	    my $wsobj = $self->_wscache($user,$ws);
+	    if ((length($path)+length($name)) == 0) {
+		my $nocreate = 0;
+
+		#We are creating a workspace
+		if (defined($wsobj)) {
+		    if ($self->is_folder($obj_type) == 1) {
+			#We ignore creation of folders that already exist
+			$nocreate = 1;	
+		    } else {
+			#Cannot overwrite a workspace on creation
+			$self->_error("Cannot overwrite existing top level folder:".$obj->[0]);
+		    }
+		} elsif ($user ne $self->_getUsername() && $self->_adminmode() == 0) {
+		    #Users can only create their own workspaces
+		    $self->_error("Insufficient permissions to create ".$obj_path);
+		} elsif ($self->is_folder($obj_type) == 0) {
+		    #Workspace must be a folder
+		    $self->_error("Cannot create ".$obj_path." because top level objects must be folders!");
+		}
+		#Checking workspace name
+		$ws = $self->_validate_workspace_name($ws);
+		#Adding workspace to creation list
+		if ($nocreate == 0) {
+		    $output->{create}->{$user}->{$ws}->{$path}->{$name} = $obj;
+		}
+	    } elsif (!defined($wsobj)) {
+		#Saving to nonexistent workspace - adding workspace to creation list
+		$output->{create}->{$user}->{$ws}->{""}->{""} = [$user."/".$ws,"folder",{},undef];
+	    } else {
+		#Saving to existing workspace - checking permissions
+		$self->_check_ws_permissions($wsobj,"w",1);
+		#Checking object name
+		$name = $self->_validate_object_name($name);
+		#Checking for potential overwritten objects
+		my $obj = $self->_get_db_object({
+		    workspace_uuid => $wsobj->{uuid},
+		    path => $path,
 			    	name => $name
-			    },0);
-			    my $nocreate = 0;
-			    if (defined($obj)) {
-		    		if ($obj->{folder} == 1) {
-		    			if ($self->is_folder($objects->[$i]->[1]) == 1) {
-		    				#We ignore creation of folders that already exist
-		    				$nocreate = 1;	
-		    			} else {
-		    				$self->_error("Cannot overwrite directory ".$objects->[$i]->[0]." on save!");
-		    			}
-		    		} elsif ($overwrite == 0) {
-		    			$self->_error("Overwriting object ".$objects->[$i]->[0]." and overwrite flag is not set!");
-		    		}
-		    		if ($nocreate == 0) {
-		    			$output->{del}->{$user}->{$ws}->{$path}->{$name} = $obj;
-		    		}
-		    	} else {
+				},0);
+		my $nocreate = 0;
+		if (defined($obj)) {
+		    if ($obj->{folder} == 1) {
+			if ($self->is_folder($obj->[1]) == 1) {
+			    #We ignore creation of folders that already exist
+			    $nocreate = 1;	
+			} else {
+			    $self->_error("Cannot overwrite directory ".$obj_path." on save!");
+			}
+		    } elsif ($overwrite == 0) {
+			$self->_error("Overwriting object ".$obj_path." and overwrite flag is not set!");
+		    }
+		    if ($nocreate == 0) {
+			$output->{del}->{$user}->{$ws}->{$path}->{$name} = $obj;
+		    }
+		} else {
 		    		#Checking that all subdirectories exist, and if they don't, adding them
-		    		my $array = [split(/\//,$path)];
-		    		my $currpath = "";
-		    		for (my $i=0; $i < @{$array}; $i++) {
-		    			my $subdir = $self->_get_db_object({
-					    	workspace_uuid => $wsobj->{uuid},
-					    	path => $currpath,
-					    	name => $array->[$i]
-					    },0);
-					    if (!defined($subdir)) {
-					    	$output->{create}->{$user}->{$ws}->{$currpath}->{$array->[$i]} = [$user."/".$ws."/".$currpath."/".$array->[$i],"folder",{},undef];
-					    }
-					    if (length($currpath) > 0) {
-					    	$currpath .= "/";
-					    }
-					    $currpath .= $array->[$i];
-		    		}
-		    	}
-		    	if ($nocreate == 0) {
-		    		$output->{create}->{$user}->{$ws}->{$path}->{$name} = $objects->[$i];
-		    	}
-	    	}
-    	}
+		    my $array = [split(/\//,$path)];
+		    my $currpath = "";
+		    for my $elt (@$array)
+			my $subdir = $self->_get_db_object({
+			    workspace_uuid => $wsobj->{uuid},
+			    path => $currpath,
+			    name => $elt
+			    },0);
+		    if (!defined($subdir)) {
+			$output->{create}->{$user}->{$ws}->{$currpath}->{$elt} = [$user."/".$ws."/".$currpath."/".$elt,"folder",{},undef];
+		    }
+		    if (length($currpath) > 0) {
+			$currpath .= "/";
+		    }
+		    $currpath .= $elt;
+		}
+	    }
+	    if ($nocreate == 0) {
+		$output->{create}->{$user}->{$ws}->{$path}->{$name} = $obj;
+	    }
+	}
     }
-    return $output;
+}
+return $output;
 }
 #Only call this function if the entire deletion list has been validated for existance and permissions** 
 sub _delete_validated_object_set {
@@ -945,30 +968,30 @@ sub _create_object {
 }
 #Retreive a workspace from the database either by uuid or by name/user**
 sub _wscache {
-	my ($self,$user,$ws,$throwerror) = @_;
-	if (!defined($CallContext->{_wscache}->{$user}->{$ws})) {
-		if ($user eq "_uuid") {
-			my $obj = $self->_get_db_ws({
-				uuid => $ws
-			});
-			$CallContext->{_wscache}->{$user}->{$ws} = $obj;
-			$CallContext->{_wscache}->{$obj->{owner}}->{$obj->{name}} = $obj;
-		} else {
-			my $obj = $self->_get_db_ws({
-				owner => $user,
-				name => $ws
-			});
-			$CallContext->{_wscache}->{$user}->{$ws} = $obj;
-			$CallContext->{_wscache}->{_uuid}->{$obj->{uuid}} = $obj;
-		}
+    my ($self, $user, $ws, $throwerror) = @_;
+    if (!defined($CallContext->{_wscache}->{$user}->{$ws})) {
+	if ($user eq "_uuid") {
+	    my $obj = $self->_get_db_ws({
+		uuid => $ws
+		});
+	    $CallContext->{_wscache}->{$user}->{$ws} = $obj;
+	    $CallContext->{_wscache}->{$obj->{owner}}->{$obj->{name}} = $obj;
+	} else {
+	    my $obj = $self->_get_db_ws({
+		owner => $user,
+		name => $ws
+		});
+	    $CallContext->{_wscache}->{$user}->{$ws} = $obj;
+	    $CallContext->{_wscache}->{_uuid}->{$obj->{uuid}} = $obj;
 	}
-	if (!defined($CallContext->{_wscache}->{$user}->{$ws})) {
-		#delete $CallContext->{_wscache}->{$user}->{$ws};
-		if ($throwerror == 1) {
-			$self->_error("Workspace ".$user."/".$ws." does not exist!");
-		}
+    }
+    if (!defined($CallContext->{_wscache}->{$user}->{$ws})) {
+	#delete $CallContext->{_wscache}->{$user}->{$ws};
+	if ($throwerror == 1) {
+	    $self->_error("Workspace ".$user."/".$ws." does not exist!");
 	}
-	return $CallContext->{_wscache}->{$user}->{$ws};
+    }
+    return $CallContext->{_wscache}->{$user}->{$ws};
 }
 
 #List all workspaces matching input query**
@@ -1640,29 +1663,33 @@ sub create
     #BEGIN create
     $output = [];
     $input = $self->_validateargs($input,["objects"],{
-		createUploadNodes => 0,
-		downloadFromLinks => 0,
-		overwrite => 0,
-		permission => "n",
-		setowner => undef
-	});
+	createUploadNodes => 0,
+	downloadFromLinks => 0,
+	overwrite => 0,
+	permission => "n",
+	setowner => undef,
+    });
 	
-	if (defined($input->{setowner})) {
-		if ($self->_adminmode() == 0) {
-			$self->_error("Cannot set owner unless adminmode is active!");
-		}
-		$CallContext->{_setowner} = $input->{setowner};
+    if (defined($input->{setowner})) {
+	if ($self->_adminmode() == 0) {
+	    $self->_error("Cannot set owner unless adminmode is active!");
 	}
+	$CallContext->{_setowner} = $input->{setowner};
+    }
     #Validating permissions
     $input->{permission} = $self->_validate_workspace_permission($input->{permission});
-	#Validating input objects
+
+    #Validating input objects
     my $voutput = $self->_validate_save_objects_before_saving($input->{objects},$input->{overwrite});
-	#Deleting overwritten objects
+
+    #Deleting overwritten objects
     $self->_delete_validated_object_set($voutput->{del});
-	#Creating validated objects
-	my $objects = $self->_create_validated_object_set($voutput->{create},$input->{createUploadNodes},$input->{downloadFromLinks},$input->{permission});
-    for (my $i=0; $i < @{$objects}; $i++) {
-    	push(@{$output},$self->_generate_object_meta($objects->[$i]));	
+
+    #Creating validated objects
+    my $objects = $self->_create_validated_object_set($voutput->{create},$input->{createUploadNodes},$input->{downloadFromLinks},$input->{permission});
+    for my $obj (@$objects)
+    {
+    	push(@{$output},$self->_generate_object_meta($obj));	
     }
     #END create
     my @_bad_returns;

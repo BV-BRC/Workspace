@@ -218,6 +218,22 @@ sub encode_output_from_exception {
     return $self->encode_output_from_object($json_error);
 }
 
+#
+# another override.
+#
+sub get_package_isa {
+    my ($self, $module) = @_;
+    my $original_isa;
+    { no strict 'refs'; $original_isa = \@{"${module}::ISA"}; }
+    my @new_isa = @$original_isa;
+
+    my $base = $self->package_base;
+    if (not $module->isa($base)) {
+        Class::Load::load_class($base);
+        push(@new_isa, $base);
+    }
+    return \@new_isa;
+}
 sub trim {
     my ($str) = @_;
     if (!(defined $str)) {
@@ -244,6 +260,44 @@ sub getIPAddress {
         }
     }
     return $self->_plack_req->address;
+}
+
+#
+# Ping method reflected from /ping on the service.
+#
+sub ping
+{
+    my($self, $env) = @_;
+    return [ 200, ["Content-type" => "text/plain"], [ "OK\n" ] ];
+}
+
+
+#
+# Authenticated ping method reflected from /auth_ping on the service.
+#
+sub auth_ping
+{
+    my($self, $env) = @_;
+
+    my $req = Plack::Request->new($env);
+    my $token = $req->header("Authorization");
+
+    if (!$token)
+    {
+	return [401, [], ["Authentication required"]];
+    }
+
+    my $auth_token = Bio::KBase::AuthToken->new(token => $token, ignore_authrc => 1);
+    my $valid = $auth_token->validate();
+
+    if ($valid)
+    {
+	return [200, ["Content-type" => "text/plain"], ["OK " . $auth_token->user_id . "\n"]];
+    }
+    else
+    {
+	return [403, [], "Authentication failed"];
+    }
 }
 
 sub call_method {
@@ -302,6 +356,11 @@ sub call_method {
 	my $tag = $self->_plack_req->header("Kbrpc-Tag");
 	if (!$tag)
 	{
+	    if (!$self->{hostname}) {
+		chomp($self->{hostname} = `hostname`);
+                $self->{hostname} ||= 'unknown-host';
+	    }
+
 	    my ($t, $us) = &$get_time();
 	    $us = sprintf("%06d", $us);
 	    my $ts = strftime("%Y-%m-%dT%H:%M:%S.${us}Z", gmtime $t);

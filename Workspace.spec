@@ -5,7 +5,6 @@ typedef string WorkspacePerm;
 /* Login name for user */
 typedef string Username;
 
-/* Login name for user */
 typedef int bool;
 
 /* Indication of a system time */
@@ -51,7 +50,11 @@ typedef mapping<string,string> AutoMetadata;
 	string shockurl - shockurl included if object is a reference to a shock node
 	
 */
-typedef tuple<ObjectName,ObjectType,FullObjectPath,Timestamp creation_time,ObjectID,Username object_owner,ObjectSize,UserMetadata,AutoMetadata,WorkspacePerm user_permission,WorkspacePerm global_permission,string shockurl> ObjectMeta;
+typedef tuple<ObjectName, ObjectType, FullObjectPath, Timestamp creation_time,
+	      ObjectID, Username object_owner, ObjectSize,
+	      UserMetadata, AutoMetadata,
+	      WorkspacePerm user_permission, WorkspacePerm global_permission, string shockurl> ObjectMeta;
+
 
 /********** DATA LOAD FUNCTIONS ********************/
 
