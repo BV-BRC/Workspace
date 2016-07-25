@@ -1,4 +1,5 @@
 bam
+bai
 biochemistry
 contigs
 csv
@@ -46,11 +47,13 @@ rxnprobs
 string
 svg
 tar_gz
+tbi
 transcriptomics_experiment
 transcripts
 txt
 unspecified
 vcf
+vcf_gz
 wig
 xls
 xlsx
