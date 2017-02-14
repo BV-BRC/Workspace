@@ -305,7 +305,7 @@ sub _validate_object_type {
 		$type = "folder";
 	}
 	if (!defined($self->{_types}->{$type})) {
-		$self->_error("Invalid type submitted!");
+		$self->_error("Invalid type \"$type\" submitted!");
 	}
 	return $type;
 }
