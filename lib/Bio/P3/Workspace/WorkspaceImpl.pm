@@ -590,7 +590,7 @@ sub _make_shock_node_public {
 	my $res = $ua->get($url."/acl/",Authorization => "OAuth ".$self->_wsauth());
 	my $json = JSON::XS->new;
 	my $data = $json->decode($res->content);
-sear	$res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
+	$res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
 }
 
 sub _update_shock_node {
@@ -3247,11 +3247,6 @@ a string
 
 =over 4
 
-
-
-=item Description
-
-Login name for user
 
 
 =item Definition
