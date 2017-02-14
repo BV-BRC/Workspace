@@ -103,17 +103,18 @@ sub _validateargs {
 		push(@{$args->{_error}}, $arg);
 	    }
 	}
-	if (defined($args->{_error})) {
-		$self->_error("Mandatory arguments ".join("; ",@{$args->{_error}})." missing.");
-	}
-	if (defined($optionalArguments)) {
-	    foreach my $argument (keys(%{$optionalArguments})) {
-		if (!defined($args->{$argument})) {
-		    $args->{$argument} = $optionalArguments->{$argument};	
-		}
+    }
+    if (defined($args->{_error})) {
+	$self->_error("Mandatory arguments ".join("; ",@{$args->{_error}})." missing.");
+    }
+    if (defined($optionalArguments)) {
+	foreach my $argument (keys(%{$optionalArguments})) {
+	    if (!defined($args->{$argument})) {
+		$args->{$argument} = $optionalArguments->{$argument};	
 	    }
 	}
-	return $args;
+    }
+    return $args;
 }
 
 sub _shockurl {
@@ -708,27 +709,29 @@ sub _validate_save_objects_before_saving {
 		    my $array = [split(/\//,$path)];
 		    my $currpath = "";
 		    for my $elt (@$array)
+		    {
 			my $subdir = $self->_get_db_object({
 			    workspace_uuid => $wsobj->{uuid},
 			    path => $currpath,
 			    name => $elt
 			    },0);
-		    if (!defined($subdir)) {
-			$output->{create}->{$user}->{$ws}->{$currpath}->{$elt} = [$user."/".$ws."/".$currpath."/".$elt,"folder",{},undef];
+			if (!defined($subdir)) {
+			    $output->{create}->{$user}->{$ws}->{$currpath}->{$elt} = [$user."/".$ws."/".$currpath."/".$elt,"folder",{},undef];
+			}
+			if (length($currpath) > 0) {
+			    $currpath .= "/";
+			}
+			$currpath .= $elt;
 		    }
-		    if (length($currpath) > 0) {
-			$currpath .= "/";
-		    }
-		    $currpath .= $elt;
 		}
-	    }
-	    if ($nocreate == 0) {
-		$output->{create}->{$user}->{$ws}->{$path}->{$name} = $obj;
+
+		if ($nocreate == 0) {
+		    $output->{create}->{$user}->{$ws}->{$path}->{$name} = $obj;
+		}
 	    }
 	}
     }
-}
-return $output;
+    return $output;
 }
 #Only call this function if the entire deletion list has been validated for existance and permissions** 
 sub _delete_validated_object_set {
