@@ -193,7 +193,7 @@ sub _get_db_ws {
     }
     my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
     my $object = $cursor->next;
-    if (!defined($object) $throwerror) {
+    if (!defined($object) && $throwerror) {
 	$self->_error("Workspace not found!");
     }
     return $object;
