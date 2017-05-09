@@ -615,12 +615,22 @@ sub _make_shock_node_public {
 }
 
 sub _update_shock_node {
-	my ($self,$object,$force) = @_;
-	if ($force == 1 ||
-	    !defined($self->{_shockupdate}->{$object->{uuid}}) ||
-	    (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
-		my $ua = LWP::UserAgent->new();
-		my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
+    my ($self,$object,$force) = @_;
+    if ($force == 1 ||
+	!defined($self->{_shockupdate}->{$object->{uuid}}) ||
+	(time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
+
+	#
+	# Need to ensure the shock node is valid (we have had bugs in the past that resulted
+	# in the node string ending in / which results in an attempted dump of all nodes in shock)
+	#
+	if ($object->{shocknode} =~ m,/$,)
+	{
+	    warn "Invalid shock node $object->{shocknode} in " . Dumper($object);
+	    return;
+	}
+	my $ua = LWP::UserAgent->new();
+	my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
 		my $json = JSON::XS->new;
 		my $data = $json->decode($res->content);
 		if (length($data->{data}->{file}->{name}) == 0) {
