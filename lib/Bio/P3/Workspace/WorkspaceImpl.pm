@@ -3076,7 +3076,7 @@ sub set_permissions
 
 	    $self->_updateDB("workspaces",
 			 {uuid => $wsobj->{uuid}},
-			 { '$set' => { permissions => { $esc_user => $perm } } });
+			 { '$set' => { permissions . "." . $esc_user => $perm } });
 	# {'$set' => {'permissions.'.$perm->[0] => $perm->[1]}});
     		$wsobj->{permissions}->{$user} = $perm;
     	}
