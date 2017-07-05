@@ -245,7 +245,13 @@ sub _generate_object_meta {
 	}
 }
 
-#Retrieving object data from filesystem or giving permission to download shock node**
+#
+# Retrieving object data from filesystem or giving permission to download shock node**
+#
+# This routine is only invoked after verifying the current user has permissions on the file.
+# Thus we can check for the Shock permissions to allow the current user permission
+# if that user is different from the owner of the file.
+#
 sub _retrieve_object_data {
 	my ($self,$obj,$wsobj) = @_;
 	if ($obj->{folder} == 1) {
@@ -263,7 +269,9 @@ sub _retrieve_object_data {
 	} else {
 		if ($wsobj->{global_permission} ne "n") {
 			$self->_make_shock_node_public($obj->{shocknode});
-		} else {
+		}
+		else
+		{
 			my $ua = LWP::UserAgent->new();
 			my $res = $ua->put($obj->{shocknode}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
 		}
@@ -611,7 +619,15 @@ sub _make_shock_node_public {
 	my $res = $ua->get($url."/acl/",Authorization => "OAuth ".$self->_wsauth());
 	my $json = JSON::XS->new;
 	my $data = $json->decode($res->content);
-	$res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
+
+	#
+	# This is wrong:
+	# $res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
+	#
+	# The current shock in PATRIC is old and does not support the public acl. So here we will
+	# add the user to the acl list.
+	#
+	$ua->put("$url/acl/read?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
 }
 
 sub _update_shock_node {
