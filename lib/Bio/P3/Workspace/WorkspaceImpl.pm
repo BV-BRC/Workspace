@@ -2360,7 +2360,10 @@ sub get_download_url
 		$token = $self->_wsauth();
 	    }
 	    
-	    my $res = $ua->put($obj->{shocknode}."/acl/read?users=$user", Authorization => "OAuth $token");
+	    #
+	    # ACL change requires using the workspace owner token
+	    #
+	    my $res = $ua->put($obj->{shocknode}."/acl/read?users=$user", Authorization => "OAuth " . $self->_wsauth());
 
 	    $doc->{shock_node} = $obj->{shocknode};
 	    $doc->{user_token} = $token;
