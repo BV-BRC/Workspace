@@ -16,7 +16,7 @@ Workspace
 =cut
 
 #BEGIN_HEADER
-
+use base 'RPC::Any::Package::JSONRPC';
 use File::Path;
 use File::Copy ("cp","mv");
 use File::stat;
@@ -54,6 +54,11 @@ sub _authentication {
 sub _getUsername {
 	my ($self) = @_;
 	return $CallContext->user_id;
+}
+
+sub _getEscapedUsername {
+	my ($self) = @_;
+	return $self->_escape_username_for_mongo($CallContext->user_id);
 }
 
 sub _get_newobject_owner {
@@ -191,6 +196,23 @@ sub _get_db_ws {
 	if (!defined($object) && defined($throwerror) && $throwerror == 1) {
 		$self->_error("Workspace not found!");
 	}
+	#
+	# We must walk the permissions field and unescape the username keys.
+	#
+	if (ref($object) eq 'HASH')
+	{
+	    my $old_perms = $object->{permissions};
+	    if (ref($old_perms) eq 'HASH')
+	    {
+		my $new_perms = {};
+		while (my($user, $perm) = each %$old_perms)
+		{
+		    $new_perms->{$self->_unescape_username_for_mongo($user)} = $perm;
+		}
+		$object->{permissions} = $new_perms;
+	    }
+	}
+	     
 	return $object;
 }
 
@@ -223,7 +245,13 @@ sub _generate_object_meta {
 	}
 }
 
-#Retrieving object data from filesystem or giving permission to download shock node**
+#
+# Retrieving object data from filesystem or giving permission to download shock node**
+#
+# This routine is only invoked after verifying the current user has permissions on the file.
+# Thus we can check for the Shock permissions to allow the current user permission
+# if that user is different from the owner of the file.
+#
 sub _retrieve_object_data {
 	my ($self,$obj,$wsobj) = @_;
 	if ($obj->{folder} == 1) {
@@ -241,7 +269,9 @@ sub _retrieve_object_data {
 	} else {
 		if ($wsobj->{global_permission} ne "n") {
 			$self->_make_shock_node_public($obj->{shocknode});
-		} else {
+		}
+		else
+		{
 			my $ua = LWP::UserAgent->new();
 			my $res = $ua->put($obj->{shocknode}."/acl/all?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
 		}
@@ -352,6 +382,20 @@ sub _check_ws_permissions {
 		return 0;
 	}
 	return 1;
+}
+
+sub _escape_username_for_mongo
+{
+    my($self, $name) = @_;
+
+    return uri_escape($name, '.\$');
+}
+
+sub _unescape_username_for_mongo
+{
+    my($self, $name) = @_;
+
+    return uri_unescape($name);
 }
 
 #Parses input full paths to user, workspace, path, and object**
@@ -575,16 +619,34 @@ sub _make_shock_node_public {
 	my $res = $ua->get($url."/acl/",Authorization => "OAuth ".$self->_wsauth());
 	my $json = JSON::XS->new;
 	my $data = $json->decode($res->content);
-	$res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
+
+	#
+	# This is wrong:
+	# $res = $ua->delete($url."/acl/read?users=".join(",",@{$data->{data}->{read}}),Authorization => "OAuth ".$self->_wsauth());
+	#
+	# The current shock in PATRIC is old and does not support the public acl. So here we will
+	# add the user to the acl list.
+	#
+	$ua->put("$url/acl/read?users=".$self->_getUsername(),Authorization => "OAuth ".$self->_wsauth());
 }
 
 sub _update_shock_node {
-	my ($self,$object,$force) = @_;
-	if ($force == 1 ||
-	    !defined($self->{_shockupdate}->{$object->{uuid}}) ||
-	    (time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
-		my $ua = LWP::UserAgent->new();
-		my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
+    my ($self,$object,$force) = @_;
+    if ($force == 1 ||
+	!defined($self->{_shockupdate}->{$object->{uuid}}) ||
+	(time() - $self->{_shockupdate}->{$object->{uuid}}) > $self->{_params}->{"update-interval"}) {
+
+	#
+	# Need to ensure the shock node is valid (we have had bugs in the past that resulted
+	# in the node string ending in / which results in an attempted dump of all nodes in shock)
+	#
+	if ($object->{shocknode} =~ m,/$,)
+	{
+	    warn "Invalid shock node $object->{shocknode} in " . Dumper($object);
+	    return;
+	}
+	my $ua = LWP::UserAgent->new();
+	my $res = $ua->get($object->{shocknode},Authorization => "OAuth ".$self->_wsauth());
 		my $json = JSON::XS->new;
 		my $data = $json->decode($res->content);
 		if (length($data->{data}->{file}->{name}) == 0) {
@@ -642,6 +704,7 @@ sub _validate_save_objects_before_saving {
 		    	#Checking workspace name
 		    	$ws = $self->_validate_workspace_name($ws);
 		    	#Adding workspace to creation list
+			print Dumper(O => $objects->[$i], $output, $nocreate);
 		    	if ($nocreate == 0) {
 		    		$output->{create}->{$user}->{$ws}->{$path}->{$name} = $objects->[$i];
 		    	}
@@ -933,8 +996,12 @@ sub _create_object {
 		my $fstat = stat($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
 		$object->{size} = $fstat->size();
 	}
-	#Creating object in mongodb
+	# Creating object in mongodb
+	# We need to remove wsobj from the object so it doesn't land in the database.
+	#
+	my $wsobj_del = delete $object->{wsobj};
 	$self->_mongodb()->get_collection('objects')->insert($object);
+	$object->{wsobj} = $wsobj_del;
     return $object;
 }
 #Retreive a workspace from the database either by uuid or by name/user**
@@ -967,65 +1034,86 @@ sub _wscache {
 
 #List all workspaces matching input query**
 sub _list_workspaces {
-	my ($self,$user,$query) = @_;
-	if (defined($user)) {
-		$query->{owner} = $user;
-	}
-	if ($self->_adminmode() != 1) {
-		if (defined($query->{'$or'})) {
-			my $oldarray = $query->{'$or'};
-			$query->{'$or'} = [];
-			for (my $i=0; $i < @{$oldarray}; $i++) {
-				my $included = 0;
-				if (!defined($oldarray->[$i]->{owner})) {
-					my $hash = {};
-					foreach my $key (keys(%{$oldarray->[$i]})) {
-						$hash->{$key} = $oldarray->[$i]->{$key};
-					}
-					$hash->{owner} = $self->_getUsername();
-					push(@{$query->{'$or'}},$hash);
-				} elsif ($oldarray->[$i]->{owner} eq $self->_getUsername()) {
-					$included = 1;
-					my $hash = {};
-					foreach my $key (keys(%{$oldarray->[$i]})) {
-						$hash->{$key} = $oldarray->[$i]->{$key};
-					}
-					push(@{$query->{'$or'}},$hash);
-				}
-				if (!defined($oldarray->[$i]->{global_permission})) {
-					my $hash = {};
-					foreach my $key (keys(%{$oldarray->[$i]})) {
-						$hash->{$key} = $oldarray->[$i]->{$key};
-					}
-					$hash->{global_permission} = {'$ne' => "n"};
-					push(@{$query->{'$or'}},$hash);
-				} elsif ($oldarray->[$i]->{global_permission} ne "n" && $included == 0) {
-					$included = 1;
-					my $hash = {};
-					foreach my $key (keys(%{$oldarray->[$i]})) {
-						$hash->{$key} = $oldarray->[$i]->{$key};
-					}
-					push(@{$query->{'$or'}},$hash);
-				}
-				if (!defined($oldarray->[$i]->{"permissions.".$self->_getUsername()})) {
-					my $hash = {};
-					foreach my $key (keys(%{$oldarray->[$i]})) {
-						$hash->{$key} = $oldarray->[$i]->{$key};
-					}
-					$hash->{"permissions.".$self->_getUsername()} = {'$exists' => 1 };
-					push(@{$query->{'$or'}},$hash);
-				} elsif ($included == 0) {
-					my $hash = {};
-					foreach my $key (keys(%{$oldarray->[$i]})) {
-						$hash->{$key} = $oldarray->[$i]->{$key};
-					}
-					push(@{$query->{'$or'}},$hash);
-				}
-			}
-		} else {
-			$query->{'$or'} = [ {owner => $self->_getUsername()},{global_permission =>  {'$ne' => "n"}},{"permissions.".$self->_getUsername() =>  {'$exists' => 1 }} ]
+    my ($self,$user,$query) = @_;
+    if (defined($user)) {
+	$query->{owner} = $user;
+    }
+    if ($self->_adminmode() != 1)
+    {
+	my $user_perm_check = { join(".", "permissions", $self->_getEscapedUsername()) => { '$exists' => 1 }};
+	if (defined($query->{'$or'}))
+	{
+	    my $oldarray = $query->{'$or'};
+	    $query->{'$or'} = [];
+
+	    for my $old_elt (@{$oldarray})
+	    {
+		my $included = 0;
+		if (!defined($old_elt->{owner}))
+		{
+		    my $hash = {};
+		    foreach my $key (keys(%{$old_elt}))
+		    {
+			$hash->{$key} = $old_elt->{$key};
+		    }
+		    $hash->{owner} = $self->_getUsername();
+		    push(@{$query->{'$or'}},$hash);
 		}
+		elsif ($old_elt->{owner} eq $self->_getUsername())
+		{
+		    $included = 1;
+		    my $hash = {};
+		    foreach my $key (keys(%{$old_elt})) {
+			$hash->{$key} = $old_elt->{$key};
+		    }
+		    push(@{$query->{'$or'}},$hash);
+		}
+		if (!defined($old_elt->{global_permission}))
+		{
+		    my $hash = {};
+		    foreach my $key (keys(%{$old_elt})) {
+			$hash->{$key} = $old_elt->{$key};
+		    }
+		    $hash->{global_permission} = {'$ne' => "n"};
+		    push(@{$query->{'$or'}},$hash);
+		}
+		elsif ($old_elt->{global_permission} ne "n" && $included == 0)
+		{
+		    $included = 1;
+		    my $hash = {};
+		    foreach my $key (keys(%{$old_elt})) {
+			$hash->{$key} = $old_elt->{$key};
+		    }
+		    push(@{$query->{'$or'}},$hash);
+		}
+		if (!defined($old_elt->{"permissions.".$self->_getUsername()}))
+		{
+		    my $hash = {};
+		    foreach my $key (keys(%{$old_elt})) {
+			$hash->{$key} = $old_elt->{$key};
+		    }
+		    $hash->{"permissions.".$self->_getUsername()} = {'$exists' => 1 };
+		    push(@{$query->{'$or'}},$hash);
+		}
+		elsif ($included == 0)
+		{
+		    my $hash = {};
+		    foreach my $key (keys(%{$old_elt})) {
+			$hash->{$key} = $old_elt->{$key};
+		    }
+		    push(@{$query->{'$or'}},$hash);
+		}
+	    }
 	}
+	else
+	{
+	    $query->{'$or'} = [
+			   { owner => $self->_getUsername() },
+			   { global_permission =>  {'$ne' => "n"} },
+			   $user_perm_check,
+		];
+	}
+    }
     my $objs = [];
     my $cursor = $self->_mongodb()->get_collection('workspaces')->find($query);
 	while (my $object = $cursor->next) {
@@ -1654,7 +1742,7 @@ sub create
 	#Deleting overwritten objects
     $self->_delete_validated_object_set($voutput->{del});
 	#Creating validated objects
-	my $objects = $self->_create_validated_object_set($voutput->{create},$input->{createUploadNodes},$input->{downloadFromLinks},$input->{permission});
+    my $objects = $self->_create_validated_object_set($voutput->{create},$input->{createUploadNodes},$input->{downloadFromLinks},$input->{permission});
     for (my $i=0; $i < @{$objects}; $i++) {
     	push(@{$output},$self->_generate_object_meta($objects->[$i]));	
     }
@@ -2272,7 +2360,10 @@ sub get_download_url
 		$token = $self->_wsauth();
 	    }
 	    
-	    my $res = $ua->put($obj->{shocknode}."/acl/read?users=$user", Authorization => "OAuth $token");
+	    #
+	    # ACL change requires using the workspace owner token
+	    #
+	    my $res = $ua->put($obj->{shocknode}."/acl/read?users=$user", Authorization => "OAuth " . $self->_wsauth());
 
 	    $doc->{shock_node} = $obj->{shocknode};
 	    $doc->{user_token} = $token;
@@ -2983,24 +3074,38 @@ sub set_permissions
     		$self->_check_ws_permissions($wsobj,"o",1);
     	}
     	$input->{new_global_permission} = $self->_validate_workspace_permission($input->{new_global_permission});
-    	$self->_updateDB("workspaces",{uuid => $wsobj->{uuid}},{'$set' => {global_permission => $input->{new_global_permission}}});
+    	$self->_updateDB("workspaces",
+		     { uuid => $wsobj->{uuid} },
+		     {'$set' => { global_permission => $input->{new_global_permission}}});
     	$wsobj->{global_permission} = $input->{new_global_permission};
     }
-    for (my $i=0; $i < @{$input->{permissions}}; $i++) {
-    	$input->{permissions}->[$i]->[1] = $self->_validate_workspace_permission($input->{permissions}->[$i]->[1]);
-    	if ($input->{permissions}->[$i]->[1] eq "n" && defined($wsobj->{permissions}->{$input->{permissions}->[$i]->[0]})) {
-    		$self->_updateDB("workspaces",{uuid => $wsobj->{uuid}},{'$unset' => {'permissions.'.$input->{permissions}->[$i]->[0] => $wsobj->{permissions}->{$input->{permissions}->[$i]->[0]}}});
-    		delete $wsobj->{permissions}->{$input->{permissions}->[$i]->[0]};
+    for my $perm (@{$input->{permissions}})
+    {
+    	$perm->[1] = $self->_validate_workspace_permission($perm->[1]);
+    	if ($perm->[1] eq "n" && defined($wsobj->{permissions}->{$perm->[0]})) {
+    		$self->_updateDB("workspaces",
+			     { uuid => $wsobj->{uuid} },
+			     {'$unset' =>
+			      { 'permissions.'. $self->_escape_username_for_mongo($perm->[0]) =>
+				    $wsobj->{permissions}->{$perm->[0]}}});
+    		delete $wsobj->{permissions}->{$perm->[0]};
     	} else {
-    		$self->_updateDB("workspaces",{uuid => $wsobj->{uuid}},{'$set' => {'permissions.'.$input->{permissions}->[$i]->[0] => $input->{permissions}->[$i]->[1]}});
-    		$wsobj->{permissions}->{$input->{permissions}->[$i]->[0]} = $input->{permissions}->[$i]->[1];
+	    my($user, $perm) = @{$perm};
+	    my $esc_user = $self->_escape_username_for_mongo($user);
+
+	    $self->_updateDB("workspaces",
+			 {uuid => $wsobj->{uuid}},
+			 { '$set' => { "permissions." . $esc_user => $perm } });
+	# {'$set' => {'permissions.'.$perm->[0] => $perm->[1]}});
+    		$wsobj->{permissions}->{$user} = $perm;
     	}
     }
     $output = [];
     foreach my $puser (keys(%{$wsobj->{permissions}})) {
     	push(@{$output},[$puser,$wsobj->{permissions}->{$puser}]);
-	}
-	push(@{$output},["global_permission",$wsobj->{global_permission}]);
+    }
+    push(@{$output},["global_permission",$wsobj->{global_permission}]);
+
     #END set_permissions
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -3087,14 +3192,16 @@ sub list_permissions
     #BEGIN list_permissions
     $input = $self->_validateargs($input,["objects"],{});
     $output = {};
-    for (my $i=0; $i < @{$input->{objects}}; $i++) {
-    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($input->{objects}->[$i]);
-   		my $wsobj = $self->_wscache($user,$ws,1);
-	    $self->_check_ws_permissions($wsobj,"r",1);
-	    foreach my $puser (keys(%{$wsobj->{permissions}})) {
-		    push(@{$output->{$input->{objects}->[$i]}},[$puser,$wsobj->{permissions}->{$puser}]);
-	    }
-	    push(@{$output->{$input->{objects}->[$i]}},["global_permission",$wsobj->{global_permission}]);
+    for my $obj (@{$input->{objects}})
+    {
+    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($obj);
+	my $wsobj = $self->_wscache($user,$ws,1);
+	$self->_check_ws_permissions($wsobj,"r",1);
+	foreach my $puser (keys(%{$wsobj->{permissions}}))
+	{
+	    push(@{$output->{$obj}},[$puser,$wsobj->{permissions}->{$puser}]);
+	}
+	push(@{$output->{$obj}},["global_permission",$wsobj->{global_permission}]);
     }
     #END list_permissions
     my @_bad_returns;
