@@ -38,6 +38,7 @@ model
 modelfolder
 model_edit
 modeltemplate
+nwk
 pdf
 png
 ppt
