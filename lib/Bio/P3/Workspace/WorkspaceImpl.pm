@@ -2570,7 +2570,7 @@ sub ls
     	my $objs = [];
     	if ($fullpath eq "" || $fullpath eq "/") {
     		$objs = $self->_list_workspaces(undef,$self->_formatQuery($input->{query},1));
-    	} elsif ($fullpath =~ m/^\/([^\/]+)\/*$/) {
+    	} elsif ($fullpath =~ m,^/([^/]+)/*$,) {
     		$objs = $self->_list_workspaces($1,$self->_formatQuery($input->{query},1));
     	} else {
     		$objs = $self->_list_objects($fullpath,$self->_formatQuery($input->{query},0),$input->{excludeDirectories},$input->{excludeObjects},$input->{recursive});
