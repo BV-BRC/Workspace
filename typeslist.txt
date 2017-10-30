@@ -1,4 +1,6 @@
 bam
+bai
+bigwig
 biochemistry
 contigs
 csv
@@ -36,6 +38,7 @@ model
 modelfolder
 model_edit
 modeltemplate
+nwk
 pdf
 png
 ppt
@@ -46,11 +49,13 @@ rxnprobs
 string
 svg
 tar_gz
+tbi
 transcriptomics_experiment
 transcripts
 txt
 unspecified
 vcf
+vcf_gz
 wig
 xls
 xlsx
