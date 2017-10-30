@@ -121,4 +121,3 @@ to serve the actual download documents. We use the AnyEvent
 infrastructure to allow multiple downlaods to be processed at once. It
 will also host a download data item garbage collection timer to purge
 the downloads collection of expired entries.
-

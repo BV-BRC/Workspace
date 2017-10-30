@@ -3,6 +3,7 @@ use strict;
 use Getopt::Long::Descriptive;
 use Data::Dumper;
 use JSON::XS;
+use Encode;
 
 =head1 NAME
 
@@ -35,19 +36,41 @@ print($usage->text), exit if $opt->help;
 my $directory = $ARGV[0];
 
 my $JSON = JSON::XS->new->utf8(1);
-open (my $fh,"<",$directory."/object.txt");
 my $data;
-while (my $line = <$fh>) {
-	$data .= $line;	
-}
-close($fh);
+if (open (my $fh,"<",$directory."/object.txt"))
+{
+    local $/;
+    undef $/;
 
+    $data = <$fh>;
+    close($fh);
+}
+else
+{
+    die "$0: cannot read $directory/object.txt: $!";
+}
+    
 my $metadata = {};
 #*******************************************************************
 #Start type specific code to generate automated metadata
 #*******************************************************************
 #You data object is loaded as text in "$data"
-$data = $JSON->decode($data);
+
+eval {
+    $data = $JSON->decode($data);
+};
+if ($@)
+{
+    if ($@ =~ /malformed UTF-8/)
+    {
+	$data = $JSON->decode(encode('utf-8', $data));
+    }
+    else
+    {
+	die "$0: Error parsing data in $directory: $@";
+    }
+}
+
 *******************************************************************
 #End type specific code to generate automated metadata
 #*******************************************************************
