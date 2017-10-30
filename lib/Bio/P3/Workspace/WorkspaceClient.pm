@@ -1,23 +1,18 @@
 package Bio::P3::Workspace::WorkspaceClient;
 
-use JSON::RPC::Client;
 use POSIX;
 use strict;
 use Data::Dumper;
 use URI;
-use Bio::KBase::Exceptions;
+
 my $get_time = sub { time, 0 };
 eval {
     require Time::HiRes;
     $get_time = sub { Time::HiRes::gettimeofday() };
 };
 
-use Bio::KBase::AuthToken;
+use P3AuthToken;
 
-# Client version should match Impl version
-# This is a Semantic Version number,
-# http://semver.org
-our $VERSION = "0.1.0";
 
 =head1 NAME
 
@@ -30,6 +25,7 @@ Bio::P3::Workspace::WorkspaceClient
 
 
 =cut
+
 
 sub new
 {
@@ -85,20 +81,20 @@ sub new
     # We create an auth token, passing through the arguments that we were (hopefully) given.
 
     {
-	my $token = Bio::KBase::AuthToken->new(@args);
+	my $token = P3AuthToken->new(@args);
 	
-	if (!$token->error_message)
+	if (my $token_str = $token->token())
 	{
-	    $self->{token} = $token->token;
-	    $self->{client}->{token} = $token->token;
+	    $self->{token} = $token_str;
+	    $self->{client}->{token} = $token_str;
 	}
     }
 
     my $ua = $self->{client}->ua;	 
     my $timeout = $ENV{CDMI_TIMEOUT} || (30 * 60);	 
     $ua->timeout($timeout);
+    $ua->agent("Bio::P3::Workspace::WorkspaceClient UserAgent");
     bless $self, $class;
-    #    $self->_validate_version();
     return $self;
 }
 
@@ -225,8 +221,7 @@ sub create
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function create (received $n, expecting 1)");
+        die "Invalid argument count for function create (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -235,8 +230,7 @@ sub create
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to create:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'create');
+	    die $msg;
 	}
     }
 
@@ -245,20 +239,15 @@ sub create
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'create',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking create:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method create",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'create',
-				       );
+	die "Error invoking method create: " .  $self->{client}->status_line;
     }
 }
 
@@ -372,8 +361,7 @@ sub update_metadata
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function update_metadata (received $n, expecting 1)");
+        die "Invalid argument count for function update_metadata (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -382,8 +370,7 @@ sub update_metadata
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to update_metadata:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'update_metadata');
+	    die $msg;
 	}
     }
 
@@ -392,20 +379,15 @@ sub update_metadata
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'update_metadata',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking update_metadata:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method update_metadata",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'update_metadata',
-				       );
+	die "Error invoking method update_metadata: " .  $self->{client}->status_line;
     }
 }
 
@@ -515,8 +497,7 @@ sub get
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function get (received $n, expecting 1)");
+        die "Invalid argument count for function get (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -525,8 +506,7 @@ sub get
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to get:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'get');
+	    die $msg;
 	}
     }
 
@@ -535,20 +515,15 @@ sub get
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'get',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking get:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method get",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'get',
-				       );
+	die "Error invoking method get: " .  $self->{client}->status_line;
     }
 }
 
@@ -650,8 +625,7 @@ sub update_auto_meta
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function update_auto_meta (received $n, expecting 1)");
+        die "Invalid argument count for function update_auto_meta (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -660,8 +634,7 @@ sub update_auto_meta
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to update_auto_meta:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'update_auto_meta');
+	    die $msg;
 	}
     }
 
@@ -670,20 +643,15 @@ sub update_auto_meta
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'update_auto_meta',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking update_auto_meta:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method update_auto_meta",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'update_auto_meta',
-				       );
+	die "Error invoking method update_auto_meta: " .  $self->{client}->status_line;
     }
 }
 
@@ -737,8 +705,7 @@ sub get_download_url
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function get_download_url (received $n, expecting 1)");
+        die "Invalid argument count for function get_download_url (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -747,8 +714,7 @@ sub get_download_url
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to get_download_url:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'get_download_url');
+	    die $msg;
 	}
     }
 
@@ -757,20 +723,15 @@ sub get_download_url
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'get_download_url',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking get_download_url:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method get_download_url",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'get_download_url',
-				       );
+	die "Error invoking method get_download_url: " .  $self->{client}->status_line;
     }
 }
 
@@ -832,8 +793,7 @@ sub get_archive_url
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function get_archive_url (received $n, expecting 1)");
+        die "Invalid argument count for function get_archive_url (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -842,8 +802,7 @@ sub get_archive_url
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to get_archive_url:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'get_archive_url');
+	    die $msg;
 	}
     }
 
@@ -852,20 +811,15 @@ sub get_archive_url
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'get_archive_url',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking get_archive_url:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method get_archive_url",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'get_archive_url',
-				       );
+	die "Error invoking method get_archive_url: " .  $self->{client}->status_line;
     }
 }
 
@@ -977,8 +931,7 @@ sub ls
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function ls (received $n, expecting 1)");
+        die "Invalid argument count for function ls (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -987,8 +940,7 @@ sub ls
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to ls:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'ls');
+	    die $msg;
 	}
     }
 
@@ -997,20 +949,15 @@ sub ls
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'ls',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking ls:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method ls",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'ls',
-				       );
+	die "Error invoking method ls: " .  $self->{client}->status_line;
     }
 }
 
@@ -1124,8 +1071,7 @@ sub copy
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function copy (received $n, expecting 1)");
+        die "Invalid argument count for function copy (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -1134,8 +1080,7 @@ sub copy
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to copy:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'copy');
+	    die $msg;
 	}
     }
 
@@ -1144,20 +1089,15 @@ sub copy
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'copy',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking copy:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method copy",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'copy',
-				       );
+	die "Error invoking method copy: " .  $self->{client}->status_line;
     }
 }
 
@@ -1263,8 +1203,7 @@ sub delete
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function delete (received $n, expecting 1)");
+        die "Invalid argument count for function delete (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -1273,8 +1212,7 @@ sub delete
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to delete:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'delete');
+	    die $msg;
 	}
     }
 
@@ -1283,20 +1221,15 @@ sub delete
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'delete',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking delete:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method delete",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'delete',
-				       );
+	die "Error invoking method delete: " .  $self->{client}->status_line;
     }
 }
 
@@ -1372,8 +1305,7 @@ sub set_permissions
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function set_permissions (received $n, expecting 1)");
+        die "Invalid argument count for function set_permissions (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -1382,8 +1314,7 @@ sub set_permissions
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to set_permissions:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'set_permissions');
+	    die $msg;
 	}
     }
 
@@ -1392,20 +1323,15 @@ sub set_permissions
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'set_permissions',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking set_permissions:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method set_permissions",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'set_permissions',
-				       );
+	die "Error invoking method set_permissions: " .  $self->{client}->status_line;
     }
 }
 
@@ -1471,8 +1397,7 @@ sub list_permissions
 
     if ((my $n = @args) != 1)
     {
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error =>
-							       "Invalid argument count for function list_permissions (received $n, expecting 1)");
+        die "Invalid argument count for function list_permissions (received $n, expecting 1)";
     }
     {
 	my($input) = @args;
@@ -1481,8 +1406,7 @@ sub list_permissions
         (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
         if (@_bad_arguments) {
 	    my $msg = "Invalid arguments passed to list_permissions:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-	    Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,
-								   method_name => 'list_permissions');
+	    die $msg;
 	}
     }
 
@@ -1491,77 +1415,21 @@ sub list_permissions
 	params => \@args,
     });
     if ($result) {
-	if ($result->is_error) {
-	    Bio::KBase::Exceptions::JSONRPC->throw(error => $result->error_message,
-					       code => $result->content->{error}->{code},
-					       method_name => 'list_permissions',
-					       data => $result->content->{error}->{error} # JSON::RPC::ReturnObject only supports JSONRPC 1.1 or 1.O
-					      );
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking list_permissions:\n$msg\n";
 	} else {
-	    return wantarray ? @{$result->result} : $result->result->[0];
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}
     } else {
-        Bio::KBase::Exceptions::HTTP->throw(error => "Error invoking method list_permissions",
-					    status_line => $self->{client}->status_line,
-					    method_name => 'list_permissions',
-				       );
+	die "Error invoking method list_permissions: " .  $self->{client}->status_line;
     }
 }
 
 
 
-sub version {
-    my ($self) = @_;
-    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
-        method => "Workspace.version",
-        params => [],
-    });
-    if ($result) {
-        if ($result->is_error) {
-            Bio::KBase::Exceptions::JSONRPC->throw(
-                error => $result->error_message,
-                code => $result->content->{code},
-                method_name => 'list_permissions',
-            );
-        } else {
-            return wantarray ? @{$result->result} : $result->result->[0];
-        }
-    } else {
-        Bio::KBase::Exceptions::HTTP->throw(
-            error => "Error invoking method list_permissions",
-            status_line => $self->{client}->status_line,
-            method_name => 'list_permissions',
-        );
-    }
-}
 
-sub _validate_version {
-    my ($self) = @_;
-    my $svr_version = $self->version();
-    my $client_version = $VERSION;
-    my ($cMajor, $cMinor) = split(/\./, $client_version);
-    my ($sMajor, $sMinor) = split(/\./, $svr_version);
-    if ($sMajor != $cMajor) {
-        Bio::KBase::Exceptions::ClientServerIncompatible->throw(
-            error => "Major version numbers differ.",
-            server_version => $svr_version,
-            client_version => $client_version
-        );
-    }
-    if ($sMinor < $cMinor) {
-        Bio::KBase::Exceptions::ClientServerIncompatible->throw(
-            error => "Client minor version greater than Server minor version.",
-            server_version => $svr_version,
-            client_version => $client_version
-        );
-    }
-    if ($sMinor > $cMinor) {
-        warn "New client version available for Bio::P3::Workspace::WorkspaceClient\n";
-    }
-    if ($sMajor == 0) {
-        warn "Bio::P3::Workspace::WorkspaceClient version is $svr_version. API subject to change.\n";
-    }
-}
 
 =head1 TYPES
 
@@ -2535,13 +2403,35 @@ adminmode has a value which is a bool
 =cut
 
 package Bio::P3::Workspace::WorkspaceClient::RpcClient;
-use base 'JSON::RPC::Client';
 use POSIX;
 use strict;
+use LWP::UserAgent;
+use JSON::XS;
 
-#
-# Override JSON::RPC::Client::call because it doesn't handle error returns properly.
-#
+BEGIN {
+    for my $method (qw/uri ua json content_type version id allow_call status_line/) {
+	eval qq|
+	    sub $method {
+		\$_[0]->{$method} = \$_[1] if defined \$_[1];
+		\$_[0]->{$method};
+	    }
+	    |;
+	}
+    }
+
+sub new
+{
+    my($class) = @_;
+
+    my $ua = LWP::UserAgent->new();
+    my $json = JSON::XS->new->allow_nonref->utf8;
+    
+    my $self = {
+	ua => $ua,
+	json => $json,
+    };
+    return bless $self, $class;
+}
 
 sub call {
     my ($self, $uri, $headers, $obj) = @_;
@@ -2563,25 +2453,33 @@ sub call {
 
     $self->status_line($result->status_line);
 
-    if ($result->is_success) {
+    if ($result->is_success || $result->content_type eq 'application/json') {
 
-        return unless($result->content); # notification?
+	my $txt = $result->content;
 
-        if ($service) {
-            return JSON::RPC::ServiceObject->new($result, $self->json);
-        }
+        return unless($txt); # notification?
 
-        return JSON::RPC::ReturnObject->new($result, $self->json);
-    }
-    elsif ($result->content_type eq 'application/json')
-    {
-        return JSON::RPC::ReturnObject->new($result, $self->json);
+	my $obj = eval { $self->json->decode($txt); };
+
+	if (!$obj)
+	{
+	    die "Error parsing result: $@";
+	}
+
+	return $obj;
     }
     else {
         return;
     }
 }
 
+sub _get {
+    my ($self, $uri) = @_;
+    $self->ua->get(
+		   $uri,
+		   Accept         => 'application/json',
+		  );
+}
 
 sub _post {
     my ($self, $uri, $headers, $obj) = @_;
@@ -2595,7 +2493,7 @@ sub _post {
             $self->id($obj->{id}) if ($obj->{id}); # if undef, it is notification.
         }
         else {
-            $obj->{id} = $self->id || ($self->id('JSON::RPC::Client'));
+            $obj->{id} = $self->id || ($self->id('JSON::RPC::Legacy::Client'));
         }
     }
     else {
