@@ -35,6 +35,10 @@ use AnyEvent::HTTP;
 use Config::Simple;
 use Plack::Request;
 use Fcntl ':seek';
+use DateTime;
+use DateTime::Format::ISO8601;
+
+our $date_parser = DateTime::Format::ISO8601->new();
 
 Log::Log4perl->easy_init($DEBUG);
 
@@ -229,6 +233,8 @@ sub _get_db_object {
 #Returns metadata tuple for input object or workspace**
 sub _generate_object_meta {
 	my ($self,$obj) = @_;
+	my $creation_dt = $date_parser->parse_datetime($obj->{creation_date});
+	my $creation_date = $creation_dt->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");	
 	if (defined($obj->{workspace_uuid})) {
 		my $path = "/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/";
 		if (length($obj->{path}) == 0) {
@@ -239,9 +245,31 @@ sub _generate_object_meta {
 			$shock = $obj->{shocknode};
 		}
 		$obj->{autometadata}->{is_folder} = $self->is_folder($obj->{type});
-		return [$obj->{name},$obj->{type},$path,$obj->{creation_date},$obj->{uuid},$obj->{owner},$obj->{size},$obj->{metadata},$obj->{autometadata},$self->_get_ws_permission($obj->{wsobj}),$obj->{wsobj}->{global_permission},$shock];
+		return [$obj->{name},
+			$obj->{type},
+			$path,
+			$creation_date,
+			$obj->{uuid},
+			$obj->{owner},
+			$obj->{size},
+			$obj->{metadata},
+			$obj->{autometadata},
+			$self->_get_ws_permission($obj->{wsobj}),
+			$obj->{wsobj}->{global_permission},
+			$shock];
 	} else {
-		return [$obj->{name},"folder","/".$obj->{owner}."/",$obj->{creation_date},$obj->{uuid},$obj->{owner},0,$obj->{metadata},{},$self->_get_ws_permission($obj),$obj->{global_permission},""];
+		return [$obj->{name},
+			"folder",
+			"/".$obj->{owner}."/",
+			$creation_date,
+			$obj->{uuid},
+			$obj->{owner},
+			0,
+			$obj->{metadata},
+		        {},
+			$self->_get_ws_permission($obj),
+			$obj->{global_permission},
+			""];
 	}
 }
 
@@ -654,8 +682,8 @@ sub _update_shock_node {
 		} else {
 			delete $self->{_shockupdate}->{$object->{uuid}};
 			$object->{size} = $data->{data}->{file}->{size};
-			$object->{autometadata}->{inspection_started} = DateTime->now()->datetime();
-			$self->_updateDB("objects",{uuid => $object->{uuid}},{'$set' => {size => $data->{data}->{file}->{size},"autometadata.inspection_started" => DateTime->now()->datetime()}});
+			$object->{autometadata}->{inspection_started} = DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");
+			$self->_updateDB("objects",{uuid => $object->{uuid}},{'$set' => {size => $data->{data}->{file}->{size},"autometadata.inspection_started" => DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ")}});
 			$self->_compute_autometadata([$object]);
 		}
 	}
@@ -852,7 +880,7 @@ sub _create_validated_object_set {
 			    			$self->_error("Only the workspace or admin can set creation date!");	
 			    		}
 			    		if ($objspec->[4] =~ m/^\d+$/) {
-			    			$objspec->[4] = DateTime->from_epoch( epoch => $objspec->[4] )->datetime();
+			    			$objspec->[4] = DateTime->from_epoch( epoch => $objspec->[4] )->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");
 			    		}
     					$createinput->{creation_date} = $objspec->[4];
     				}
@@ -894,7 +922,7 @@ sub _create_workspace {
     	$uuid = $specs->{data}->{uuid};
     }
     if (!defined($specs->{creation_date})) {
-    	$specs->{creation_date} = DateTime->now()->datetime();
+    	$specs->{creation_date} = DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");
     }
     $self->_mongodb()->get_collection('workspaces')->insert({
 		creation_date => $specs->{creation_date},
@@ -921,7 +949,7 @@ sub _create_object {
     	$uuid = $specs->{data}->{uuid};
     }
     if (!defined($specs->{creation_date})) {
-    	$specs->{creation_date} = DateTime->now()->datetime();
+    	$specs->{creation_date} = DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");
     }
     my $wsobj = $self->_wscache($specs->{user},$specs->{workspace});
     $self->_check_ws_permissions($wsobj,"w",1);
@@ -936,7 +964,7 @@ sub _create_object {
 		uuid => $uuid,
 		creation_date => $specs->{creation_date},
 		owner => $self->_get_newobject_owner(),
-		autometadata => {inspection_started => DateTime->now()->datetime()},
+		autometadata => { inspection_started => DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ") },
 		shock => 0,
 		metadata => $specs->{metadata}
 	};
@@ -1926,7 +1954,7 @@ sub update_metadata
     			$self->_error("Only the workspace or admin can set creation date!");	
     		}
     		if ($input->{objects}->[$i]->[3] =~ m/^\d+$/) {
-    			$input->{objects}->[$i]->[3] = DateTime->from_epoch( epoch => $input->{objects}->[$i]->[3] )->datetime();
+    			$input->{objects}->[$i]->[3] = DateTime->from_epoch( epoch => $input->{objects}->[$i]->[3] )->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");
     		}
     		$obj->{creation_date} = $input->{objects}->[$i]->[3];
     		$self->_updateDB($type,{uuid => $obj->{uuid}},{'$set' => {creation_date => $input->{objects}->[$i]->[3]}});
@@ -2228,7 +2256,7 @@ sub update_auto_meta
 	    		name => $name
 	    	});
 	    	if ($obj->{shock} == 0) {
-	    		$obj->{autometadata}->{inspection_started} = DateTime->now()->datetime();
+	    		$obj->{autometadata}->{inspection_started} = DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");
 		    	$self->_compute_autometadata($obj,1);
 	    		push(@{$output},$self->_generate_object_meta($obj)); 
 	    	} else {
