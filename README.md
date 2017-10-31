@@ -17,6 +17,66 @@ SETUP
 If the server doesn't start up correctly, check /var/log/syslog 
 for debugging information.
 
+MONGO OBJECTS
+
+The workspace collection holds objects of this form:
+
+[
+{
+  "_id": ObjectId("5519b6dcfc6521532b3df037"),
+  "owner": "olson",
+  "global_permission": "n",
+  "permissions": {
+
+  },
+  "creation_date": "2015-03-30T20:49:32",
+  "name": "olson",
+  "metadata": {
+
+  },
+  "uuid": "4431C49E-D71E-11E4-B895-17ED682E0674"
+}
+]
+
+The objects collection holds objects of this form:
+
+[
+{
+  "_id": ObjectId("5519bb83fc6521532b3df038"),
+  "owner": "olson",
+  "shock": NumberLong(0),
+  "name": "buchnera.fa",
+  "autometadata": {
+
+  },
+  "path": "",
+  "uuid": "0A1A550C-D721-11E4-8FDD-17ED682E0674",
+  "folder": NumberLong(0),
+  "size": NumberLong(626258),
+  "wsobj": {
+    "owner": "olson",
+    "global_permission": "n",
+    "creation_date": "2015-03-30T20:49:32",
+    "permissions": {
+
+    },
+    "_id": ObjectId("5519b6dcfc6521532b3df037"),
+    "name": "olson",
+    "metadata": {
+
+    },
+    "uuid": "4431C49E-D71E-11E4-B895-17ED682E0674"
+  },
+  "creation_date": "2015-03-30T21:09:23",
+  "metadata": {
+    "original_file": "/homes/olson/buchnera.fa"
+  },
+  "type": "unspecified",
+  "workspace_uuid": "4431C49E-D71E-11E4-B895-17ED682E0674"
+}
+]
+
+
 UNAUTHENTICATED DOWNLOADS
 
 The workspace service supports the creation of time-limited download
@@ -61,4 +121,3 @@ to serve the actual download documents. We use the AnyEvent
 infrastructure to allow multiple downlaods to be processed at once. It
 will also host a download data item garbage collection timer to purge
 the downloads collection of expired entries.
-
