@@ -97,8 +97,6 @@ while ($running && defined($_ = $term->readline("$pwd> ")))
 
 exit (0);
 
-
-
 #
 # Commands
 #
@@ -220,7 +218,7 @@ sub normalize_path
     my $i = 0;
     while ($i < @parts)
     {
-	print Dumper($i, \@parts);
+	# print Dumper($i, \@parts);
 	if ($parts[$i] eq '')
 	{
 	    splice(@parts, $i, 1);

@@ -234,7 +234,7 @@ sub _get_db_object {
 sub _generate_object_meta {
 	my ($self,$obj) = @_;
 	my $creation_dt = $date_parser->parse_datetime($obj->{creation_date});
-	my $creation_date = $creation_dt->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");	
+	my $creation_date = _format_datetime($creation_dt);
 	if (defined($obj->{workspace_uuid})) {
 		my $path = "/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/";
 		if (length($obj->{path}) == 0) {
@@ -680,10 +680,11 @@ sub _update_shock_node {
 		if (length($data->{data}->{file}->{name}) == 0) {
 			$self->{_shockupdate}->{$object->{uuid}} = time();
 		} else {
+		        my $timestamp = _format_datetime(DateTime->now());
 			delete $self->{_shockupdate}->{$object->{uuid}};
 			$object->{size} = $data->{data}->{file}->{size};
-			$object->{autometadata}->{inspection_started} = DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ");
-			$self->_updateDB("objects",{uuid => $object->{uuid}},{'$set' => {size => $data->{data}->{file}->{size},"autometadata.inspection_started" => DateTime->now()->format_cldr("yyyy-MM-dd'T'HH:mm:ssZ")}});
+			$object->{autometadata}->{inspection_started} = $timestamp;
+			$self->_updateDB("objects",{uuid => $object->{uuid}},{'$set' => {size => $data->{data}->{file}->{size},"autometadata.inspection_started" => $timestamp}});
 			$self->_compute_autometadata([$object]);
 		}
 	}
