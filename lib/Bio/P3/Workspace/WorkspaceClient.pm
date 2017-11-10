@@ -35,6 +35,10 @@ sub new
 {
     my($class, $url, @args) = @_;
     
+    if (!defined($url))
+    {
+	$url = 'http://p3.theseed.org/services/Workspace';
+    }
 
     my $self = {
 	client => Bio::P3::Workspace::WorkspaceClient::RpcClient->new,
