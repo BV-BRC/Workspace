@@ -4,7 +4,12 @@ use Data::Dumper;
 use strict;
 use base 'Bio::P3::Workspace::WorkspaceClient';
 use LWP::UserAgent;
+use File::stat ();
 use File::Slurp;
+use Fcntl ':mode';
+
+our %folder_types = (folder => 1,
+		     modelfolder => 1 );
 
 sub copy_files_to_handles
 {
@@ -192,13 +197,77 @@ sub readdir
     }
 }
 
+# my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+#            $atime,$mtime,$ctime,$blksize,$blocks)
+#           = stat($filename);
+#              0 dev      device number of filesystem
+#              1 ino      inode number
+#              2 mode     file mode  (type and permissions)
+#              3 nlink    number of (hard) links to the file
+#              4 uid      numeric user ID of file's owner
+#              5 gid      numeric group ID of file's owner
+#              6 rdev     the device identifier (special files only)
+#              7 size     total size of file, in bytes
+#              8 atime    last access time in seconds since the epoch
+#              9 mtime    last modify time in seconds since the epoch
+#             10 ctime    inode change time in seconds since the epoch (*)
+#             11 blksize  preferred I/O size in bytes for interacting with the
+#                         file (may vary from file to file)
+#             12 blocks   actual number of system-specific blocks allocated
+#                         on disk (often, but not always, 512 bytes each)
+
 sub stat
 {
     my($self, $path) = @_;
-    my $res = $self->get({ objects => [$path] });
-    my $ent  = $res->[0];
-    my $meta = $ent->[0];
-    print Dumper($meta);
+    my $res = eval { $self->get({ objects => [$path] }); };
+    return undef if $@ =~ /_ERROR_/;
+
+    my($obj_meta, $obj_data) = @{$res->[0]};
+    my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
+       $user_perm, $global_perm, $shockurl) = @$obj_meta;
+    print Dumper($obj_meta);
+
+    my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$atime,$mtime,$ctime,$blksize,$blocks);
+
+    $mode = 0;
+    if ($user_perm eq 'r') {
+	$mode |= S_IRUSR;
+    }
+    if ($user_perm eq 'w' || $user_perm eq 'o') {
+	$mode |= S_IWUSR | S_IRUSR;
+    }
+    if ($global_perm eq 'r') {
+	$mode |= S_IROTH;
+    }
+    if ($global_perm eq 'w') {
+	$mode |= S_IWOTH | S_IROTH;
+    }
+
+    if ($folder_types{$type}) {
+	$mode |= S_IFDIR;
+    }
+
+    if ($shockurl)
+    {
+	$dev = 'shock';
+	$ino = $shockurl;
+    }
+    else
+    {
+	$dev = 'ws';
+    }
+
+    $uid = $owner;
+
+    my @stat = ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks);
+    if (wantarray)
+    {
+	return @stat;
+    }
+    else
+    {
+	return File::stat::populate(@stat);
+    }
 }
 
 package Bio::P3::Workspace::ObjectMeta;
