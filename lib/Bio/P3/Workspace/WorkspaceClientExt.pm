@@ -4,7 +4,12 @@ use Data::Dumper;
 use strict;
 use base 'Bio::P3::Workspace::WorkspaceClient';
 use LWP::UserAgent;
+use File::stat ();
 use File::Slurp;
+use Fcntl ':mode';
+
+our %folder_types = (folder => 1,
+		     modelfolder => 1 );
 
 sub copy_files_to_handles
 {
@@ -141,8 +146,129 @@ sub save_file_to_file
     }
 }
 
+sub opendir
+{
+    my($self, $path) = @_;
 
+    my $res = $self->ls({paths => [$path]});
+    my $info = $res->{$path};
+    if ($info)
+    {
+	#
+	# Need to treat root path names differently than others
+	# because it lists workspaces (/username/workspacename)
+	# and not the visible usernames as one might expect.
+	# Here we are modeling a file hierarchy so an opendir
+	# on / should return the user names that are visible.
+	#
 
+	if ($path =~ m,^/+$,)
+	{
+	    #
+	    # We need to manipulate the output here to force everything
+	    # to folders named with the username; we also need to make
+	    # that list of usernames unique.
+	    #
+	    # Perms are all 'r' as one cannot create a user.
+	    #
+
+	    my %users = map { my $n = $_->[2]; $n =~ s,^/,,; $n =~ s,/$,,; ($n => $_->[3]) } @$info;
+	    $info = [ map { [$_, 'folder', '/', $users{$_}, undef, $_, 0, {}, {}, 'r', 'r', '' ]} sort keys %users];
+	}
+	return [$info, 0];
+    }
+}
+
+sub readdir
+{
+    my($self, $handle, $details) = @_;
+    if (wantarray)
+    {
+	my $contents = $handle->[0];
+	my $idx = $handle->[1];
+	return undef if $idx >= @$contents;
+	$handle->[1] = $#$contents;
+	return map { $details ? $_ : $_->[0] } @$contents[$idx..$#$contents];
+    }
+    else
+    {
+	my $idx = $handle->[1]++;
+	return $details ? $handle->[0]->[$idx] : $handle->[0]->[$idx];
+    }
+}
+
+# my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
+#            $atime,$mtime,$ctime,$blksize,$blocks)
+#           = stat($filename);
+#              0 dev      device number of filesystem
+#              1 ino      inode number
+#              2 mode     file mode  (type and permissions)
+#              3 nlink    number of (hard) links to the file
+#              4 uid      numeric user ID of file's owner
+#              5 gid      numeric group ID of file's owner
+#              6 rdev     the device identifier (special files only)
+#              7 size     total size of file, in bytes
+#              8 atime    last access time in seconds since the epoch
+#              9 mtime    last modify time in seconds since the epoch
+#             10 ctime    inode change time in seconds since the epoch (*)
+#             11 blksize  preferred I/O size in bytes for interacting with the
+#                         file (may vary from file to file)
+#             12 blocks   actual number of system-specific blocks allocated
+#                         on disk (often, but not always, 512 bytes each)
+
+sub stat
+{
+    my($self, $path) = @_;
+    my $res = eval { $self->get({ objects => [$path] }); };
+    return undef if $@ =~ /_ERROR_/;
+
+    my($obj_meta, $obj_data) = @{$res->[0]};
+    my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
+       $user_perm, $global_perm, $shockurl) = @$obj_meta;
+    print Dumper($obj_meta);
+
+    my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$atime,$mtime,$ctime,$blksize,$blocks);
+
+    $mode = 0;
+    if ($user_perm eq 'r') {
+	$mode |= S_IRUSR;
+    }
+    if ($user_perm eq 'w' || $user_perm eq 'o') {
+	$mode |= S_IWUSR | S_IRUSR;
+    }
+    if ($global_perm eq 'r') {
+	$mode |= S_IROTH;
+    }
+    if ($global_perm eq 'w') {
+	$mode |= S_IWOTH | S_IROTH;
+    }
+
+    if ($folder_types{$type}) {
+	$mode |= S_IFDIR;
+    }
+
+    if ($shockurl)
+    {
+	$dev = 'shock';
+	$ino = $shockurl;
+    }
+    else
+    {
+	$dev = 'ws';
+    }
+
+    $uid = $owner;
+
+    my @stat = ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,$atime,$mtime,$ctime,$blksize,$blocks);
+    if (wantarray)
+    {
+	return @stat;
+    }
+    else
+    {
+	return File::stat::populate(@stat);
+    }
+}
 
 package Bio::P3::Workspace::ObjectMeta;
 sub name { return $_[0]->[0] };
