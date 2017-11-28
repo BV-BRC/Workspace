@@ -113,6 +113,7 @@ sub save_file_to_file
 
     $type ||= 'unspecified';
 
+    my $obj;
     if ($use_shock)
     {
 	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
@@ -136,14 +137,25 @@ sub save_file_to_file
 					      Content => [upload => [$local_file]]);
 	$req->method('PUT');
 	my $sres = $ua->request($req);
-	print STDERR Dumper($sres->content);
+	if (!$sres->is_success)
+	{
+	    die "Failure uploading $local_file to shock: " . $res->status_line;
+	}
+	$obj = $res;
     }
     else
     {
-	my $res = $self->create({ objects => [[$path, $type, $metadata, scalar read_file($local_file) ]],
+	my $res = eval {
+	    $self->create({ objects => [[$path, $type, $metadata, scalar read_file($local_file) ]],
 				overwrite => ($overwrite ? 1 : 0) });
-	print STDERR Dumper($res);
+	};
+	if ($@)
+	{
+	    die "Failure uploading $local_file: $@";
+	}
+	$obj = $res->[0];
     }
+    return $obj;
 }
 
 sub opendir
@@ -225,7 +237,7 @@ sub stat
     my($obj_meta, $obj_data) = @{$res->[0]};
     my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
        $user_perm, $global_perm, $shockurl) = @$obj_meta;
-    print Dumper($obj_meta);
+    # print Dumper($obj_meta);
 
     my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$atime,$mtime,$ctime,$blksize,$blocks);
 
@@ -245,6 +257,10 @@ sub stat
 
     if ($folder_types{$type}) {
 	$mode |= S_IFDIR;
+    }
+    else
+    {
+	$mode |= S_IFREG;
     }
 
     if ($shockurl)
