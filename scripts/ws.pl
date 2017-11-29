@@ -15,6 +15,7 @@ use Bio::P3::Workspace::ScriptHelpers;
 use Text::Table;
 use Term::ReadKey;
 use IO::Handle;
+use Fcntl ':mode';
 
 my $default_url = "https://p3.thseed.org/services/Workspace";
 
@@ -164,6 +165,19 @@ sub cmd_cd
 	{
 	    $new = "$pwd/$path";
 	}
+
+	my $stat = $ws->stat($new);
+	if (!$stat)
+	{
+	    print "$path does not exist\n";
+	    return;
+	}
+	if (!S_ISDIR($stat->mode))
+	{
+	    print "$path is not a directory\n";
+	    return;
+	}
+	
 	$pwd = normalize_path($new);
     }
     else
