@@ -422,6 +422,13 @@ sub stat
     return $s;
 }
 
+sub opendir
+{
+    my($self) = @_;
+
+    return new WsDirHandle($self->ws, $self->path);
+}
+
 sub mkdir
 {
     my($self) = @_;
@@ -461,4 +468,33 @@ sub copy_to
 	close(OUT);
     }
 	
+}
+
+package WsDirHandle;
+use strict;
+sub new
+{
+    my($class, $ws, $path) = @_;
+    my $self = {
+	ws => $ws,
+	path => $path,
+    };
+
+    eval
+    {
+	my $dh = $ws->opendir($path);
+	$self->{dh} = $dh;
+    };
+    if ($@)
+    {
+	warn "Opendir $path failed\n";
+	return undef;
+    }
+    return bless $self, $class;
+}
+
+sub read
+{
+    my($self) = @_;
+    return $self->{ws}->readdir($self->{dh});
 }

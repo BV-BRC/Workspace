@@ -205,7 +205,7 @@ sub readdir
     else
     {
 	my $idx = $handle->[1]++;
-	return $details ? $handle->[0]->[$idx] : $handle->[0]->[$idx];
+	return $details ? $handle->[0]->[$idx] : $handle->[0]->[$idx]->[0];
     }
 }
 
