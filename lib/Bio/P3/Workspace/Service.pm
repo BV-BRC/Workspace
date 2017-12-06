@@ -425,10 +425,17 @@ __PACKAGE__->mk_accessors(qw(user_id client_ip authenticated token
 
 sub new
 {
-    my($class, %opts) = @_;
+    my($class, @opts) = @_;
+
+    if (!defined($opts[0]) || ref($opts[0]))
+    {
+        # We were invoked by old code that stuffed a logger in here.
+	# Strip that option.
+	shift @opts;
+    }
     
     my $self = {
-        %opts,
+        @opts,
     };
     chomp($self->{hostname} = `hostname`);
     $self->{hostname} ||= 'unknown-host';

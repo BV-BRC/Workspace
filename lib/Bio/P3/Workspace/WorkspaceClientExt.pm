@@ -11,6 +11,15 @@ use Fcntl ':mode';
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
 
+sub download_file
+{
+    my($self, $ws_path, $local_file, $use_shock, $token) = @_;
+
+    open(my $fh, ">", $local_file) or die "WorkspaceClientExt::download_file: cannot write $local_file: $!";
+    $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]]);
+    close($fh);
+}
+
 sub copy_files_to_handles
 {
     my($self, $use_shock, $token, $file_handle_pairs) = @_;
