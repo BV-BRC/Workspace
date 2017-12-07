@@ -7,6 +7,7 @@ use LWP::UserAgent;
 use File::stat ();
 use File::Slurp;
 use Fcntl ':mode';
+use JSON::XS;
 
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
@@ -18,6 +19,33 @@ sub download_file
     open(my $fh, ">", $local_file) or die "WorkspaceClientExt::download_file: cannot write $local_file: $!";
     $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]]);
     close($fh);
+}
+
+sub download_json
+{
+    my($self, $path, $token) = @_;
+
+    my $str;
+    open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
+
+    eval {
+	$self->copy_files_to_handles(1, $token, [[$path, $fh]]);
+    };
+    if ($@)
+    {
+	my($err) = $@ =~ /_ERROR_(.*)_ERROR_/;
+	$err //= $@;
+	die "Bio::P3::Workspace::WorkspaceClientExt::download_json: failed to load $path: $err\n";
+    }
+    close($fh);
+
+    my $doc = eval { decode_json($str) };
+
+    if ($@)
+    {
+	die "Error parsing json: $@";
+    }
+    return $doc;
 }
 
 sub copy_files_to_handles
