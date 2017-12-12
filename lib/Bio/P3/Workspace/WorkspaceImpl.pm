@@ -989,6 +989,7 @@ sub _create_object {
 		File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
 	} elsif (defined($specs->{copy}) && $specs->{copy} == 1) {
 		$object->{shock} = $specs->{data}->{shock};
+		$object->{size} = $specs->{data}->{size};
 		$object->{autometadata} = $specs->{data}->{autometadata};
 		if (defined($specs->{data}->{shocknode})) {
 			$object->{shocknode} = $specs->{data}->{shocknode};
