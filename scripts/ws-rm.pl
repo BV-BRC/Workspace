@@ -25,7 +25,13 @@ my($opt, $usage) = Bio::P3::Workspace::ScriptHelpers::options("%c %o <path>",[
 	["recursive|r", "Delete directories recursively"],
 	["force|f", "Delete directories"]
 ]);
-my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths([$ARGV[0]]);
+
+if (@ARGV == 0)
+{
+    exit;
+}
+
+my $paths = Bio::P3::Workspace::ScriptHelpers::process_paths(\@ARGV);
 my $res = Bio::P3::Workspace::ScriptHelpers::wscall("delete",{
 	objects => $paths,
 	force => $opt->force,
