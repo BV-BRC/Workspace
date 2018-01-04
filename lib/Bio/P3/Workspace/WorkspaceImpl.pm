@@ -1343,7 +1343,7 @@ sub _download_request
 	    {
 		$writer = $responder->([206,
 					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; filename=$res->{name}",
+					 'Content-Disposition' => "attachment; filename=\"$res->{name}\"",
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
@@ -1354,7 +1354,7 @@ sub _download_request
 	    {
 		$writer = $responder->([200,
 					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; filename=$res->{name}"]]);
+					 'Content-Disposition' => "attachment; filename=\"$res->{name}\""]]);
 		$url = $res->{shock_node} . "?download";
 	    }
 	    
@@ -1415,7 +1415,7 @@ sub _download_request
 	    {
 		$writer = $responder->([206,
 					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; filename=$res->{name}",
+					 'Content-Disposition' => "attachment; \"filename=$res->{name}\"",
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
@@ -1424,7 +1424,7 @@ sub _download_request
 	    {
 		$writer = $responder->([200,
 					['Content-type' => 'application/octet-stream',
-					'Content-Disposition' => "attachment; filename=$res->{name}"]]);
+					'Content-Disposition' => "attachment; filename=\"$res->{name}\""]]);
 	    }
 
 	    print STDERR "retrieve $res->{file_path}\n";
