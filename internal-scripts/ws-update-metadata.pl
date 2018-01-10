@@ -53,7 +53,6 @@ my $scriptpath = $config->param("$service.script-path");
 my $datapath = $config->param("$service.db-path")."/P3WSDB/";
 #Logging in workspace user
 
-print Dumper($config);
 my $token = P3AuthLogin::login_rast($config->param("$service.wsuser"), $config->param("$service.wspassword"));
 $token or die "Failure logging in service user\n";
 
