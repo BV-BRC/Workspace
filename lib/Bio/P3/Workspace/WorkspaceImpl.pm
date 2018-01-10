@@ -151,7 +151,7 @@ sub _url {
 sub _error {
 	my($self,$msg) = @_;
 	$msg = "_ERROR_".$msg."_ERROR_";
-	Bio::KBase::Exceptions::ArgumentValidationError->throw(error => $msg,method_name => "");#$self->_current_method());
+	die $msg;
 }
 
 sub _db_path {

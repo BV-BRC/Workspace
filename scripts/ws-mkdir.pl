@@ -1,7 +1,6 @@
 
 use strict;
 use Bio::P3::Workspace::ScriptHelpers;
-use Bio::P3::Workspace::Utils;
 
 =head1 NAME
 

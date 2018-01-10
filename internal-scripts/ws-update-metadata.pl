@@ -5,13 +5,15 @@ use Data::Dumper;
 use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::WorkspaceImpl;
 
+use P3AuthLogin;
+
 =head1 NAME
 
 ws-update-metadata
 
 =head1 SYNOPSIS
 
-ws-update-metadata <filename> <script path> <data path> <url>
+ws-update-metadata object-dir service-url
 
 =head1 DESCRIPTION
 
@@ -19,7 +21,7 @@ Compute and load auto-metadata for object list
 
 =head1 COMMAND-LINE OPTIONS
 
-ws-update-metadata [-h] [long options...]
+ws-update-metadata [-h] [long options...] object-dir service-url
 	-h --help   Show this usage message
 	
 =cut
@@ -28,10 +30,11 @@ my @options = (
 	       ["help|h", "Show this usage message"],
 	      );
 
-my($opt, $usage) = describe_options("%c %o",
+my($opt, $usage) = describe_options("%c %o object-dir service-url",
 				    @options);
 
 print($usage->text), exit if $opt->help;
+die($usage->text) unless @ARGV == 2;
 
 my $directory = $ARGV[0];
 my $url = $ARGV[1];
@@ -49,18 +52,20 @@ if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 my $scriptpath = $config->param("$service.script-path");
 my $datapath = $config->param("$service.db-path")."/P3WSDB/";
 #Logging in workspace user
-my $tokenObj = Bio::KBase::AuthToken->new(
-	user_id => $config->param("$service.wsuser"), password => $config->param("$service.wspassword"),ignore_authrc => 1
-);
+
+print Dumper($config);
+my $token = P3AuthLogin::login_rast($config->param("$service.wsuser"), $config->param("$service.wspassword"));
+$token or die "Failure logging in service user\n";
+
 #Creating workspace object
 my $ws;
 our $ctxtwo;
 if ($url eq "impl") {
-	$ctxtwo = Bio::P3::Workspace::ServiceContext->new($tokenObj->token(),"test",$config->param("$service.wsuser"));
+	$ctxtwo = Bio::P3::Workspace::ServiceContext->new($token,"test",$config->param("$service.wsuser"));
 	$Bio::P3::Workspace::Service::CallContext = $ctxtwo;
 	$ws = Bio::P3::Workspace::WorkspaceImpl->new();
 } else {
-	$ws = Bio::P3::Workspace::WorkspaceClient->new($url,$tokenObj->token());
+	$ws = Bio::P3::Workspace::WorkspaceClient->new($url,$token);
 }
 #Opening object file
 open (my $fh,"<",$directory."/objects.json");
@@ -75,8 +80,8 @@ my $objs = $JSON->decode($data);
 for (my $i=0; $i < @{$objs}; $i++) {
 	if (-e $scriptpath."/ws-autometa-".$objs->[$i]->{type}.".pl") {
 		if ($objs->[$i]->{shock} == 1 && $objs->[$i]->{size} > 0) {
-			#print 'curl -X GET -H "Authorization: OAuth '.$tokenObj->token().'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt'."\n";
-			system('curl -X GET -H "Authorization: OAuth '.$tokenObj->token().'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt');
+			#print 'curl -X GET -H "Authorization: OAuth '.$token.'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt'."\n";
+			system('curl -X GET -H "Authorization: OAuth '.$token.'" '.$objs->[$i]->{shocknode}.'?download > '.$directory.'/object.txt');
 		} elsif ($objs->[$i]->{shock} == 0 && $objs->[$i]->{folder} == 0) {
 			my $filename = $datapath."/".$objs->[$i]->{wsobj}->{owner}."/".$objs->[$i]->{wsobj}->{name}."/".$objs->[$i]->{path}."/".$objs->[$i]->{name};
 			#print "cp \"".$filename."\" \"".$directory."/object.txt\"\n";
