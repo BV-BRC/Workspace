@@ -237,19 +237,26 @@ sub process_paths {
 }
 
 sub wscall {
-	my $command = shift;
-	my $params = shift;
-	if (defined($adminmode)) {
-		$params->{adminmode} = $adminmode;
-	}
-	my $output;
-	eval {
-		$output = Bio::P3::Workspace::ScriptHelpers::wsClient()->$command($params);
+    my $command = shift;
+    my $params = shift;
+    if (defined($adminmode)) {
+	$params->{adminmode} = $adminmode;
+    }
+    my $output;
+    eval {
+	$output = Bio::P3::Workspace::ScriptHelpers::wsClient()->$command($params);
     };
     if ($@) {
-		warn "Error running $command\n$@\n";
+	my $err = $@;
+	my($errstr) = $err =~ /_ERROR_(.*)_ERROR_/g;
+	if (!$errstr)
+	{
+	    $errstr = $err;
+	    $errstr =~ s/Trace begun.*//s;
+	}
+	warn "Error running $command:\n   $errstr\n";
     }
-	return $output;
+    return $output;
 }
 
 sub directory {

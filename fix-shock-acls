@@ -1,0 +1,62 @@
+#
+# fix up shock acls where owner not in the read acl
+#
+
+use Data::Dumper;
+use strict;
+use MongoDB;
+use LWP::UserAgent;
+
+my $ua = LWP::UserAgent->new;
+
+# use Config::Simple;
+
+# @ARGV == 1 or die "Usage: $0 config-file\n";
+# my $conf_file = shift;
+
+# my $conf = Config::Simple->new($conf_file);
+
+# my $ws_mongo = MongoDB::MongoClient->new(host => $conf->param("Workspace.mongodb-host"),
+# 					 db_name => $conf->param("Workspace.mongodb-database"),
+# 					 username => $conf->param("Workspace.mongodb-user"),
+# 					 password => $conf->param("Workspace.mongodb-pwd"));
+# $ws_mongo or die;
+
+my $shock_mongo = MongoDB::MongoClient->new(host => 'localhost',
+					    db_name => 'HemlockShock',
+					    port => 27018,
+					    );
+my $nodes = $shock_mongo->get_database("HemlockShock")->get_collection("Nodes");
+
+# my $ws = $ws_mongo->get_database($conf->param("Workspace.mongodb-database"));
+# my $objs = $ws->get_collection("objects");
+
+my $token = 'un=reviewer|GET A REVIEWER TOKEN';
+
+my @auth = ("Authorization" => "OAuth $token");
+my $base_url = "http://localhost:7078";
+
+#
+# Find nodes where reviewer id not in the read acl
+#
+
+my $owner = "0e6adb8b-0eaa-4742-b27d-79ed25d094ba";
+my $owner_name = "reviewer";
+
+my @extra = ( id => 'd2ddeb37-a4ba-4c5c-a0a6-85c810fe99ce');
+@extra = ();
+
+my $res = $nodes->find({ 'acl.owner' => $owner, 'acl.read' => { '$nin' => [ $owner ] }, @extra});
+$res = $res->fields({acl => 1, public => 1, file => 1, id => 1, created_on => 1 });
+while (my $elt = $res->next())
+{
+    print join("\t", $elt->{id}, scalar @{$elt->{acl}->{read}}), "\n";
+    next;
+    my $url = "$base_url/node/$elt->{id}/acl/read?users=$owner_name";
+    my $res = $ua->put($url, @auth);
+    if (!$res->is_success)
+    {
+	die "Failed on $elt->{id} " . $res->status_line;
+    }
+}
+
