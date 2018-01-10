@@ -21,6 +21,27 @@ sub download_file
     close($fh);
 }
 
+sub download_file_to_string
+{
+    my($self, $path, $token) = @_;
+
+    my $str;
+    open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
+
+    eval {
+	$self->copy_files_to_handles(1, $token, [[$path, $fh]]);
+    };
+    if ($@)
+    {
+	my($err) = $@ =~ /_ERROR_(.*)_ERROR_/;
+	$err //= $@;
+	die "Bio::P3::Workspace::WorkspaceClientExt::download_file_to_string: failed to load $path: $err\n";
+    }
+    close($fh);
+
+    return $str;
+}
+
 sub download_json
 {
     my($self, $path, $token) = @_;
