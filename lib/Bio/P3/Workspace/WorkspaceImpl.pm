@@ -36,6 +36,7 @@ use Plack::Request;
 use Fcntl ':seek';
 use DateTime;
 use DateTime::Format::ISO8601;
+use P3AuthLogin;
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -137,8 +138,13 @@ sub _shockurl {
 sub _wsauth {
 	my $self = shift;
 	if (!defined($self->{_wsauth})) {
-		my $token = Bio::KBase::AuthToken->new(user_id =>  $self->{_params}->{wsuser}, password => $self->{_params}->{wspassword});
-		$self->{_wsauth} = $token->token();
+	    #
+	    # Currently our token comes from a RAST-authenticated login. This should
+	    # get factored out / improved if we change that assumption.
+	    #
+	    my $token = P3AuthLogin::login_rast($self->{_params}->{wsuser}, $self->{_params}->{wspassword});
+	    $token or die "Failure logging in service user\n";
+	    $self->{_wsauth} = $token;
 	}
 	return $self->{_wsauth};
 }
