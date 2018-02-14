@@ -2,6 +2,7 @@ TOP_DIR = ../..
 include $(TOP_DIR)/tools/Makefile.common
 
 TARGET ?= /kb/deployment
+DEPLOY_TARGET ?= $(TARGET)
 DEPLOY_RUNTIME ?= /kb/runtime
 SERVER_SPEC = Workspace.spec
 
@@ -31,8 +32,15 @@ ifdef TEMPDIR
 TPAGE_TEMPDIR = --define kb_tempdir=$(TEMPDIR)
 endif
 
-TPAGE_ARGS = --define kb_top=$(TARGET) \
-	--define kb_runtime=$(DEPLOY_RUNTIME) \
+TPAGE_DEPLOY_ARGS = 
+	--define kb_top=$(DEPLOY_TARGET) \
+	--define kb_runtime=$(DEPLOY_RUNTIME) 
+
+TPAGE_BUILD_ARGS = \
+	--define kb_top=$(TARGET) \
+	--define kb_runtime=$(DEPLOY_RUNTIME) 
+
+TPAGE_ARGS =  \
 	--define kb_service_name=$(SERVICE) \
 	--define kb_service_port=$(SERVICE_PORT) \
 	--define kb_psgi=$(SERVICE_PSGI_FILE) \
@@ -88,16 +96,16 @@ deploy-all: deploy-client deploy-service
 deploy-client: compile-typespec deploy-docs deploy-libs deploy-scripts 
 
 deploy-service: deploy-dir deploy-monit deploy-libs deploy-service-scripts
-	$(TPAGE) $(TPAGE_ARGS) service/start_service.tt > $(TARGET)/services/$(SERVICE)/start_service
+	$(TPAGE) $(TPAGE_DEPLOY_ARGS) $(TPAGE_ARGS) service/start_service.tt > $(TARGET)/services/$(SERVICE)/start_service
 	chmod +x $(TARGET)/services/$(SERVICE)/start_service
-	$(TPAGE) $(TPAGE_ARGS) service/stop_service.tt > $(TARGET)/services/$(SERVICE)/stop_service
+	$(TPAGE) $(TPAGE_DEPLOY_ARGS) $(TPAGE_ARGS) service/stop_service.tt > $(TARGET)/services/$(SERVICE)/stop_service
 	chmod +x $(TARGET)/services/$(SERVICE)/stop_service
 
 deploy-service-scripts:
-	export KB_TOP=$(TARGET); \
+	export KB_TOP=$(DEPLOY_TARGET); \
 	export KB_RUNTIME=$(DEPLOY_RUNTIME); \
 	export KB_PERL_PATH=$(TARGET)/lib ; \
-	export PATH_PREFIX=$(TARGET)/services/$(SERVICE)/bin:$(TARGET)/services/cdmi_api/bin; \
+	export PATH_PREFIX=$(DEPLOY_TARGET)/services/$(SERVICE)/bin:$(DEPLOY_TARGET)/services/cdmi_api/bin; \
 	cp internal-scripts/*.pl $(TARGET)/plbin/
 	for src in $(SRC_SERVICE_PERL) ; do \
 	        basefile=`basename $$src`; \
@@ -108,7 +116,7 @@ deploy-service-scripts:
 	done
 
 deploy-monit:
-	$(TPAGE) $(TPAGE_ARGS) service/process.$(SERVICE).tt > $(TARGET)/services/$(SERVICE)/process.$(SERVICE)
+	$(TPAGE) $(TPAGE_DEPLOY_ARGS) $(TPAGE_ARGS) service/process.$(SERVICE).tt > $(TARGET)/services/$(SERVICE)/process.$(SERVICE)
 
 deploy-docs:
 	-mkdir doc
