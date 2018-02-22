@@ -27,9 +27,13 @@ SRC_SERVICE_PERL = $(wildcard service-scripts/*.pl)
 BIN_SERVICE_PERL = $(addprefix $(BIN_DIR)/,$(basename $(notdir $(SRC_SERVICE_PERL))))
 DEPLOY_SERVICE_PERL = $(addprefix $(SERVICE_DIR)/bin/,$(basename $(notdir $(SRC_SERVICE_PERL))))
 
-
 ifdef TEMPDIR
 TPAGE_TEMPDIR = --define kb_tempdir=$(TEMPDIR)
+endif
+
+ifdef DEPLOYMENT_VAR_DIR
+SERVICE_LOGDIR = $(DEPLOYMENT_VAR_DIR)/services/$(SERVICE)
+TPAGE_SERVICE_LOGDIR = --define kb_service_log_dir=$(SERVICE_LOGDIR)
 endif
 
 TPAGE_DEPLOY_ARGS = 
@@ -46,7 +50,8 @@ TPAGE_ARGS =  \
 	--define kb_psgi=$(SERVICE_PSGI_FILE) \
 	--define kb_download_port=$(DOWNLOAD_SERVICE_PORT) \
 	--define kb_download_psgi=$(DOWNLOAD_SERVICE_PSGI_FILE) \
-	$(TPAGE_TEMPDIR)
+	$(TPAGE_TEMPDIR) \
+	$(TPAGE_SERVIE_LOGDIR)
 
 TESTS = $(wildcard t/client-tests/*.t)
 
