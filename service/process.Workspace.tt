@@ -1,4 +1,10 @@
-check process [% kb_service_name %] with pidfile [% kb_top %]/services/[% kb_service_name %]/service.pid
+[% IF kb_service_log_dir -%]
+set log_dir = "[% kb_service_log_dir %]"
+[% ELSE -%]
+set log_dir = "$KB_TOP/services/[% kb_service_name %]"
+[% END -%]
+
+check process [% kb_service_name %] with pidfile [% log_dir %]/service.pid
   start program = "[% kb_top %]/services/[% kb_service_name %]/start_service" with timeout 60 seconds
   stop  program = "[% kb_top %]/services/[% kb_service_name %]/stop_service"
   if failed port [% kb_service_port %] type tcp 
