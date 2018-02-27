@@ -36,7 +36,7 @@ SERVICE_LOGDIR = $(DEPLOYMENT_VAR_DIR)/services/$(SERVICE)
 TPAGE_SERVICE_LOGDIR = --define kb_service_log_dir=$(SERVICE_LOGDIR)
 endif
 
-TPAGE_DEPLOY_ARGS = 
+TPAGE_DEPLOY_ARGS = \
 	--define kb_top=$(DEPLOY_TARGET) \
 	--define kb_runtime=$(DEPLOY_RUNTIME) 
 
