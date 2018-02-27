@@ -51,7 +51,7 @@ TPAGE_ARGS =  \
 	--define kb_download_port=$(DOWNLOAD_SERVICE_PORT) \
 	--define kb_download_psgi=$(DOWNLOAD_SERVICE_PSGI_FILE) \
 	$(TPAGE_TEMPDIR) \
-	$(TPAGE_SERVIE_LOGDIR)
+	$(TPAGE_SERVICE_LOGDIR)
 
 TESTS = $(wildcard t/client-tests/*.t)
 
