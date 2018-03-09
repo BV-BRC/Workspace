@@ -19,6 +19,7 @@ use base 'RPC::Any::Package::JSONRPC';
 use File::Path;
 use File::Copy ("cp","mv");
 use File::stat;
+use File::Which qw(which);
 use Fcntl ':mode';
 use Data::UUID;
 use REST::Client;
@@ -1475,46 +1476,65 @@ sub _download_request
     [200, ['Content-Type' => 'text/plain'], [$dlid]];
 }
 
+sub _autometadata_script_path_for_type
+{
+    my($self, $type) = @_;
+
+    my $script = "ws-autometa-$type";
+    my $path = which($script);
+    return $path;
+}
+    
 sub _compute_autometadata {
-	my($self, $objs) = @_;
-	my $path = $self->{_params}->{"job-directory"};
-	if (!-d $path) {
-		File::Path::mkpath ($path);
+    my($self, $objs) = @_;
+    my $path = $self->{_params}->{"job-directory"};
+    if (!-d $path) {
+	File::Path::mkpath ($path);
+    }
+    my $fulldir = File::Temp::tempdir(DIR => $path);
+    if (!-d $fulldir) {
+	File::Path::mkpath ($fulldir);
+    }
+    my $objs_to_process = [];
+    for my $obj (@$objs)
+    {
+	if ($obj->{folder} == 0 && defined($obj->{autometadata}->{inspection_started}))
+	{
+	    my $script = $self->_autometadata_script_path_for_type($obj->{type});
+	    
+	    if ($script)
+	    {
+		delete $obj->{_id};
+		delete $obj->{wsobj}->{_id};
+		push(@{$objs_to_process}, [$obj, $script]);
+	    }
+	    else
+	    {
+		#
+		# If we have no update script, set the autometadata as empty
+		#
+		print STDERR "No script found for type $obj->{type}\n";
+		$self->_updateDB("objects",{uuid => $obj->{uuid}},{'$set' => {"autometadata" => {}}});
+	    }
 	}
-	my $fulldir = File::Temp::tempdir(DIR => $path);
-	if (!-d $fulldir) {
-		File::Path::mkpath ($fulldir);
+    }
+    if (@$objs_to_process)
+    {
+	open (my $fh, ">", "$fulldir/objects.json") or die "Error writing $fulldir/objects.json: $!";
+	my $JSON = JSON::XS->new->utf8(1);
+	print $fh $JSON->encode($objs_to_process);
+	close($fh);
+	$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
+	my $rc = system("ws-update-metadata", $fulldir, "impl");
+	if ($rc != 0)
+	{
+	    warn "Error $rc processing metadata for $fulldir\n";
 	}
-	my $finalobj = [];
-	for (my $i=0; $i < @{$objs}; $i++){
-		if ($objs->[$i]->{folder} == 0 && defined($objs->[$i]->{autometadata}->{inspection_started})) {
-			if (-e $self->{_params}->{"script-path"}."/ws-autometa-".$objs->[$i]->{type}.".pl") {
-				if (defined($objs->[$i]->{_id})) {
-					delete $objs->[$i]->{_id};
-				}
-				if (defined($objs->[$i]->{wsobj}->{_id})) {
-					delete $objs->[$i]->{wsobj}->{_id};
-				}
-				push(@{$finalobj},$objs->[$i]);
-			} else {
-				if (defined($objs->[$i]->{autometadata}->{inspection_started})) {
-					$self->_updateDB("objects",{uuid => $objs->[$i]->{uuid}},{'$set' => {"autometadata" => {}}});
-				}
-			}
-		}
-	}
-	my $size = @{$finalobj};
-	if ($size > 0) {
-		open (my $fh,">",$fulldir."/objects.json");
-		my $JSON = JSON::XS->new->utf8(1);
-		print $fh $JSON->encode($finalobj);
-		close($fh);
-		$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
-		#print "\nperl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl\n\n";
-		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl");
-	} else {
-		File::Path::rmtree($fulldir);
-	}
+    }
+    else
+    {
+	File::Path::rmtree($fulldir);
+    }
 };
 
 sub is_folder {

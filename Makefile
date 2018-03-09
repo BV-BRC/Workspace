@@ -23,7 +23,7 @@ DOWNLOAD_SERVICE_NAME = WorkspaceDownload
 SERVICE_PSGI_FILE = $(SERVICE_NAME).psgi
 DOWNLOAD_SERVICE_PSGI_FILE = $(DOWNLOAD_SERVICE_NAME).psgi
 
-SRC_SERVICE_PERL = $(wildcard service-scripts/*.pl)
+SRC_SERVICE_PERL = $(wildcard service-scripts/*.pl) $(wildcard internal-scripts/*.pl)
 BIN_SERVICE_PERL = $(addprefix $(BIN_DIR)/,$(basename $(notdir $(SRC_SERVICE_PERL))))
 DEPLOY_SERVICE_PERL = $(addprefix $(SERVICE_DIR)/bin/,$(basename $(notdir $(SRC_SERVICE_PERL))))
 
@@ -111,7 +111,6 @@ deploy-service-scripts:
 	export KB_RUNTIME=$(DEPLOY_RUNTIME); \
 	export KB_PERL_PATH=$(TARGET)/lib ; \
 	export PATH_PREFIX=$(DEPLOY_TARGET)/services/$(SERVICE)/bin:$(DEPLOY_TARGET)/services/cdmi_api/bin; \
-	cp internal-scripts/*.pl $(TARGET)/plbin/
 	for src in $(SRC_SERVICE_PERL) ; do \
 	        basefile=`basename $$src`; \
 	        base=`basename $$src .pl`; \
@@ -137,6 +136,9 @@ deploy-dir:
 	if [ ! -d $(SERVICE_DIR)/bin ] ; then mkdir $(SERVICE_DIR)/bin ; fi
 
 $(BIN_DIR)/%: service-scripts/%.pl $(TOP_DIR)/user-env.sh
+	$(WRAP_PERL_SCRIPT) '$$KB_TOP/modules/$(CURRENT_DIR)/$<' $@
+
+$(BIN_DIR)/%: internal-scripts/%.pl $(TOP_DIR)/user-env.sh
 	$(WRAP_PERL_SCRIPT) '$$KB_TOP/modules/$(CURRENT_DIR)/$<' $@
 
 $(BIN_DIR)/%: service-scripts/%.py $(TOP_DIR)/user-env.sh
