@@ -44,7 +44,6 @@ else
 -s $readfile or die "File not found or empty: $readfile\n";
 
 my $tmpdir = File::Temp->newdir("fastqc_XXXXX", TMPDIR => 1, CLEANUP => 1);
-print STDERR "tmpdir=$tmpdir\n";
 my $meta = reads_to_meta($readfile, $tmpdir);
 
 my $out_file = "$dir/" . $opt->out;
@@ -68,6 +67,12 @@ sub reads_to_meta {
     if (!$ok)
     {
 	print STDERR "fastqc failure $?:\n<<$stdout>>\n<<$stderr>>\n";
+	my @l = split(/\n/, $stderr);
+	%meta = (file_type => 'Invalid',
+		 fastqc_failure => join("\n", @l[0..1]) . "\n",
+		 valid_reads => 0,
+		 total_sequences => 0,
+	     );
     }
     else
     {
@@ -91,7 +96,10 @@ sub reads_to_meta {
 	    }
 	}
 	
-	%meta = (%basic, quality_tests => \%quality, images => \%images);
+	%meta = (%basic,
+		 valid_reads => 1,
+		 quality_tests => \%quality,
+		 images => \%images);
     }
     wantarray ? %meta : \%meta;
 }
