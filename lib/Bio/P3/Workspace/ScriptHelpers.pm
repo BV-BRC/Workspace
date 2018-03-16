@@ -6,6 +6,9 @@ use Data::Dumper;
 use Text::Table;
 use JSON::XS;
 use HTTP::Request::Common;
+use File::Spec;
+use File::HomeDir;
+
 use LWP::UserAgent;
 use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::WorkspaceClientExt;
@@ -69,13 +72,21 @@ Description:
 
 =cut
 sub ConfigFilename {
-    my $filename = glob "~/.patric_config";
+    my $filename;
     if (defined($ENV{ P3_CLIENT_CONFIG })) {
     	$filename = $ENV{ P3_CLIENT_CONFIG };
-    } elsif (defined($ENV{ HOME })) {
-    	$filename = $ENV{ HOME }."/.patric_config";
     }
-   	return $filename;
+    else
+    {
+	#
+	# Glob is sporadically failing on windows. In particular,
+	# the second time this routine is invoked when ws-ls is run.
+	# Replace with explicit search in the homedir which is safer anyway.
+	#
+	$filename = File::Spec->catfile(File::HomeDir->my_home, ".patric_config"); 
+	undef $filename unless -f $filename;
+    }
+    return $filename;
 }
 
 =head3 GetConfigs
@@ -87,12 +98,14 @@ Description:
 =cut
 sub GetConfigs {
     my $filename = ConfigFilename();
-    my $c;
-    if (!-e $filename) {
+
+    if (! -f $filename) {
     	SetDefaultConfig("P3Client");
     }
-	$c = Config::Simple->new( filename => $filename);
-    if (!defined($c->param("P3Client.wsurl")) || length($c->param("P3Client.wsurl")) == 0 || $c->param("P3Client.wsurl") =~ m/ARRAY/) {
+    my $c = Config::Simple->new( filename => $filename);
+    my $wsurl = $c->param("P3Client.wsurl");
+    if (!$wsurl || $wsurl =~ /ARRAY/)
+    {
     	SetDefaultConfig("P3Client");
     	$c = GetConfigs();
     }
@@ -120,20 +133,23 @@ Description:
 
 =cut
 sub SetDefaultConfig {
-	my($class) = @_;
-	my $filename = ConfigFilename();
+    my($class) = @_;
+    my $filename = ConfigFilename();
     my $c;
-    if (-e $filename) {
+    if (-f $filename)
+    {
     	$c = Config::Simple->new( filename => $filename);
-    } else {
-	    $c = Config::Simple->new( syntax => 'ini');
+    }
+    else
+    {
+	$c = Config::Simple->new( syntax => 'ini');
     }
     if ($class eq "P3Client") {
-		$c->set_block('P3Client', {
-			wsurl => $Bio::P3::Workspace::ScriptHelpers::defaultWSURL,
-			appurl => $Bio::P3::Workspace::ScriptHelpers::defaultAPPURL		
-		});
-	}
+	$c->set_block('P3Client', {
+	    wsurl => $Bio::P3::Workspace::ScriptHelpers::defaultWSURL,
+	    appurl => $Bio::P3::Workspace::ScriptHelpers::defaultAPPURL		
+	    });
+    }
     $c->write($filename);
 }
 
