@@ -25,6 +25,11 @@ my($opt, $usage) =
     describe_options("%c %o path [path...]",
 		     ["List one or more workspace paths"],
 		     [],
+		     ["long||l", "Show file details"],
+		     ["time|t", "Sort by creation time"],
+		     ["reverse|r", "Reverse sort order"],
+		     ["shock", "Show shock node IDs in long listing"],
+		     ["full-shock", "Show full shock URLs in long listing"],
 		     ["help|h", "Show this help message"],
 		    );
 print($usage->text), exit 0 if $opt->help;
@@ -35,7 +40,7 @@ my @paths = @ARGV;
 for my $path (@paths)
 {
     eval {
-	show_pretty_ls($ws, $path);
+	show_pretty_ls($ws, $path, $opt);
     };
     if (my $err = $@)
     {

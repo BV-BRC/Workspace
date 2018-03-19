@@ -8,13 +8,15 @@ use Data::Dumper;
 use POSIX;
 use strict;
 use Term::ReadKey;
+use Text::Table;
+use Date::Parse;
 
 use Exporter 'import';
 our @EXPORT_OK = qw(show_pretty_ls);
 
 sub show_pretty_ls
 {
-    my($ws, $path) = @_;
+    my($ws, $path, $opt) = @_;
 
     my $res = $ws->get({ objects => [$path], metadata_only => 1});
 
@@ -27,15 +29,112 @@ sub show_pretty_ls
 
     if ($res->[1] eq 'folder')
     {
-	my $dh = $ws->opendir($path);
-	my @files = sort { $a cmp $b } $ws->readdir($dh);
-	
-	my @out = tabularize(\@files);
-	print "$_\n" foreach @out;
+	my $dir = $ws->ls({ paths => [$path] });
+
+	my @files = sort { compare_paths_for_sort($a, $b, $opt) } @{$dir->{$path}};
+
+	if ($opt->long)
+	{
+	    my @list = map { compute_long_listing($_, $opt) } @files;
+	    my $table = Text::Table->new();
+	    $table->load(@list);
+	    print $table;
+	}
+	else
+	{
+	    @files = map { $_->[0] } @files;
+	    my @out = tabularize(\@files);
+	    print "$_\n" foreach @out;
+	}
     }
     else
     {
-	print "$path\n";
+	if ($opt->long)
+	{
+	    my($ent) = compute_long_listing($res, $opt);
+	    print join(" ", @$ent), "\n";
+	}
+	else
+	{
+	    print "$path\n";
+	}
+    }
+}
+
+#
+# Compute fields for "ls -l" style listing for this object.
+sub compute_long_listing
+{
+    my($ws_obj, $opt) = @_;
+    my($name, $type, $path, $created, $oid, $owner, $size, $user_meta, $auto_meta, $user_perm, $global_perm, $shock) = @$ws_obj;
+
+    my @short_perms;
+    push(@short_perms, $type eq 'folder' ? 'd' : '-');
+    push(@short_perms, 'rw'); 	# In workspace, owner can always access
+    push(@short_perms, $global_perm eq 'n' ? '--' : 'r-');
+    my $short_perms = join("", @short_perms);
+
+    my @ret = ();
+    push(@ret, $short_perms);
+    push(@ret, $owner);
+    push(@ret, $size);
+
+    my $fmt_cstamp;
+    my $cstamp = str2time($created);
+    if (time - $cstamp > 180 * 86400)
+    {
+	$fmt_cstamp = strftime("%b %d  %Y", localtime $cstamp);
+    }
+    else
+    {
+	$fmt_cstamp = strftime("%b %d %H:%M", localtime $cstamp);
+    }
+    push(@ret, $fmt_cstamp);
+
+    if ($opt->full_shock && $shock)
+    {
+	$name .= " <- $shock";
+    }
+    elsif ($opt->shock && $shock =~ m,/node/([^/]+),)
+    {
+	$name .= " <- $1";
+    }
+    
+    push(@ret, $name);
+    return \@ret;
+}
+
+
+#
+# Compare pathnames for display.
+# First sort with leading dots removed so we can group job results
+# with their folders.
+#
+
+sub compare_paths_for_sort
+{
+    my($a, $b, $opt) = @_;
+
+    if ($opt->reverse)
+    {
+	($b, $a) = ($a, $b);
+    }
+
+    my $da = $a->[0];
+    my $db = $b->[0];
+	
+    $da =~ s/^\.//;
+    $db =~ s/^\.//;
+	
+    if ($opt->time)
+    {
+	my $ta = str2time($a->[3]);
+	my $tb = str2time($b->[3]);
+	return $ta <=> $tb or $da cmp $db or $a->[0] cmp $b->[0];
+    }
+    else
+    {
+	return $da cmp $db or $a->[0] cmp $b->[0];
     }
 }
 
