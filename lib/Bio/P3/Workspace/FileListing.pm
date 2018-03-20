@@ -27,7 +27,7 @@ sub show_pretty_ls
 
     $res = $res->[0]->[0];
 
-    if ($res->[1] eq 'folder')
+    if ($res->[1] eq 'folder' && !$opt->directory)
     {
 	my $dir = $ws->ls({ paths => [$path] });
 
@@ -91,6 +91,10 @@ sub compute_long_listing
     }
     push(@ret, $fmt_cstamp);
 
+    if ($opt->ids)
+    {
+	push(@ret, $oid);
+    }
     if ($opt->full_shock && $shock)
     {
 	$name .= " <- $shock";
