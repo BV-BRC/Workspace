@@ -6,7 +6,7 @@ use Data::Dumper;
 use File::Basename;
 use Pod::Usage;
 
-=head1 Remove a directory
+=head1 Remove a file
 
     
 =cut
@@ -22,7 +22,7 @@ my @paths;
 
 my($opt, $usage) =
     describe_options("%c %o path [path...]",
-		     ["Remove one or more directories in the workspace"],
+		     ["Remove one or more files in the workspace"],
 		     [],
 		     ["help|h", "Show this help message"],
 		    );
@@ -36,41 +36,28 @@ for my $path (@paths)
     my $cur = eval { $ws->get( { objects => [$path], metadata_only => 1 } ); };
     if (!$cur || @$cur == 0)
     {
-	print STDERR "Not removing $path: directory does not exist\n";
+	print STDERR "Not removing $path: file does not exist\n";
 	next;
     }
     $cur = $cur->[0]->[0];
-    if ($cur->[1] ne 'folder')
+    if ($cur->[1] eq 'folder' || $cur->[1] eq 'modelfolder' || $cur->[8]->{is_folder})
     {
-	print STDERR "Not removing $path: is not a directory\n";
+	print STDERR "Not removing $path: is a directory\n";
 	next;
     }
 
-    #
-    # We do an ls here to both ensure this really is a folder and that it is empty.
-    #
-     
-    my $cur = eval { $ws->ls( { paths => [$path] } ); };
-
-    my $meta = $cur->{$path};
-    my $n = ref($meta) eq 'ARRAY' ? @$meta : 0;
-    if ($n > 0)
-    {
-	print STDERR "Not removing $path: directory is not empty\n";
-	next;
-    }
     eval {
-	my $res = $ws->delete({ objects => [$path], deleteDirectories => 1 });
+	my $res = $ws->delete({ objects => [$path], deleteDirectories => 0 });
     };
     if (my $err = $@)
     {
         if ($err =~ /_ERROR_(.*?)!?_ERROR_/)
         {
-	    print STDERR "Error removing directory $path: $1\n";
+	    print STDERR "Error removing file $path: $1\n";
         }
         else
         {
-	    print STDERR "Error removing directory $path: $@\n";
+	    print STDERR "Error removing file $path: $@\n";
         }
     }
 }
