@@ -31,7 +31,13 @@ sub show_pretty_ls
     {
 	my $dir = $ws->ls({ paths => [$path] });
 
-	my @files = sort { compare_paths_for_sort($a, $b, $opt) } @{$dir->{$path}};
+	my @files = @{$dir->{$path}};
+	if (!$opt->all)
+	{
+	    @files = grep { $_->[0] !~ /^\./ } @files;
+	}
+
+	@files = sort { compare_paths_for_sort($a, $b, $opt) } @files;
 
 	if ($opt->long)
 	{
@@ -95,6 +101,12 @@ sub compute_long_listing
     {
 	push(@ret, $oid);
     }
+
+    if ($opt->type)
+    {
+	push(@ret, $type);
+    }
+    
     if ($opt->full_shock && $shock)
     {
 	$name .= " <- $shock";
