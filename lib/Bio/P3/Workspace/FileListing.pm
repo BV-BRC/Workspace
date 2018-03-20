@@ -75,7 +75,19 @@ sub compute_long_listing
     my($name, $type, $path, $created, $oid, $owner, $size, $user_meta, $auto_meta, $user_perm, $global_perm, $shock) = @$ws_obj;
 
     my @short_perms;
-    push(@short_perms, $type eq 'folder' ? 'd' : '-');
+    if ($type eq 'folder' || $type eq 'model_folder' || $auto_meta->{is_folder})
+    {
+	push(@short_perms, 'd');
+    }
+    elsif ($shock)
+    {
+	push(@short_perms, 'S');
+    }
+    else
+    {
+	push(@short_perms, '-');
+    }
+	     
     push(@short_perms, 'rw'); 	# In workspace, owner can always access
     push(@short_perms, $global_perm eq 'n' ? '--' : 'r-');
     my $short_perms = join("", @short_perms);
