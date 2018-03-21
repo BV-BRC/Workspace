@@ -34,6 +34,7 @@ my($opt, $usage) =
 		     ["ids", "Show workspace UUIDs in long listing"],
 		     ["shock", "Show shock node IDs in long listing"],
 		     ["full-shock", "Show full shock URLs in long listing"],
+		     ["administrator|A", "Run as administrator (if user has those privileges)"],
 		     ["help|h", "Show this help message"],
 		    );
 print($usage->text), exit 0 if $opt->help;

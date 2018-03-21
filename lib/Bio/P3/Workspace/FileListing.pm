@@ -18,7 +18,9 @@ sub show_pretty_ls
 {
     my($ws, $path, $opt) = @_;
 
-    my $res = $ws->get({ objects => [$path], metadata_only => 1});
+    my @admin = $opt->administrator ? (adminmode => 1) : ();
+
+    my $res = $ws->get({ objects => [$path], metadata_only => 1, @admin});
 
     if (!$res || @$res == 0)
     {
@@ -29,9 +31,12 @@ sub show_pretty_ls
 
     if ($res->[1] eq 'folder' && !$opt->directory)
     {
-	my $dir = $ws->ls({ paths => [$path] });
+	my $dir = $ws->ls({ paths => [$path], @admin });
 
-	my @files = @{$dir->{$path}};
+	my $files = $dir->{$path};
+
+	my @files = ref($files) eq 'ARRAY' ? @$files : ();
+
 	if (!$opt->all)
 	{
 	    @files = grep { $_->[0] !~ /^\./ } @files;
