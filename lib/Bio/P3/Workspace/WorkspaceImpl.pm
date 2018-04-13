@@ -2384,7 +2384,7 @@ sub get_download_url
 	    });
 	
 	if ($obj->{folder} == 1) {
-	    push(@objs, {});
+	    push(@objs, []);
 	    next;
 	}
 	elsif (!$obj->{wsobj})
