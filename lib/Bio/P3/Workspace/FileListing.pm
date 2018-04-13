@@ -53,8 +53,11 @@ sub show_pretty_ls
 	}
 	else
 	{
-	    @files = map { $_->[0] } @files;
-	    my @out = tabularize(\@files);
+	    my @out = map { $_->[0] } @files;
+	    if (!$opt->one_column)
+	    {
+		@out = tabularize(\@out);
+	    }
 	    print "$_\n" foreach @out;
 	}
     }

@@ -27,6 +27,7 @@ my($opt, $usage) =
 		     [],
 		     ["all|a", "Do not ignore entries starting with ."],
 		     ["long||l", "Show file details"],
+		     ["one-column|1", "Show results in one column"],
 		     ["directory|d", "Show file details for directory instead of listing contents"],
 		     ["time|t", "Sort by creation time"],
 		     ["reverse|r", "Reverse sort order"],
@@ -41,6 +42,11 @@ print($usage->text), exit 0 if $opt->help;
 die($usage->text) if @ARGV == 0;
 
 my @paths = @ARGV;
+
+if (! -t STDOUT)
+{
+    $opt->{one_column} = 1;
+}
 
 for my $path (@paths)
 {
