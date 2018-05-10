@@ -1812,18 +1812,18 @@ a reference to a hash where the key is a string and the value is a string
 
 ObjectMeta: tuple containing information about an object in the workspace 
 
-        ObjectName - name selected for object in workspace
-        ObjectType - type of the object in the workspace
-        FullObjectPath - full path to object in workspace, including object name
-        Timestamp creation_time - time when the object was created
-        ObjectID - a globally unique UUID assigned to every object that will never change even if the object is moved
-        Username object_owner - name of object owner
-        ObjectSize - size of the object in bytes or if object is directory, the number of objects in directory
-        UserMetadata - arbitrary user metadata associated with object
-        AutoMetadata - automatically populated metadata generated from object data in automated way
-        WorkspacePerm user_permission - permissions for the authenticated user of this workspace.
-        WorkspacePerm global_permission - whether this workspace is globally readable.
-        string shockurl - shockurl included if object is a reference to a shock node
+       ObjectName - name selected for object in workspace
+       ObjectType - type of the object in the workspace
+       FullObjectPath - full path to object in workspace, including object name
+       Timestamp creation_time - time when the object was created
+       ObjectID - a globally unique UUID assigned to every object that will never change even if the object is moved
+       Username object_owner - name of object owner
+       ObjectSize - size of the object in bytes or if object is directory, the number of objects in directory
+       UserMetadata - arbitrary user metadata associated with object
+       AutoMetadata - automatically populated metadata generated from object data in automated way
+       WorkspacePerm user_permission - permissions for the authenticated user of this workspace.
+       WorkspacePerm global_permission - whether this workspace is globally readable.
+       string shockurl - shockurl included if object is a reference to a shock node
 
 
 =item Definition
@@ -1940,13 +1940,13 @@ setowner has a value which is a string
 =item Description
 
 "update_metadata" command
-Description: 
-This function permits the alteration of metadata associated with an object
-
-Parameters:
-list<tuple<FullObjectPath,UserMetadata>> objects - list of object paths and new metadatas
-bool autometadata - this flag can only be used by the workspace itself
-bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
+        Description: 
+        This function permits the alteration of metadata associated with an object
+        
+        Parameters:
+        list<tuple<FullObjectPath,UserMetadata>> objects - list of object paths and new metadatas
+        bool autometadata - this flag can only be used by the workspace itself
+        bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
 
 
 =item Definition
@@ -2035,12 +2035,12 @@ adminmode has a value which is a bool
 =item Description
 
 "update_shock_meta" command
-Description:
-Call this function to trigger an immediate update of workspace metadata for an object,
-which should typically take place once the upload of a file into shock has completed
+        Description:
+        Call this function to trigger an immediate update of workspace metadata for an object,
+        which should typically take place once the upload of a file into shock has completed
 
-Parameters:
-list<FullObjectPath> objects - list of full paths to objects for which shock nodes should be updated
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects for which shock nodes should be updated
 
 
 =item Definition
@@ -2078,13 +2078,13 @@ adminmode has a value which is a bool
 =item Description
 
 "get_download_url" command
-Description:
-This function returns a URL from which an object may be downloaded
-without any other authentication required. The download URL will only be
-valid for a limited amount of time. 
+        Description:
+        This function returns a URL from which an object may be downloaded
+        without any other authentication required. The download URL will only be
+        valid for a limited amount of time. 
 
-Parameters:
-list<FullObjectPath> objects - list of full paths to objects for which URLs are to be constructed
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects for which URLs are to be constructed
 
 
 =item Definition
@@ -2120,16 +2120,16 @@ objects has a value which is a reference to a list where each element is a FullO
 =item Description
 
 "get_archive_url" command
-Description:
-This function returns a URL from which an archive of the given 
-objects may be downloaded. The download URL will only be valid for a limited
-amount of time.
+        Description:
+        This function returns a URL from which an archive of the given 
+        objects may be downloaded. The download URL will only be valid for a limited
+        amount of time.
 
-Parameters:
-list<FullObjectPath> objects - list of full paths to objects to be archived
-bool recursive - if true, recurse into folders
-string archive_name - name to be given to the archive file
-string archive_type - type of archive, one of "zip", "tar.gz", "tar.bz2"
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects to be archived
+        bool recursive - if true, recurse into folders
+        string archive_name - name to be given to the archive file
+        string archive_type - type of archive, one of "zip", "tar.gz", "tar.bz2"
 
 
 =item Definition
@@ -2171,17 +2171,17 @@ archive_type has a value which is a string
 =item Description
 
 "list" command
-Description: 
-This function retrieves a list of all objects and directories below the specified paths with optional ability to filter by search
-
-Parameters:
-list<FullObjectPath> paths - list of full paths for which subobjects should be listed
-bool excludeDirectories - don't return directories with output (optional; default = "0")
-bool excludeObjects - don't return objects with output (optional; default = "0")
-bool recursive - recursively list contents of all subdirectories; will not work above top level directory (optional; default "0")
-bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
-mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
-bool adminmode - run this command as an admin, meaning you can see anything anywhere
+        Description: 
+        This function retrieves a list of all objects and directories below the specified paths with optional ability to filter by search
+        
+        Parameters:
+        list<FullObjectPath> paths - list of full paths for which subobjects should be listed
+        bool excludeDirectories - don't return directories with output (optional; default = "0")
+        bool excludeObjects - don't return objects with output (optional; default = "0")
+        bool recursive - recursively list contents of all subdirectories; will not work above top level directory (optional; default "0")
+        bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
+        mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
+        bool adminmode - run this command as an admin, meaning you can see anything anywhere
 
 
 =item Definition
@@ -2366,12 +2366,12 @@ adminmode has a value which is a bool
 =item Description
 
 "list_permissions" command
-Description: 
-This function lists permissions for the specified objects
-
-Parameters:
-list<FullObjectPath> objects - path to objects for which permissions are to be listed
-bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
+        Description: 
+        This function lists permissions for the specified objects
+        
+        Parameters:
+        list<FullObjectPath> objects - path to objects for which permissions are to be listed
+        bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
 
 
 =item Definition
