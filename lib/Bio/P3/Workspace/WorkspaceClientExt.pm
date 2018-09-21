@@ -16,6 +16,8 @@ sub download_file
 {
     my($self, $ws_path, $local_file, $use_shock, $token) = @_;
 
+    $token //= $self->{token};
+       
     open(my $fh, ">", $local_file) or die "WorkspaceClientExt::download_file: cannot write $local_file: $!";
     $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]]);
     close($fh);
@@ -25,6 +27,8 @@ sub download_file_to_string
 {
     my($self, $path, $token) = @_;
 
+    $token //= $self->{token};
+       
     my $str;
     open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
 
@@ -46,6 +50,8 @@ sub download_json
 {
     my($self, $path, $token) = @_;
 
+    $token //= $self->{token};
+       
     my $str;
     open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
 
@@ -73,6 +79,8 @@ sub copy_files_to_handles
 {
     my($self, $use_shock, $token, $file_handle_pairs) = @_;
 
+    $token //= $self->{token};
+       
     my $ua;
     if ($use_shock)
     {
@@ -125,6 +133,8 @@ sub save_data_to_file
 {
     my($self, $data, $metadata, $path, $type, $overwrite, $use_shock, $token) = @_;
 
+    $token //= $self->{token};
+       
     $type ||= 'unspecified';
 
     if ($use_shock)
@@ -169,6 +179,8 @@ sub save_file_to_file
 {
     my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token) = @_;
 
+    $token //= $self->{token};
+       
     $type ||= 'unspecified';
 
     my $obj;
