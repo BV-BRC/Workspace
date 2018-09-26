@@ -12,6 +12,51 @@ use JSON::XS;
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
 
+sub file_is_gzipped
+{
+    my($self, $ws_path) = @_;
+
+    my $res = eval { $self->get({ objects => [$ws_path], metadata_only => 1 }); };
+    return undef if $@ =~ /_ERROR_/;
+
+    my($obj_meta, $obj_data) = @{$res->[0]};
+    my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
+       $user_perm, $global_perm, $shockurl) = @$obj_meta;
+
+    if (!$shockurl)
+    {
+	return 0;
+    }
+
+    my $hdr = $self->shock_read_bytes($shockurl, 0, 2);
+    return $hdr eq "\x1f\x8b";
+}
+
+#
+# Read some number of bytes from the given shock url.
+#
+sub shock_read_bytes
+{
+    my($self, $url, $offset, $length) = @_;
+
+    my $ua = LWP::UserAgent->new();
+    my @auth = (Authorization => "OAuth " . $self->{token});
+
+    my $get_url = "$url?download&seek=$offset&length=$length";
+    my $res = $ua->get($get_url, @auth);
+    if ($res->is_success)
+    {
+	return $res->content;
+    }
+    else
+    {
+	warn "Get failed: " . $res->status_line . ": " . $res->content;
+	return undef;
+    }
+       
+}
+    
+
 sub download_file
 {
     my($self, $ws_path, $local_file, $use_shock, $token) = @_;
@@ -301,7 +346,7 @@ sub readdir
 sub stat
 {
     my($self, $path) = @_;
-    my $res = eval { $self->get({ objects => [$path] }); };
+    my $res = eval { $self->get({ objects => [$path], metadata_only => 1 }); };
     return undef if $@ =~ /_ERROR_/;
 
     my($obj_meta, $obj_data) = @{$res->[0]};
