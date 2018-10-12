@@ -5,7 +5,10 @@ use strict;
 use base 'Bio::P3::Workspace::WorkspaceClient';
 use LWP::UserAgent;
 use File::stat ();
+use File::Basename;
 use File::Slurp;
+use Cwd qw(getcwd abs_path);
+use File::Find;
 use Fcntl ':mode';
 use JSON::XS;
 
@@ -67,6 +70,97 @@ sub download_file
     $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]]);
     close($fh);
 }
+
+=item B<upload_folder>
+
+    $res = $ws->upload_folder($local_path, $ws_path, $suffix_type_map)
+
+ local: /home/user/foo/bar
+ ws: /u@p.org/xx
+ Dest path is /u@p.org/xx/bar
+
+ local: /home/user/foo/bar/.
+ ws: /u@p.org/xx
+ Dest path is /u@p.org/xx
+
+
+=cut
+
+sub upload_folder
+{
+    my($self, $local_path, $ws_path_base, $opts) = @_;
+
+    my $suffix_type_map = $opts->{type_map} // {};
+    my $exclude = $opts->{exclude} // [];
+
+    my $abs_local = abs_path($local_path);
+
+    my $cwd = getcwd();
+    $local_path .= "." if ($local_path =~ m,/$,);
+
+    my $last = basename($local_path);
+    my $top;
+    if ($last eq '.')
+    {
+	chdir($local_path) or die "Cannot chdir $local_path: $!";
+	$top = ".";
+    }
+    else
+    {
+	my $d = dirname($local_path);
+	chdir($d) or die "Cannot chdir $d: $!";
+	$top = $last;
+    }
+
+    my $proc = sub {
+	# $File::Find::dir is the dirname
+	# $_ is the filename
+	# $ File::Find::name is the pathame
+
+
+	for my $e (@$exclude)
+	{
+	    if (/$e/)
+	    {
+		print "Exclude $_\n";
+		$File::Find::prune = 1;
+		return;
+	    }
+	}
+
+	my $ws_path = "$ws_path_base/$File::Find::name";
+	$ws_path =~ s,/\./,/,g;
+
+#	print "'$ws_path' '$_'  '$File::Find::name\n";
+	if (-d $_)
+	{
+	    if (!$self->exists($ws_path))
+	    {
+		print "Create $ws_path\n";
+		$self->create({objects => [[$ws_path, 'folder']]});
+	    }
+	}
+	elsif (-f $_)
+	{
+	    my($suffix) = /\.([^.]+)$/;
+	    my $type = $suffix_type_map->{$suffix} // 'txt';
+	    print "Copy $_ => $ws_path with type $type\n";
+	    $self->save_file_to_file($_, { original_path => dirname($abs_local) . "/" . $File::Find::name }, $ws_path, $type, 1,
+	     (-s > 1000 ? 1 : 0), $self->{token});
+	}
+    };
+    find($proc, $top);
+    chdir($cwd);
+}
+
+sub exists
+{
+    my($self, $path) = @_;
+
+    my $cur = eval { $self->get( { objects => [$path], metadata_only => 1 } ); };
+    return ($cur && @$cur == 1);
+}
+    
 
 sub download_file_to_string
 {
