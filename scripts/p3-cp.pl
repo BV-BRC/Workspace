@@ -62,6 +62,7 @@ my %suffix_map = ("fa" => "reads",
 my $workspace_path_prefix;
 my $recursive;
 my $overwrite;
+my $admin;
 
 my @sources;
 my $dest;
@@ -80,6 +81,7 @@ GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "recursive|r" => \$recursive,
 	   "target|t" => \$dest,
 	   "map-suffix|m=s\%" => \%suffix_map,
+	   "administrator|A" => \$admin,
 	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws) },
 	   "help|h" => sub {
 	       print pod2usage(-sections => 'Usage synopsis', -verbose => 99, -exitval => 0);
@@ -449,6 +451,9 @@ sub copy_to
 {
     my($self, $dest) = @_;
 
+    my $opts;
+    $opts->{admin} = 1 if $admin;
+
     print "Copy $self to $dest\n";
     if (ref($dest) eq 'WsFile')
     {
@@ -464,7 +469,8 @@ sub copy_to
     else
     {
 	open(OUT, ">", $dest->path()) or die "Cannot open $dest for writing: $!\n";
-	$self->ws->copy_files_to_handles(1, $token->token(), [[$self->path(), \*OUT]]);
+	$self->ws->copy_files_to_handles(1, $token->token(), [[$self->path(), \*OUT]],
+					$opts);
 	close(OUT);
     }
 	

@@ -16,9 +16,11 @@ Workspace
 
 #BEGIN_HEADER
 use base 'RPC::Any::Package::JSONRPC';
+use POSIX;
 use File::Path;
 use File::Copy ("cp","mv");
 use File::stat;
+use File::Which qw(which);
 use Fcntl ':mode';
 use Data::UUID;
 use REST::Client;
@@ -37,6 +39,8 @@ use Fcntl ':seek';
 use DateTime;
 use DateTime::Format::ISO8601;
 use P3AuthLogin;
+use IO::File;
+use Time::HiRes 'gettimeofday';
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -562,9 +566,10 @@ sub _query_database {
 }
 
 #Copy of move a set of objects in the database**
-sub _copy_or_move_objects {
-	my ($self,$objects, $overwrite, $recursive,$move) = @_;
-	my $output = [];
+sub _copy_or_move_objects
+{
+    my ($self,$objects, $overwrite, $recursive,$move) = @_;
+    my $output = [];
     my $wshash = {};
     my $destinations;
     my $objdest;
@@ -574,73 +579,77 @@ sub _copy_or_move_objects {
     	my ($user,$ws,$path,$name) = $self->_parse_ws_path($objects->[$i]->[0]);
     	my $wsobj = $self->_wscache($user,$ws);
     	if ($move == 0) {
-    		$self->_check_ws_permissions($wsobj,"r",1);
+	    $self->_check_ws_permissions($wsobj,"r",1);
     	} else {
-    		$self->_check_ws_permissions($wsobj,"w",1);
+	    $self->_check_ws_permissions($wsobj,"w",1);
     	}
     	#Checking if a workspace is being copied
     	if (length($path)+length($name) == 0) {
-    		if ($move == 1) {
-    			$self->_check_ws_permissions($wsobj,"o",1);
-    		}
-    		#Adding original to del hash
-    		if ($move == 1) {
-    			$delhash->{$user}->{$ws}->{$path}->{$name} = $wsobj;
-    		}
-    		#Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],"folder",$wsobj->{metadata},$wsobj,undef,1,$move]);
-    		if ($recursive == 1) {
-    			my $subobjs = $self->_query_database({workspace_uuid => $wsobj->{uuid}},0);
-    			for (my $j=0; $j < @{$subobjs}; $j++) {
+	    if ($move == 1) {
+		$self->_check_ws_permissions($wsobj,"o",1);
+	    }
+	    #Adding original to del hash
+	    if ($move == 1) {
+		$delhash->{$user}->{$ws}->{$path}->{$name} = $wsobj;
+	    }
+	    #Adding object to save array
+	    push(@{$saveobjs},[$objects->[$i]->[1],"folder",$wsobj->{metadata},$wsobj,undef,1,$move]);
+	    if ($recursive == 1) {
+		my $subobjs = $self->_query_database({workspace_uuid => $wsobj->{uuid}},0);
+		for (my $j=0; $j < @{$subobjs}; $j++) {
     				#Computing destination path
-    				my $dpath = $objects->[$i]->[1]."/".$subobjs->[$j]->{path}."/".$subobjs->[$j]->{name};
-    				$dpath =~ s/\/+/\//g;
+		    my $dpath = $objects->[$i]->[1]."/".$subobjs->[$j]->{path}."/".$subobjs->[$j]->{name};
+		    $dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
-    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
-    			}
-    		}
+		    push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
+		}
+	    }
     	} else {
-    		#An object is being copied
-    		my $obj = $self->_get_db_object({
-		    	workspace_uuid => $wsobj->{uuid},
-		    	path => $path,
-		    	name => $name
-		    },1);
-		    #Adding original to del hash
-		    if ($move == 1) {
-    			$delhash->{$user}->{$ws}->{$path}->{$name} = $obj;
-		    }
-		    #Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],$obj->{type},$obj->{metadata},$obj,undef,1,$move]);
-    		#Checking if object being copied is a directory
-    		if	($obj->{folder} == 1 && $recursive == 1) {
-    			my $subobjs = $self->_get_directory_contents($obj,1);
-	    		for (my $j=0; $j < @{$subobjs}; $j++) {
+	    #An object is being copied
+	    my $obj = $self->_get_db_object({
+		workspace_uuid => $wsobj->{uuid},
+		path => $path,
+		name => $name
+		},1);
+	    #Adding original to del hash
+	    if ($move == 1) {
+		$delhash->{$user}->{$ws}->{$path}->{$name} = $obj;
+	    }
+	    #Adding object to save array
+	    push(@{$saveobjs},[$objects->[$i]->[1],$obj->{type},$obj->{metadata},$obj,undef,1,$move]);
+	    #Checking if object being copied is a directory
+	    if	($obj->{folder} == 1 && $recursive == 1) {
+		my $subobjs = $self->_get_directory_contents($obj,1);
+		for (my $j=0; $j < @{$subobjs}; $j++) {
 	    			#Computing destination path
-    				my $subpath = $obj->{path}."/".$obj->{name};
-		    		if (length($obj->{path}) == 0) {
-		    			$subpath = $obj->{name};
-		    		}
-    				my $partialpath = substr($subobjs->[$j]->{path},length($subpath));
-	    			my $dpath = $objects->[$i]->[1]."/".$partialpath."/".$subobjs->[$j]->{name};
-    				$dpath =~ s/\/+/\//g;
+		    my $subpath = $obj->{path}."/".$obj->{name};
+		    if (length($obj->{path}) == 0) {
+			$subpath = $obj->{name};
+		    }
+		    my $partialpath = substr($subobjs->[$j]->{path},length($subpath));
+		    my $dpath = $objects->[$i]->[1]."/".$partialpath."/".$subobjs->[$j]->{name};
+		    $dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
-    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
-	    		}
-    		}
+		    push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
+		}
+	    }
     	}
     }
     #Validating the save list
     my $voutput = $self->_validate_save_objects_before_saving($saveobjs,$overwrite);
-	#Running deletions
-	$self->_delete_validated_object_set($voutput->{del});
-	#Creating objects
-	my $output = $self->_create_validated_object_set($voutput->{create},0,0,"n");
-	#Running deletions
-	if (keys(%{$delhash}) > 0) { 
-		$self->_delete_validated_object_set($delhash);
-	}
-	return $output;
+    #Running deletions
+    $self->_delete_validated_object_set($voutput->{del});
+    #Creating objects
+    $self->_write_log("begin copy create");
+    my $output = $self->_create_validated_object_set($voutput->{create},0,0,"n");
+    $self->_write_log("end copy create");
+    #Running deletions
+    if (keys(%{$delhash}) > 0) {
+	$self->_write_log("begin copy delete");
+	$self->_delete_validated_object_set($delhash);
+	$self->_write_log("end copy delete");
+    }
+    return $output;
 }
 
 #This function creates an empty shock node, gives the logged user ACLs, and returns the node ID**
@@ -808,19 +817,19 @@ sub _validate_save_objects_before_saving {
 }
 #Only call this function if the entire deletion list has been validated for existance and permissions** 
 sub _delete_validated_object_set {
-	my ($self,$delhash,$nodeletefiles) = @_;
-	foreach my $user (keys(%{$delhash})) {
+    my ($self,$delhash,$nodeletefiles) = @_;
+    foreach my $user (keys(%{$delhash})) {
     	foreach my $workspace (keys(%{$delhash->{$user}})) {
-    		my $paths = [reverse(sort(keys(%{$delhash->{$user}->{$workspace}})))];
-    		foreach my $path (@{$paths}) {
-    			foreach my $object (keys(%{$delhash->{$user}->{$workspace}->{$path}})) {
-    				if ((length($path)+length($object)) == 0) {
-    					$self->_delete_workspace($delhash->{$user}->{$workspace}->{$path}->{$object});
-    				} else {
-    					$self->_delete_object($delhash->{$user}->{$workspace}->{$path}->{$object},$nodeletefiles);
-    				}
-    			}
-    		}
+	    my $paths = [reverse(sort(keys(%{$delhash->{$user}->{$workspace}})))];
+	    foreach my $path (@{$paths}) {
+		foreach my $object (keys(%{$delhash->{$user}->{$workspace}->{$path}})) {
+		    if ((length($path)+length($object)) == 0) {
+			$self->_delete_workspace($delhash->{$user}->{$workspace}->{$path}->{$object});
+		    } else {
+			$self->_delete_object($delhash->{$user}->{$workspace}->{$path}->{$object},$nodeletefiles);
+		    }
+		}
+	    }
     	}
     }
 }
@@ -835,86 +844,102 @@ sub _delete_workspace {
 }
 #Delete the specified object**
 sub _delete_object {
-	my ($self,$obj,$nodeletefiles) = @_;
+    my ($self,$obj,$nodeletefiles) = @_;
     #Ensuring all parts of object path have nonzero length
-    if (!defined($obj->{wsobj}->{owner}) || length($obj->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in deletion!");}
-    if (!defined($obj->{wsobj}->{name}) || length($obj->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in deletion!");}
-    if (!defined($obj->{name}) || length($obj->{name}) == 0) {$self->_error("Name not specified in deletion!");}
+    if (!defined($obj->{wsobj}->{owner}) || length($obj->{wsobj}->{owner}) == 0)
+    {
+	$self->_error("Owner not specified in deletion!");
+    }
+    if (!defined($obj->{wsobj}->{name}) || length($obj->{wsobj}->{name}) == 0)
+    {
+	$self->_error("Top directory not specified in deletion!");
+    }
+    if (!defined($obj->{name}) || length($obj->{name}) == 0)
+    {
+	$self->_error("Name not specified in deletion!");
+    }
     if ($obj->{folder} == 1) {
-		my $objs = $self->_get_directory_contents($obj,0);
-		for (my $i=0; $i < @{$objs}; $i++) {
-			$self->_delete_object($objs->[$i]);
-		}
-		if (!defined($nodeletefiles)) {
-			rmtree($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
-		}
-		$self->_mongodb()->get_collection('objects')->remove({
-			uuid => $obj->{uuid},
-			workspace_uuid => $obj->{workspace_uuid},
-			path => $obj->{path},
-			name => $obj->{name}
-		});
-	} else {
-		$self->_mongodb()->get_collection('objects')->remove({
-			uuid => $obj->{uuid},
-			workspace_uuid => $obj->{workspace_uuid},
-			path => $obj->{path},
-			name => $obj->{name}
-		});
-		if (!defined($nodeletefiles)) {
-			unlink($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
-		}
+	my $objs = $self->_get_directory_contents($obj,0);
+	for (my $i=0; $i < @{$objs}; $i++) {
+	    $self->_delete_object($objs->[$i]);
 	}
+	if (!defined($nodeletefiles)) {
+	    rmtree($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
+	}
+	$self->_write_log("begin_delete_folder", $obj->{uuid}, $obj->{workspace_uuid},
+			  $obj->{path}, $obj->{name}, $obj->{shocknode});
+	$self->_mongodb()->get_collection('objects')->remove({
+	    uuid => $obj->{uuid},
+	    workspace_uuid => $obj->{workspace_uuid},
+	    path => $obj->{path},
+	    name => $obj->{name}
+	});
+	$self->_write_log("end_delete_folder", $obj->{uuid}, $obj->{workspace_uuid}, $obj->{path}, $obj->{name}, $obj->{shocknode});
+    } else {
+	$self->_write_log("begin_delete_object", $obj->{uuid}, $obj->{workspace_uuid}, $obj->{path}, $obj->{name}, $obj->{shocknode});
+	$self->_mongodb()->get_collection('objects')->remove({
+	    uuid => $obj->{uuid},
+	    workspace_uuid => $obj->{workspace_uuid},
+	    path => $obj->{path},
+	    name => $obj->{name}
+	});
+	$self->_write_log("end_delete_object", $obj->{uuid}, $obj->{workspace_uuid}, $obj->{path}, $obj->{name}, $obj->{shocknode});
+	if (!defined($nodeletefiles)) {
+	    unlink($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
+	}
+    }
 }
+
 #Only call this function to create a set of prevalidated object**
 sub _create_validated_object_set {
-	my ($self,$createhash,$createUploadNodes,$downloadFromLinks,$permission) = @_;
-	#Only call this function if the entire creation list has been validated for subdirectories, overwrites, and permissions
+    my ($self,$createhash,$createUploadNodes,$downloadFromLinks,$permission) = @_;
+    #Only call this function if the entire creation list has been validated for subdirectories, overwrites, and permissions
     my $output = [];
     foreach my $user (keys(%{$createhash})) {
     	foreach my $workspace (keys(%{$createhash->{$user}})) {
-    		my $paths = [(sort(keys(%{$createhash->{$user}->{$workspace}})))];
-    		foreach my $path (@{$paths}) {
-    			foreach my $object (keys(%{$createhash->{$user}->{$workspace}->{$path}})) {
-    				my $objspec = $createhash->{$user}->{$workspace}->{$path}->{$object};
-    				my $createinput = {
-    					user => $user,
-    					workspace => $workspace,
-    					path => $path,
-    					name => $object,
-    					permission => $permission,
-    					type => $objspec->[1],
-    					data => $objspec->[3],
-    					metadata => $objspec->[2],
-    					createUploadNodes => $createUploadNodes,
-    					downloadFromLinks => $downloadFromLinks,
-    				};
-    				if (defined($objspec->[4])) {
-    					if ($self->_getUsername() ne $self->{_params}->{wsuser} && $self->_adminmode() eq 0) {
-			    			$self->_error("Only the workspace or admin can set creation date!");	
-			    		}
-			    		if ($objspec->[4] =~ m/^\d+$/) {
-			    			$objspec->[4] = _format_datetime(DateTime->from_epoch( epoch => $objspec->[4] ));
-			    		}
-    					$createinput->{creation_date} = $objspec->[4];
-    				}
-    				if (defined($objspec->[5])) {
-    					$createinput->{copy} = $objspec->[5];
-    					$createinput->{move} = $objspec->[6];
-    				}
-    				my $obj = $self->_create($createinput);
-    				push(@{$output},$obj);
-    			}
-    		}
+	    my $paths = [(sort(keys(%{$createhash->{$user}->{$workspace}})))];
+	    foreach my $path (@{$paths}) {
+		foreach my $object (keys(%{$createhash->{$user}->{$workspace}->{$path}})) {
+		    my $objspec = $createhash->{$user}->{$workspace}->{$path}->{$object};
+		    my $createinput = {
+			user => $user,
+			workspace => $workspace,
+			path => $path,
+			name => $object,
+			permission => $permission,
+			type => $objspec->[1],
+			data => $objspec->[3],
+			metadata => $objspec->[2],
+			createUploadNodes => $createUploadNodes,
+			downloadFromLinks => $downloadFromLinks,
+		    };
+		    if (defined($objspec->[4])) {
+			if ($self->_getUsername() ne $self->{_params}->{wsuser} && $self->_adminmode() eq 0) {
+			    $self->_error("Only the workspace or admin can set creation date!");	
+			}
+			if ($objspec->[4] =~ m/^\d+$/) {
+			    $objspec->[4] = _format_datetime(DateTime->from_epoch( epoch => $objspec->[4] ));
+			}
+			$createinput->{creation_date} = $objspec->[4];
+		    }
+		    if (defined($objspec->[5])) {
+			$createinput->{copy} = $objspec->[5];
+			$createinput->{move} = $objspec->[6];
+		    }
+		    my $obj = $self->_create($createinput);
+		    push(@{$output},$obj);
+		}
+	    }
     	}
     }
     $self->_compute_autometadata($output);
     return $output;
 }
+
 #This function creates objects and workspaces**
 sub _create {
-	my ($self,$specs) = @_;
-	if (length($specs->{path}) == 0 && length($specs->{name}) == 0) {
+    my ($self,$specs) = @_;
+    if (length($specs->{path}) == 0 && length($specs->{name}) == 0) {
 		return $self->_create_workspace($specs);
 	}
 	return $self->_create_object($specs);
@@ -1044,6 +1069,9 @@ sub _create_object {
 	#
 	my $wsobj_del = delete $object->{wsobj};
 	$self->_mongodb()->get_collection('objects')->insert($object);
+
+	$self->_write_log("create_object", $object->{uuid}, $object->{workspace_uuid},
+			  $object->{path}, $object->{name}, $object->{shocknode});
 	$object->{wsobj} = $wsobj_del;
     return $object;
 }
@@ -1475,46 +1503,65 @@ sub _download_request
     [200, ['Content-Type' => 'text/plain'], [$dlid]];
 }
 
+sub _autometadata_script_path_for_type
+{
+    my($self, $type) = @_;
+
+    my $script = "ws-autometa-$type";
+    my $path = which($script);
+    return $path;
+}
+    
 sub _compute_autometadata {
-	my($self, $objs) = @_;
-	my $path = $self->{_params}->{"job-directory"};
-	if (!-d $path) {
-		File::Path::mkpath ($path);
+    my($self, $objs) = @_;
+    my $path = $self->{_params}->{"job-directory"};
+    if (!-d $path) {
+	File::Path::mkpath ($path);
+    }
+    my $fulldir = File::Temp::tempdir(DIR => $path);
+    if (!-d $fulldir) {
+	File::Path::mkpath ($fulldir);
+    }
+    my $objs_to_process = [];
+    for my $obj (@$objs)
+    {
+	if ($obj->{folder} == 0 && defined($obj->{autometadata}->{inspection_started}))
+	{
+	    my $script = $self->_autometadata_script_path_for_type($obj->{type});
+	    
+	    if ($script)
+	    {
+		delete $obj->{_id};
+		delete $obj->{wsobj}->{_id};
+		push(@{$objs_to_process}, [$obj, $script]);
+	    }
+	    else
+	    {
+		#
+		# If we have no update script, set the autometadata as empty
+		#
+		print STDERR "No script found for type $obj->{type}\n";
+		$self->_updateDB("objects",{uuid => $obj->{uuid}},{'$set' => {"autometadata" => {}}});
+	    }
 	}
-	my $fulldir = File::Temp::tempdir(DIR => $path);
-	if (!-d $fulldir) {
-		File::Path::mkpath ($fulldir);
+    }
+    if (@$objs_to_process)
+    {
+	open (my $fh, ">", "$fulldir/objects.json") or die "Error writing $fulldir/objects.json: $!";
+	my $JSON = JSON::XS->new->utf8(1);
+	print $fh $JSON->encode($objs_to_process);
+	close($fh);
+	$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
+	my $rc = system("ws-update-metadata", $fulldir, "impl");
+	if ($rc != 0)
+	{
+	    warn "Error $rc processing metadata for $fulldir\n";
 	}
-	my $finalobj = [];
-	for (my $i=0; $i < @{$objs}; $i++){
-		if ($objs->[$i]->{folder} == 0 && defined($objs->[$i]->{autometadata}->{inspection_started})) {
-			if (-e $self->{_params}->{"script-path"}."/ws-autometa-".$objs->[$i]->{type}.".pl") {
-				if (defined($objs->[$i]->{_id})) {
-					delete $objs->[$i]->{_id};
-				}
-				if (defined($objs->[$i]->{wsobj}->{_id})) {
-					delete $objs->[$i]->{wsobj}->{_id};
-				}
-				push(@{$finalobj},$objs->[$i]);
-			} else {
-				if (defined($objs->[$i]->{autometadata}->{inspection_started})) {
-					$self->_updateDB("objects",{uuid => $objs->[$i]->{uuid}},{'$set' => {"autometadata" => {}}});
-				}
-			}
-		}
-	}
-	my $size = @{$finalobj};
-	if ($size > 0) {
-		open (my $fh,">",$fulldir."/objects.json");
-		my $JSON = JSON::XS->new->utf8(1);
-		print $fh $JSON->encode($finalobj);
-		close($fh);
-		$ENV{WS_AUTH_TOKEN} = $self->_wsauth();
-		#print "\nperl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl\n\n";
-		system("perl ".$self->{_params}->{"script-path"}."/ws-update-metadata.pl ".$fulldir." impl");
-	} else {
-		File::Path::rmtree($fulldir);
-	}
+    }
+    else
+    {
+	File::Path::rmtree($fulldir);
+    }
 };
 
 sub is_folder {
@@ -1523,6 +1570,17 @@ sub is_folder {
 		return 1;
 	}
 	return 0;
+}
+
+sub _write_log
+{
+    my($self, @fields) = @_;
+    if (my $fh = $self->{_log_fh})
+    {
+	my($sec, $usec) = gettimeofday;
+	my $ts = sprintf(strftime("%Y-%m-%d %H:%M:%S.%%06d", gmtime $sec), $usec);
+	print $fh join("\t", $ts, $self->_getUsername, @fields), "\n";
+    }
 }
 
 #END_HEADER
@@ -1553,6 +1611,7 @@ sub new
         download-lifetime
         download-url-base
         types-file
+	log-path
     )];
     if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 		my $service = $ENV{KB_SERVICE_NAME};
@@ -1620,6 +1679,24 @@ sub new
 		folder => 1,
 		modelfolder => 1
 	};
+
+    if ($params->{'log-path'})
+    {
+	my $log_file = sprintf("%s/log-%06d.txt", $params->{'log-path'}, $$);
+	my $log_fh;
+	if (open($log_fh, ">>", $log_file))
+	{
+	    print STDERR "Begin logging to $log_file\n";
+	    $self->{_log_fh} = $log_fh;
+	    $log_fh->autoflush(1);
+	}
+	else
+	{
+	    warn "Cannot log to $log_file: $!";
+	}
+	    
+    }
+
     #END_CONSTRUCTOR
 
     if ($self->can('_init_instance'))
@@ -2364,7 +2441,7 @@ sub get_download_url
 	    });
 	
 	if ($obj->{folder} == 1) {
-	    push(@objs, {});
+	    push(@objs, []);
 	    next;
 	}
 	elsif (!$obj->{wsobj})
@@ -2815,7 +2892,15 @@ sub copy
     	recursive => 0,
     	move => 0
     });
+    my $n = @{$input->{objects}};
+    $self->_write_log("begin copy_or_move n_objects=$n overwrite=$input->{overwrite} recursive=$input->{recursive} move=$input->{move}");
+    for (my $i = 0; $i < $n; $i++)
+    {
+	my $obj = $input->{objects}->[$i];
+	$self->_write_log("object $i", $obj->[0], $obj->[1]);
+    }
     $output = $self->_copy_or_move_objects($input->{objects},$input->{overwrite},$input->{recursive},$input->{move});
+    $self->_write_log("end copy_or_move n_objects=$n overwrite=$input->{overwrite} recursive=$input->{recursive} move=$input->{move}");
     for (my $i=0; $i < @{$output}; $i++) {
     	$output->[$i] = $self->_generate_object_meta($output->[$i]);
     }
@@ -3655,18 +3740,18 @@ a reference to a hash where the key is a string and the value is a string
 
 ObjectMeta: tuple containing information about an object in the workspace 
 
-        ObjectName - name selected for object in workspace
-        ObjectType - type of the object in the workspace
-        FullObjectPath - full path to object in workspace, including object name
-        Timestamp creation_time - time when the object was created
-        ObjectID - a globally unique UUID assigned to every object that will never change even if the object is moved
-        Username object_owner - name of object owner
-        ObjectSize - size of the object in bytes or if object is directory, the number of objects in directory
-        UserMetadata - arbitrary user metadata associated with object
-        AutoMetadata - automatically populated metadata generated from object data in automated way
-        WorkspacePerm user_permission - permissions for the authenticated user of this workspace.
-        WorkspacePerm global_permission - whether this workspace is globally readable.
-        string shockurl - shockurl included if object is a reference to a shock node
+       ObjectName - name selected for object in workspace
+       ObjectType - type of the object in the workspace
+       FullObjectPath - full path to object in workspace, including object name
+       Timestamp creation_time - time when the object was created
+       ObjectID - a globally unique UUID assigned to every object that will never change even if the object is moved
+       Username object_owner - name of object owner
+       ObjectSize - size of the object in bytes or if object is directory, the number of objects in directory
+       UserMetadata - arbitrary user metadata associated with object
+       AutoMetadata - automatically populated metadata generated from object data in automated way
+       WorkspacePerm user_permission - permissions for the authenticated user of this workspace.
+       WorkspacePerm global_permission - whether this workspace is globally readable.
+       string shockurl - shockurl included if object is a reference to a shock node
 
 
 =item Definition
@@ -3783,13 +3868,13 @@ setowner has a value which is a string
 =item Description
 
 "update_metadata" command
-Description: 
-This function permits the alteration of metadata associated with an object
-
-Parameters:
-list<tuple<FullObjectPath,UserMetadata>> objects - list of object paths and new metadatas
-bool autometadata - this flag can only be used by the workspace itself
-bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
+        Description: 
+        This function permits the alteration of metadata associated with an object
+        
+        Parameters:
+        list<tuple<FullObjectPath,UserMetadata>> objects - list of object paths and new metadatas
+        bool autometadata - this flag can only be used by the workspace itself
+        bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
 
 
 =item Definition
@@ -3878,12 +3963,12 @@ adminmode has a value which is a bool
 =item Description
 
 "update_shock_meta" command
-Description:
-Call this function to trigger an immediate update of workspace metadata for an object,
-which should typically take place once the upload of a file into shock has completed
+        Description:
+        Call this function to trigger an immediate update of workspace metadata for an object,
+        which should typically take place once the upload of a file into shock has completed
 
-Parameters:
-list<FullObjectPath> objects - list of full paths to objects for which shock nodes should be updated
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects for which shock nodes should be updated
 
 
 =item Definition
@@ -3921,13 +4006,13 @@ adminmode has a value which is a bool
 =item Description
 
 "get_download_url" command
-Description:
-This function returns a URL from which an object may be downloaded
-without any other authentication required. The download URL will only be
-valid for a limited amount of time. 
+        Description:
+        This function returns a URL from which an object may be downloaded
+        without any other authentication required. The download URL will only be
+        valid for a limited amount of time. 
 
-Parameters:
-list<FullObjectPath> objects - list of full paths to objects for which URLs are to be constructed
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects for which URLs are to be constructed
 
 
 =item Definition
@@ -3963,16 +4048,16 @@ objects has a value which is a reference to a list where each element is a FullO
 =item Description
 
 "get_archive_url" command
-Description:
-This function returns a URL from which an archive of the given 
-objects may be downloaded. The download URL will only be valid for a limited
-amount of time.
+        Description:
+        This function returns a URL from which an archive of the given 
+        objects may be downloaded. The download URL will only be valid for a limited
+        amount of time.
 
-Parameters:
-list<FullObjectPath> objects - list of full paths to objects to be archived
-bool recursive - if true, recurse into folders
-string archive_name - name to be given to the archive file
-string archive_type - type of archive, one of "zip", "tar.gz", "tar.bz2"
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects to be archived
+        bool recursive - if true, recurse into folders
+        string archive_name - name to be given to the archive file
+        string archive_type - type of archive, one of "zip", "tar.gz", "tar.bz2"
 
 
 =item Definition
@@ -4014,17 +4099,17 @@ archive_type has a value which is a string
 =item Description
 
 "list" command
-Description: 
-This function retrieves a list of all objects and directories below the specified paths with optional ability to filter by search
-
-Parameters:
-list<FullObjectPath> paths - list of full paths for which subobjects should be listed
-bool excludeDirectories - don't return directories with output (optional; default = "0")
-bool excludeObjects - don't return objects with output (optional; default = "0")
-bool recursive - recursively list contents of all subdirectories; will not work above top level directory (optional; default "0")
-bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
-mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
-bool adminmode - run this command as an admin, meaning you can see anything anywhere
+        Description: 
+        This function retrieves a list of all objects and directories below the specified paths with optional ability to filter by search
+        
+        Parameters:
+        list<FullObjectPath> paths - list of full paths for which subobjects should be listed
+        bool excludeDirectories - don't return directories with output (optional; default = "0")
+        bool excludeObjects - don't return objects with output (optional; default = "0")
+        bool recursive - recursively list contents of all subdirectories; will not work above top level directory (optional; default "0")
+        bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
+        mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
+        bool adminmode - run this command as an admin, meaning you can see anything anywhere
 
 
 =item Definition
@@ -4209,12 +4294,12 @@ adminmode has a value which is a bool
 =item Description
 
 "list_permissions" command
-Description: 
-This function lists permissions for the specified objects
-
-Parameters:
-list<FullObjectPath> objects - path to objects for which permissions are to be listed
-bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
+        Description: 
+        This function lists permissions for the specified objects
+        
+        Parameters:
+        list<FullObjectPath> objects - path to objects for which permissions are to be listed
+        bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
 
 
 =item Definition

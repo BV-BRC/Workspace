@@ -5,26 +5,169 @@ use strict;
 use base 'Bio::P3::Workspace::WorkspaceClient';
 use LWP::UserAgent;
 use File::stat ();
+use File::Basename;
 use File::Slurp;
+use Cwd qw(getcwd abs_path);
+use File::Find;
 use Fcntl ':mode';
 use JSON::XS;
 
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
 
+sub file_is_gzipped
+{
+    my($self, $ws_path) = @_;
+
+    my $res = eval { $self->get({ objects => [$ws_path], metadata_only => 1 }); };
+    return undef if $@ =~ /_ERROR_/;
+
+    my($obj_meta, $obj_data) = @{$res->[0]};
+    my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
+       $user_perm, $global_perm, $shockurl) = @$obj_meta;
+
+    if (!$shockurl)
+    {
+	return 0;
+    }
+
+    my $hdr = $self->shock_read_bytes($shockurl, 0, 2);
+    return $hdr eq "\x1f\x8b";
+}
+
+#
+# Read some number of bytes from the given shock url.
+#
+sub shock_read_bytes
+{
+    my($self, $url, $offset, $length) = @_;
+
+    my $ua = LWP::UserAgent->new();
+    my @auth = (Authorization => "OAuth " . $self->{token});
+
+    my $get_url = "$url?download&seek=$offset&length=$length";
+    my $res = $ua->get($get_url, @auth);
+    if ($res->is_success)
+    {
+	return $res->content;
+    }
+    else
+    {
+	warn "Get failed: " . $res->status_line . ": " . $res->content;
+	return undef;
+    }
+       
+}
+    
+
 sub download_file
 {
-    my($self, $ws_path, $local_file, $use_shock, $token) = @_;
+    my($self, $ws_path, $local_file, $use_shock, $token, $opts) = @_;
 
+    $token //= $self->{token};
+       
     open(my $fh, ">", $local_file) or die "WorkspaceClientExt::download_file: cannot write $local_file: $!";
-    $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]]);
+    $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]], $opts);
     close($fh);
 }
+
+=item B<upload_folder>
+
+    $res = $ws->upload_folder($local_path, $ws_path, $suffix_type_map)
+
+ local: /home/user/foo/bar
+ ws: /u@p.org/xx
+ Dest path is /u@p.org/xx/bar
+
+ local: /home/user/foo/bar/.
+ ws: /u@p.org/xx
+ Dest path is /u@p.org/xx
+
+
+=cut
+
+sub upload_folder
+{
+    my($self, $local_path, $ws_path_base, $opts) = @_;
+
+    my $suffix_type_map = $opts->{type_map} // {};
+    my $exclude = $opts->{exclude} // [];
+
+    my $abs_local = abs_path($local_path);
+
+    my $cwd = getcwd();
+    $local_path .= "." if ($local_path =~ m,/$,);
+
+    my $last = basename($local_path);
+    my $top;
+    if ($last eq '.')
+    {
+	chdir($local_path) or die "Cannot chdir $local_path: $!";
+	$top = ".";
+    }
+    else
+    {
+	my $d = dirname($local_path);
+	chdir($d) or die "Cannot chdir $d: $!";
+	$top = $last;
+    }
+
+    my $proc = sub {
+	# $File::Find::dir is the dirname
+	# $_ is the filename
+	# $ File::Find::name is the pathame
+
+
+	for my $e (@$exclude)
+	{
+	    if (/$e/)
+	    {
+		print "Exclude $_\n";
+		$File::Find::prune = 1;
+		return;
+	    }
+	}
+
+	my $ws_path = "$ws_path_base/$File::Find::name";
+	$ws_path =~ s,/\./,/,g;
+
+#	print "'$ws_path' '$_'  '$File::Find::name\n";
+	if (-d $_)
+	{
+	    if (!$self->exists($ws_path))
+	    {
+		print "Create $ws_path\n";
+		$self->create({objects => [[$ws_path, 'folder']]});
+	    }
+	}
+	elsif (-f $_)
+	{
+	    my($suffix) = /\.([^.]+)$/;
+	    my $type = $suffix_type_map->{$suffix} // 'txt';
+	    print "Copy $_ => $ws_path with type $type\n";
+	    $self->save_file_to_file($_, { original_path => dirname($abs_local) . "/" . $File::Find::name }, $ws_path, $type, 1,
+	     (-s > 1000 ? 1 : 0), $self->{token});
+	}
+    };
+    find($proc, $top);
+    chdir($cwd);
+}
+
+sub exists
+{
+    my($self, $path) = @_;
+
+    my $cur = eval { $self->get( { objects => [$path], metadata_only => 1 } ); };
+    return ($cur && @$cur == 1);
+}
+    
 
 sub download_file_to_string
 {
     my($self, $path, $token) = @_;
 
+    $token //= $self->{token};
+       
     my $str;
     open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
 
@@ -46,6 +189,8 @@ sub download_json
 {
     my($self, $path, $token) = @_;
 
+    $token //= $self->{token};
+       
     my $str;
     open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
 
@@ -71,17 +216,26 @@ sub download_json
 
 sub copy_files_to_handles
 {
-    my($self, $use_shock, $token, $file_handle_pairs) = @_;
+    my($self, $use_shock, $token, $file_handle_pairs, $opts) = @_;
 
+    $opts //= {};
+
+    $token //= $self->{token};
+       
     my $ua;
     if ($use_shock)
     {
 	$ua = LWP::UserAgent->new();
 	$token = $token->token if ref($token);
     }
+    my @get_opts;
+    if ($opts->{admin})
+    {
+	push(@get_opts, adminmode => 1);
+    }
 
     my %fhmap = map { @$_ } @$file_handle_pairs;
-    my $res = $self->get({ objects => [ map { $_->[0] } @$file_handle_pairs] });
+    my $res = $self->get({ @get_opts, objects => [ map { $_->[0] } @$file_handle_pairs] });
 
     # print Dumper(\%fhmap, $file_handle_pairs, $res);
     for my $i (0 .. $#$res)
@@ -105,7 +259,17 @@ sub copy_files_to_handles
 		print $fh $data;
 	    };
 
-	    my $res = $ua->get($meta->shock_url. "?download",
+	    my $qry = '?download';
+	    if (my $o = $opts->{offset})
+	    {
+		$qry .= "&seek=$o";
+	    }
+	    if (my $o = $opts->{length})
+	    {
+		$qry .= "&length=$o";
+	    }
+
+	    my $res = $ua->get($meta->shock_url . $qry,
 			       Authorization => "OAuth " . $token,
 			       ':content_cb' => $cb);
 	    if (!$res->is_success)
@@ -125,6 +289,8 @@ sub save_data_to_file
 {
     my($self, $data, $metadata, $path, $type, $overwrite, $use_shock, $token) = @_;
 
+    $token //= $self->{token};
+       
     $type ||= 'unspecified';
 
     if ($use_shock)
@@ -169,6 +335,8 @@ sub save_file_to_file
 {
     my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token) = @_;
 
+    $token //= $self->{token};
+       
     $type ||= 'unspecified';
 
     my $obj;
@@ -197,7 +365,7 @@ sub save_file_to_file
 	my $sres = $ua->request($req);
 	if (!$sres->is_success)
 	{
-	    die "Failure uploading $local_file to shock: " . $res->status_line;
+	    die "Failure uploading $local_file to shock: " . $sres->status_line;
 	}
 	$obj = $res;
     }
@@ -289,7 +457,7 @@ sub readdir
 sub stat
 {
     my($self, $path) = @_;
-    my $res = eval { $self->get({ objects => [$path] }); };
+    my $res = eval { $self->get({ objects => [$path], metadata_only => 1 }); };
     return undef if $@ =~ /_ERROR_/;
 
     my($obj_meta, $obj_data) = @{$res->[0]};
