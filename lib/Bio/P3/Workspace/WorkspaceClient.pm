@@ -1,5 +1,5 @@
 package Bio::P3::Workspace::WorkspaceClient;
-
+use Carp::Always;
 use POSIX;
 use strict;
 use Data::Dumper;
@@ -518,7 +518,7 @@ sub get
 	if ($result->{error}) {
 	    my $msg = $result->{error}->{error} || $result->{error}->{message};
 	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
-	    die "Error $result->{error}->{code} invoking get:\n$msg\n";
+	    die "Error $result->{error}->{code} invoking get:\n$msg\n" . Dumper(@args);
 	} else {
 	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
 	}

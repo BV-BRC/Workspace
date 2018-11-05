@@ -16,6 +16,7 @@ Workspace
 
 #BEGIN_HEADER
 use base 'RPC::Any::Package::JSONRPC';
+use POSIX;
 use File::Path;
 use File::Copy ("cp","mv");
 use File::stat;
@@ -38,6 +39,8 @@ use Fcntl ':seek';
 use DateTime;
 use DateTime::Format::ISO8601;
 use P3AuthLogin;
+use IO::File;
+use Time::HiRes 'gettimeofday';
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -563,9 +566,10 @@ sub _query_database {
 }
 
 #Copy of move a set of objects in the database**
-sub _copy_or_move_objects {
-	my ($self,$objects, $overwrite, $recursive,$move) = @_;
-	my $output = [];
+sub _copy_or_move_objects
+{
+    my ($self,$objects, $overwrite, $recursive,$move) = @_;
+    my $output = [];
     my $wshash = {};
     my $destinations;
     my $objdest;
@@ -575,73 +579,77 @@ sub _copy_or_move_objects {
     	my ($user,$ws,$path,$name) = $self->_parse_ws_path($objects->[$i]->[0]);
     	my $wsobj = $self->_wscache($user,$ws);
     	if ($move == 0) {
-    		$self->_check_ws_permissions($wsobj,"r",1);
+	    $self->_check_ws_permissions($wsobj,"r",1);
     	} else {
-    		$self->_check_ws_permissions($wsobj,"w",1);
+	    $self->_check_ws_permissions($wsobj,"w",1);
     	}
     	#Checking if a workspace is being copied
     	if (length($path)+length($name) == 0) {
-    		if ($move == 1) {
-    			$self->_check_ws_permissions($wsobj,"o",1);
-    		}
-    		#Adding original to del hash
-    		if ($move == 1) {
-    			$delhash->{$user}->{$ws}->{$path}->{$name} = $wsobj;
-    		}
-    		#Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],"folder",$wsobj->{metadata},$wsobj,undef,1,$move]);
-    		if ($recursive == 1) {
-    			my $subobjs = $self->_query_database({workspace_uuid => $wsobj->{uuid}},0);
-    			for (my $j=0; $j < @{$subobjs}; $j++) {
+	    if ($move == 1) {
+		$self->_check_ws_permissions($wsobj,"o",1);
+	    }
+	    #Adding original to del hash
+	    if ($move == 1) {
+		$delhash->{$user}->{$ws}->{$path}->{$name} = $wsobj;
+	    }
+	    #Adding object to save array
+	    push(@{$saveobjs},[$objects->[$i]->[1],"folder",$wsobj->{metadata},$wsobj,undef,1,$move]);
+	    if ($recursive == 1) {
+		my $subobjs = $self->_query_database({workspace_uuid => $wsobj->{uuid}},0);
+		for (my $j=0; $j < @{$subobjs}; $j++) {
     				#Computing destination path
-    				my $dpath = $objects->[$i]->[1]."/".$subobjs->[$j]->{path}."/".$subobjs->[$j]->{name};
-    				$dpath =~ s/\/+/\//g;
+		    my $dpath = $objects->[$i]->[1]."/".$subobjs->[$j]->{path}."/".$subobjs->[$j]->{name};
+		    $dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
-    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
-    			}
-    		}
+		    push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
+		}
+	    }
     	} else {
-    		#An object is being copied
-    		my $obj = $self->_get_db_object({
-		    	workspace_uuid => $wsobj->{uuid},
-		    	path => $path,
-		    	name => $name
-		    },1);
-		    #Adding original to del hash
-		    if ($move == 1) {
-    			$delhash->{$user}->{$ws}->{$path}->{$name} = $obj;
-		    }
-		    #Adding object to save array
-    		push(@{$saveobjs},[$objects->[$i]->[1],$obj->{type},$obj->{metadata},$obj,undef,1,$move]);
-    		#Checking if object being copied is a directory
-    		if	($obj->{folder} == 1 && $recursive == 1) {
-    			my $subobjs = $self->_get_directory_contents($obj,1);
-	    		for (my $j=0; $j < @{$subobjs}; $j++) {
+	    #An object is being copied
+	    my $obj = $self->_get_db_object({
+		workspace_uuid => $wsobj->{uuid},
+		path => $path,
+		name => $name
+		},1);
+	    #Adding original to del hash
+	    if ($move == 1) {
+		$delhash->{$user}->{$ws}->{$path}->{$name} = $obj;
+	    }
+	    #Adding object to save array
+	    push(@{$saveobjs},[$objects->[$i]->[1],$obj->{type},$obj->{metadata},$obj,undef,1,$move]);
+	    #Checking if object being copied is a directory
+	    if	($obj->{folder} == 1 && $recursive == 1) {
+		my $subobjs = $self->_get_directory_contents($obj,1);
+		for (my $j=0; $j < @{$subobjs}; $j++) {
 	    			#Computing destination path
-    				my $subpath = $obj->{path}."/".$obj->{name};
-		    		if (length($obj->{path}) == 0) {
-		    			$subpath = $obj->{name};
-		    		}
-    				my $partialpath = substr($subobjs->[$j]->{path},length($subpath));
-	    			my $dpath = $objects->[$i]->[1]."/".$partialpath."/".$subobjs->[$j]->{name};
-    				$dpath =~ s/\/+/\//g;
+		    my $subpath = $obj->{path}."/".$obj->{name};
+		    if (length($obj->{path}) == 0) {
+			$subpath = $obj->{name};
+		    }
+		    my $partialpath = substr($subobjs->[$j]->{path},length($subpath));
+		    my $dpath = $objects->[$i]->[1]."/".$partialpath."/".$subobjs->[$j]->{name};
+		    $dpath =~ s/\/+/\//g;
     				#Adding subobject to save array
-    				push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
-	    		}
-    		}
+		    push(@{$saveobjs},[$dpath,$subobjs->[$j]->{type},$subobjs->[$j]->{metadata},$subobjs->[$j],undef,1,$move]);
+		}
+	    }
     	}
     }
     #Validating the save list
     my $voutput = $self->_validate_save_objects_before_saving($saveobjs,$overwrite);
-	#Running deletions
-	$self->_delete_validated_object_set($voutput->{del});
-	#Creating objects
-	my $output = $self->_create_validated_object_set($voutput->{create},0,0,"n");
-	#Running deletions
-	if (keys(%{$delhash}) > 0) { 
-		$self->_delete_validated_object_set($delhash);
-	}
-	return $output;
+    #Running deletions
+    $self->_delete_validated_object_set($voutput->{del});
+    #Creating objects
+    $self->_write_log("begin copy create");
+    my $output = $self->_create_validated_object_set($voutput->{create},0,0,"n");
+    $self->_write_log("end copy create");
+    #Running deletions
+    if (keys(%{$delhash}) > 0) {
+	$self->_write_log("begin copy delete");
+	$self->_delete_validated_object_set($delhash);
+	$self->_write_log("end copy delete");
+    }
+    return $output;
 }
 
 #This function creates an empty shock node, gives the logged user ACLs, and returns the node ID**
@@ -809,19 +817,19 @@ sub _validate_save_objects_before_saving {
 }
 #Only call this function if the entire deletion list has been validated for existance and permissions** 
 sub _delete_validated_object_set {
-	my ($self,$delhash,$nodeletefiles) = @_;
-	foreach my $user (keys(%{$delhash})) {
+    my ($self,$delhash,$nodeletefiles) = @_;
+    foreach my $user (keys(%{$delhash})) {
     	foreach my $workspace (keys(%{$delhash->{$user}})) {
-    		my $paths = [reverse(sort(keys(%{$delhash->{$user}->{$workspace}})))];
-    		foreach my $path (@{$paths}) {
-    			foreach my $object (keys(%{$delhash->{$user}->{$workspace}->{$path}})) {
-    				if ((length($path)+length($object)) == 0) {
-    					$self->_delete_workspace($delhash->{$user}->{$workspace}->{$path}->{$object});
-    				} else {
-    					$self->_delete_object($delhash->{$user}->{$workspace}->{$path}->{$object},$nodeletefiles);
-    				}
-    			}
-    		}
+	    my $paths = [reverse(sort(keys(%{$delhash->{$user}->{$workspace}})))];
+	    foreach my $path (@{$paths}) {
+		foreach my $object (keys(%{$delhash->{$user}->{$workspace}->{$path}})) {
+		    if ((length($path)+length($object)) == 0) {
+			$self->_delete_workspace($delhash->{$user}->{$workspace}->{$path}->{$object});
+		    } else {
+			$self->_delete_object($delhash->{$user}->{$workspace}->{$path}->{$object},$nodeletefiles);
+		    }
+		}
+	    }
     	}
     }
 }
@@ -836,86 +844,102 @@ sub _delete_workspace {
 }
 #Delete the specified object**
 sub _delete_object {
-	my ($self,$obj,$nodeletefiles) = @_;
+    my ($self,$obj,$nodeletefiles) = @_;
     #Ensuring all parts of object path have nonzero length
-    if (!defined($obj->{wsobj}->{owner}) || length($obj->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in deletion!");}
-    if (!defined($obj->{wsobj}->{name}) || length($obj->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in deletion!");}
-    if (!defined($obj->{name}) || length($obj->{name}) == 0) {$self->_error("Name not specified in deletion!");}
+    if (!defined($obj->{wsobj}->{owner}) || length($obj->{wsobj}->{owner}) == 0)
+    {
+	$self->_error("Owner not specified in deletion!");
+    }
+    if (!defined($obj->{wsobj}->{name}) || length($obj->{wsobj}->{name}) == 0)
+    {
+	$self->_error("Top directory not specified in deletion!");
+    }
+    if (!defined($obj->{name}) || length($obj->{name}) == 0)
+    {
+	$self->_error("Name not specified in deletion!");
+    }
     if ($obj->{folder} == 1) {
-		my $objs = $self->_get_directory_contents($obj,0);
-		for (my $i=0; $i < @{$objs}; $i++) {
-			$self->_delete_object($objs->[$i]);
-		}
-		if (!defined($nodeletefiles)) {
-			rmtree($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
-		}
-		$self->_mongodb()->get_collection('objects')->remove({
-			uuid => $obj->{uuid},
-			workspace_uuid => $obj->{workspace_uuid},
-			path => $obj->{path},
-			name => $obj->{name}
-		});
-	} else {
-		$self->_mongodb()->get_collection('objects')->remove({
-			uuid => $obj->{uuid},
-			workspace_uuid => $obj->{workspace_uuid},
-			path => $obj->{path},
-			name => $obj->{name}
-		});
-		if (!defined($nodeletefiles)) {
-			unlink($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
-		}
+	my $objs = $self->_get_directory_contents($obj,0);
+	for (my $i=0; $i < @{$objs}; $i++) {
+	    $self->_delete_object($objs->[$i]);
 	}
+	if (!defined($nodeletefiles)) {
+	    rmtree($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
+	}
+	$self->_write_log("begin_delete_folder", $obj->{uuid}, $obj->{workspace_uuid},
+			  $obj->{path}, $obj->{name}, $obj->{shocknode});
+	$self->_mongodb()->get_collection('objects')->remove({
+	    uuid => $obj->{uuid},
+	    workspace_uuid => $obj->{workspace_uuid},
+	    path => $obj->{path},
+	    name => $obj->{name}
+	});
+	$self->_write_log("end_delete_folder", $obj->{uuid}, $obj->{workspace_uuid}, $obj->{path}, $obj->{name}, $obj->{shocknode});
+    } else {
+	$self->_write_log("begin_delete_object", $obj->{uuid}, $obj->{workspace_uuid}, $obj->{path}, $obj->{name}, $obj->{shocknode});
+	$self->_mongodb()->get_collection('objects')->remove({
+	    uuid => $obj->{uuid},
+	    workspace_uuid => $obj->{workspace_uuid},
+	    path => $obj->{path},
+	    name => $obj->{name}
+	});
+	$self->_write_log("end_delete_object", $obj->{uuid}, $obj->{workspace_uuid}, $obj->{path}, $obj->{name}, $obj->{shocknode});
+	if (!defined($nodeletefiles)) {
+	    unlink($self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name});
+	}
+    }
 }
+
 #Only call this function to create a set of prevalidated object**
 sub _create_validated_object_set {
-	my ($self,$createhash,$createUploadNodes,$downloadFromLinks,$permission) = @_;
-	#Only call this function if the entire creation list has been validated for subdirectories, overwrites, and permissions
+    my ($self,$createhash,$createUploadNodes,$downloadFromLinks,$permission) = @_;
+    #Only call this function if the entire creation list has been validated for subdirectories, overwrites, and permissions
     my $output = [];
     foreach my $user (keys(%{$createhash})) {
     	foreach my $workspace (keys(%{$createhash->{$user}})) {
-    		my $paths = [(sort(keys(%{$createhash->{$user}->{$workspace}})))];
-    		foreach my $path (@{$paths}) {
-    			foreach my $object (keys(%{$createhash->{$user}->{$workspace}->{$path}})) {
-    				my $objspec = $createhash->{$user}->{$workspace}->{$path}->{$object};
-    				my $createinput = {
-    					user => $user,
-    					workspace => $workspace,
-    					path => $path,
-    					name => $object,
-    					permission => $permission,
-    					type => $objspec->[1],
-    					data => $objspec->[3],
-    					metadata => $objspec->[2],
-    					createUploadNodes => $createUploadNodes,
-    					downloadFromLinks => $downloadFromLinks,
-    				};
-    				if (defined($objspec->[4])) {
-    					if ($self->_getUsername() ne $self->{_params}->{wsuser} && $self->_adminmode() eq 0) {
-			    			$self->_error("Only the workspace or admin can set creation date!");	
-			    		}
-			    		if ($objspec->[4] =~ m/^\d+$/) {
-			    			$objspec->[4] = _format_datetime(DateTime->from_epoch( epoch => $objspec->[4] ));
-			    		}
-    					$createinput->{creation_date} = $objspec->[4];
-    				}
-    				if (defined($objspec->[5])) {
-    					$createinput->{copy} = $objspec->[5];
-    					$createinput->{move} = $objspec->[6];
-    				}
-    				my $obj = $self->_create($createinput);
-    				push(@{$output},$obj);
-    			}
-    		}
+	    my $paths = [(sort(keys(%{$createhash->{$user}->{$workspace}})))];
+	    foreach my $path (@{$paths}) {
+		foreach my $object (keys(%{$createhash->{$user}->{$workspace}->{$path}})) {
+		    my $objspec = $createhash->{$user}->{$workspace}->{$path}->{$object};
+		    my $createinput = {
+			user => $user,
+			workspace => $workspace,
+			path => $path,
+			name => $object,
+			permission => $permission,
+			type => $objspec->[1],
+			data => $objspec->[3],
+			metadata => $objspec->[2],
+			createUploadNodes => $createUploadNodes,
+			downloadFromLinks => $downloadFromLinks,
+		    };
+		    if (defined($objspec->[4])) {
+			if ($self->_getUsername() ne $self->{_params}->{wsuser} && $self->_adminmode() eq 0) {
+			    $self->_error("Only the workspace or admin can set creation date!");	
+			}
+			if ($objspec->[4] =~ m/^\d+$/) {
+			    $objspec->[4] = _format_datetime(DateTime->from_epoch( epoch => $objspec->[4] ));
+			}
+			$createinput->{creation_date} = $objspec->[4];
+		    }
+		    if (defined($objspec->[5])) {
+			$createinput->{copy} = $objspec->[5];
+			$createinput->{move} = $objspec->[6];
+		    }
+		    my $obj = $self->_create($createinput);
+		    push(@{$output},$obj);
+		}
+	    }
     	}
     }
     $self->_compute_autometadata($output);
     return $output;
 }
+
 #This function creates objects and workspaces**
 sub _create {
-	my ($self,$specs) = @_;
-	if (length($specs->{path}) == 0 && length($specs->{name}) == 0) {
+    my ($self,$specs) = @_;
+    if (length($specs->{path}) == 0 && length($specs->{name}) == 0) {
 		return $self->_create_workspace($specs);
 	}
 	return $self->_create_object($specs);
@@ -1045,6 +1069,9 @@ sub _create_object {
 	#
 	my $wsobj_del = delete $object->{wsobj};
 	$self->_mongodb()->get_collection('objects')->insert($object);
+
+	$self->_write_log("create_object", $object->{uuid}, $object->{workspace_uuid},
+			  $object->{path}, $object->{name}, $object->{shocknode});
 	$object->{wsobj} = $wsobj_del;
     return $object;
 }
@@ -1545,6 +1572,17 @@ sub is_folder {
 	return 0;
 }
 
+sub _write_log
+{
+    my($self, @fields) = @_;
+    if (my $fh = $self->{_log_fh})
+    {
+	my($sec, $usec) = gettimeofday;
+	my $ts = sprintf(strftime("%Y-%m-%d %H:%M:%S.%%06d", gmtime $sec), $usec);
+	print $fh join("\t", $ts, $self->_getUsername, @fields), "\n";
+    }
+}
+
 #END_HEADER
 
 sub new
@@ -1573,6 +1611,7 @@ sub new
         download-lifetime
         download-url-base
         types-file
+	log-path
     )];
     if ((my $e = $ENV{KB_DEPLOYMENT_CONFIG}) && -e $ENV{KB_DEPLOYMENT_CONFIG}) {
 		my $service = $ENV{KB_SERVICE_NAME};
@@ -1640,6 +1679,24 @@ sub new
 		folder => 1,
 		modelfolder => 1
 	};
+
+    if ($params->{'log-path'})
+    {
+	my $log_file = sprintf("%s/log-%06d.txt", $params->{'log-path'}, $$);
+	my $log_fh;
+	if (open($log_fh, ">>", $log_file))
+	{
+	    print STDERR "Begin logging to $log_file\n";
+	    $self->{_log_fh} = $log_fh;
+	    $log_fh->autoflush(1);
+	}
+	else
+	{
+	    warn "Cannot log to $log_file: $!";
+	}
+	    
+    }
+
     #END_CONSTRUCTOR
 
     if ($self->can('_init_instance'))
@@ -2835,7 +2892,15 @@ sub copy
     	recursive => 0,
     	move => 0
     });
+    my $n = @{$input->{objects}};
+    $self->_write_log("begin copy_or_move n_objects=$n overwrite=$input->{overwrite} recursive=$input->{recursive} move=$input->{move}");
+    for (my $i = 0; $i < $n; $i++)
+    {
+	my $obj = $input->{objects}->[$i];
+	$self->_write_log("object $i", $obj->[0], $obj->[1]);
+    }
     $output = $self->_copy_or_move_objects($input->{objects},$input->{overwrite},$input->{recursive},$input->{move});
+    $self->_write_log("end copy_or_move n_objects=$n overwrite=$input->{overwrite} recursive=$input->{recursive} move=$input->{move}");
     for (my $i=0; $i < @{$output}; $i++) {
     	$output->[$i] = $self->_generate_object_meta($output->[$i]);
     }
