@@ -348,7 +348,7 @@ sub save_file_to_file
 	my $sres = $ua->request($req);
 	if (!$sres->is_success)
 	{
-	    die "Failure uploading $local_file to shock: " . $res->status_line;
+	    die "Failure uploading $local_file to shock: " . $sres->status_line;
 	}
 	$obj = $res;
     }
