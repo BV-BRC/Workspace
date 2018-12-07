@@ -62,12 +62,12 @@ sub shock_read_bytes
 
 sub download_file
 {
-    my($self, $ws_path, $local_file, $use_shock, $token) = @_;
+    my($self, $ws_path, $local_file, $use_shock, $token, $opts) = @_;
 
     $token //= $self->{token};
        
     open(my $fh, ">", $local_file) or die "WorkspaceClientExt::download_file: cannot write $local_file: $!";
-    $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]]);
+    $self->copy_files_to_handles($use_shock, $token, [[$ws_path, $fh]], $opts);
     close($fh);
 }
 
@@ -216,7 +216,9 @@ sub download_json
 
 sub copy_files_to_handles
 {
-    my($self, $use_shock, $token, $file_handle_pairs) = @_;
+    my($self, $use_shock, $token, $file_handle_pairs, $opts) = @_;
+
+    $opts //= {};
 
     $token //= $self->{token};
        
@@ -226,9 +228,14 @@ sub copy_files_to_handles
 	$ua = LWP::UserAgent->new();
 	$token = $token->token if ref($token);
     }
+    my @get_opts;
+    if ($opts->{admin})
+    {
+	push(@get_opts, adminmode => 1);
+    }
 
     my %fhmap = map { @$_ } @$file_handle_pairs;
-    my $res = $self->get({ objects => [ map { $_->[0] } @$file_handle_pairs] });
+    my $res = $self->get({ @get_opts, objects => [ map { $_->[0] } @$file_handle_pairs] });
 
     # print Dumper(\%fhmap, $file_handle_pairs, $res);
     for my $i (0 .. $#$res)
@@ -252,7 +259,17 @@ sub copy_files_to_handles
 		print $fh $data;
 	    };
 
-	    my $res = $ua->get($meta->shock_url. "?download",
+	    my $qry = '?download';
+	    if (my $o = $opts->{offset})
+	    {
+		$qry .= "&seek=$o";
+	    }
+	    if (my $o = $opts->{length})
+	    {
+		$qry .= "&length=$o";
+	    }
+
+	    my $res = $ua->get($meta->shock_url . $qry,
 			       Authorization => "OAuth " . $token,
 			       ':content_cb' => $cb);
 	    if (!$res->is_success)
