@@ -52,6 +52,7 @@ tar_gz
 tbi
 transcriptomics_experiment
 transcripts
+tsv
 txt
 unspecified
 vcf
