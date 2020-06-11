@@ -84,7 +84,7 @@ sub ConfigFilename {
 	# Replace with explicit search in the homedir which is safer anyway.
 	#
 	$filename = File::Spec->catfile(File::HomeDir->my_home, ".patric_config"); 
-	undef $filename unless -f $filename;
+	# undef $filename unless -f $filename;
     }
     return $filename;
 }
