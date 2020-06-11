@@ -11,6 +11,7 @@ use Cwd qw(getcwd abs_path);
 use File::Find;
 use Fcntl ':mode';
 use JSON::XS;
+use utf8;
 
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
@@ -31,8 +32,11 @@ sub file_is_gzipped
 	return 0;
     }
 
+    my %comp_map = ("\x1f\x8b" => 'gzip',
+		    "BZ" => 'bzip2');
+
     my $hdr = $self->shock_read_bytes($shockurl, 0, 2);
-    return $hdr eq "\x1f\x8b";
+    return $comp_map{$hdr};
 }
 
 #
@@ -187,7 +191,7 @@ sub download_file_to_string
 
 sub download_json
 {
-    my($self, $path, $token) = @_;
+    my($self, $path, $token, $options) = @_;
 
     $token //= $self->{token};
        
@@ -195,7 +199,7 @@ sub download_json
     open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
 
     eval {
-	$self->copy_files_to_handles(1, $token, [[$path, $fh]]);
+	$self->copy_files_to_handles(1, $token, [[$path, $fh]], $options);
     };
     if ($@)
     {
@@ -234,23 +238,27 @@ sub copy_files_to_handles
 	push(@get_opts, adminmode => 1);
     }
 
-    my %fhmap = map { @$_ } @$file_handle_pairs;
-    my $res = $self->get({ @get_opts, objects => [ map { $_->[0] } @$file_handle_pairs] });
-
-    # print Dumper(\%fhmap, $file_handle_pairs, $res);
-    for my $i (0 .. $#$res)
+    for my $pair (@$file_handle_pairs)
     {
-	my $ent = $res->[$i];
+	my($filename, $fh) = @$pair;
+	my $res = eval { $self->get({ @get_opts, objects => [ $filename ] }) };
+	if (!$res)
+	{
+	    #
+	    # This might have failed to the pathname needing utf8 decoding.
+	    #
+	    utf8::decode($filename);
+	    print STDERR "Retry download after decoding $filename\n";
+	    $res = eval { $self->get({@get_opts, objects => [$filename]}); };
+	    if (!$res)
+	    {
+		die "Workspace object not found for $filename\n";
+	    }
+	}
+	my $ent = $res->[0];
 	my($meta, $data) = @$ent;
 
-	if (!defined($meta->[0]))
-	{
-	    my $f = $file_handle_pairs->[$i]->[0];
-	    die "Workspace object not found for $f\n";
-	}
-
 	bless $meta, 'Bio::P3::Workspace::ObjectMeta';
-	my $fh = $fhmap{$meta->full_path};
 
 	if ($use_shock && $meta->shock_url)
 	{
@@ -346,6 +354,7 @@ sub save_file_to_file
 
 	$token = $token->token if ref($token);
 	my $ua = LWP::UserAgent->new();
+	$ua->timeout(86400);
 
 	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
 				overwrite => ($overwrite ? 1 : 0),
