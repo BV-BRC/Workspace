@@ -11,7 +11,6 @@ use Cwd qw(getcwd abs_path);
 use File::Find;
 use Fcntl ':mode';
 use JSON::XS;
-use utf8;
 
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
