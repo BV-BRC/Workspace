@@ -489,6 +489,7 @@ sub _count_directory_contents {
 	my ($self,$obj,$recursive) = @_;
 	if ($recursive == 1) {
 		my $path = "^".$obj->{path}."/".$obj->{name};
+		$path =~ s/[()]/\\$&/g; #RDO 2020-1201
 		return $self->_query_database({
 			workspace_uuid => $obj->{workspace_uuid},
 			path => qr/$path/
@@ -979,12 +980,12 @@ sub _create_workspace {
 }
 #This function creates objects**
 sub _create_object {
-	my ($self,$specs) = @_;
-	$specs->{path} =~ s/^\/+//;
-	$specs->{path} =~ s/\/+$//;
-	
-	my $uuid = Data::UUID->new()->create_str();
-	if (defined($specs->{move}) && $specs->{move} == 1) {
+    my ($self,$specs) = @_;
+    $specs->{path} =~ s/^\/+//;
+    $specs->{path} =~ s/\/+$//;
+    
+    my $uuid = Data::UUID->new()->create_str();
+    if (defined($specs->{move}) && $specs->{move} == 1) {
     	$uuid = $specs->{data}->{uuid};
     }
     if (!defined($specs->{creation_date})) {
@@ -992,87 +993,87 @@ sub _create_object {
     }
     my $wsobj = $self->_wscache($specs->{user},$specs->{workspace});
     $self->_check_ws_permissions($wsobj,"w",1);
-	my $object = {
-		wsobj => $wsobj,
-		size => 0,
-		folder => 0,
-		type => $specs->{type},
-		path => $specs->{path},
-		name => $specs->{name},
-		workspace_uuid => $wsobj->{uuid},
-		uuid => $uuid,
-		creation_date => $specs->{creation_date},
-		owner => $self->_get_newobject_owner(),
-		autometadata => { inspection_started => _format_datetime(DateTime->now()) },
-		shock => 0,
-		metadata => $specs->{metadata}
-	};
-	if (!-e $self->{_params}->{"script-path"}."/ws-autometa-".$specs->{type}.".pl") {
-		$object->{autometadata} = {};
-	}
-	if (!defined($object->{wsobj}->{owner}) || length($object->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in creation!");}
+    my $object = {
+	wsobj => $wsobj,
+	size => 0,
+	folder => 0,
+	type => $specs->{type},
+	path => $specs->{path},
+	name => $specs->{name},
+	workspace_uuid => $wsobj->{uuid},
+	uuid => $uuid,
+	creation_date => $specs->{creation_date},
+	owner => $self->_get_newobject_owner(),
+	autometadata => { inspection_started => _format_datetime(DateTime->now()) },
+	shock => 0,
+	metadata => $specs->{metadata}
+    };
+    if (!-e $self->{_params}->{"script-path"}."/ws-autometa-".$specs->{type}.".pl") {
+	$object->{autometadata} = {};
+    }
+    if (!defined($object->{wsobj}->{owner}) || length($object->{wsobj}->{owner}) == 0) {$self->_error("Owner not specified in creation!");}
     if (!defined($object->{wsobj}->{name}) || length($object->{wsobj}->{name}) == 0) {$self->_error("Top directory not specified in creation!");}
     if (!defined($object->{name}) || length($object->{name}) == 0) {$self->_error("Name not specified in creation!");}
-	if ($self->is_folder($specs->{type}) == 1) {
-		#Creating folder on file system
-		$object->{autometadata} = {};
-		$object->{folder} = 1;
-		File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
-	} elsif (defined($specs->{copy}) && $specs->{copy} == 1) {
-		$object->{shock} = $specs->{data}->{shock};
-		$object->{size} = $specs->{data}->{size};
-		$object->{autometadata} = $specs->{data}->{autometadata};
-		if (defined($specs->{data}->{shocknode})) {
-			$object->{shocknode} = $specs->{data}->{shocknode};
-		}
-		if (defined($specs->{data}->{downloadLink})) {
-			$object->{downloadLink} = $specs->{data}->{downloadLink};
-		}
-		if (defined($specs->{data}->{downloaded})) {
-			$object->{downloaded} = $specs->{data}->{downloaded};
-		}
-		if ($object->{shock} == 0) {
-			if ($specs->{move} == 1) {
-				mv($self->_db_path()."/".$specs->{data}->{wsobj}->{owner}."/".$specs->{data}->{wsobj}->{name}."/".$specs->{data}->{path}."/".$specs->{data}->{name},$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
-			} else {
-				cp($self->_db_path()."/".$specs->{data}->{wsobj}->{owner}."/".$specs->{data}->{wsobj}->{name}."/".$specs->{data}->{path}."/".$specs->{data}->{name},$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
-			}
-		}
-	} elsif ($specs->{createUploadNodes} == 1) {
-		#Creating upload node if requested
-		$object->{shock} = 1;
-		$object->{shocknode} = $self->_shockurl()."/node/".$self->_create_shock_node();
-	} elsif ($specs->{downloadFromLinks} == 1) {
-		#Creating upload node and setting download link, which will be processed asynchronously
-		$object->{shock} = 1;
-		$object->{shocknode} = $self->_shockurl()."/node/".$self->_create_shock_node();
-		$object->{downloadLink} = $specs->{data};
-		$object->{downloaded} == 0;
-	} else {
-		#Writing data to file system directly and setting file size
-		my $data = $specs->{data};
-		if (!-d $self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}) {
-			File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path});
-		}
-		open (my $fh,">",$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
-		if (ref($data) eq 'ARRAY' || ref($data) eq 'HASH') {
-			my $JSON = JSON::XS->new->utf8(1);
-			$data = $JSON->encode($data);	
-		}
-		print $fh $data;
-		close($fh);
-		my $fstat = stat($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
-		$object->{size} = $fstat->size();
+    if ($self->is_folder($specs->{type}) == 1) {
+	#Creating folder on file system
+	$object->{autometadata} = {};
+	$object->{folder} = 1;
+	File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
+    } elsif (defined($specs->{copy}) && $specs->{copy} == 1) {
+	$object->{shock} = $specs->{data}->{shock};
+	$object->{size} = $specs->{data}->{size};
+	$object->{autometadata} = $specs->{data}->{autometadata};
+	if (defined($specs->{data}->{shocknode})) {
+	    $object->{shocknode} = $specs->{data}->{shocknode};
 	}
-	# Creating object in mongodb
-	# We need to remove wsobj from the object so it doesn't land in the database.
-	#
-	my $wsobj_del = delete $object->{wsobj};
-	$self->_mongodb()->get_collection('objects')->insert($object);
-
-	$self->_write_log("create_object", $object->{uuid}, $object->{workspace_uuid},
-			  $object->{path}, $object->{name}, $object->{shocknode});
-	$object->{wsobj} = $wsobj_del;
+	if (defined($specs->{data}->{downloadLink})) {
+	    $object->{downloadLink} = $specs->{data}->{downloadLink};
+	}
+	if (defined($specs->{data}->{downloaded})) {
+	    $object->{downloaded} = $specs->{data}->{downloaded};
+	}
+	if ($object->{shock} == 0) {
+	    if ($specs->{move} == 1) {
+		mv($self->_db_path()."/".$specs->{data}->{wsobj}->{owner}."/".$specs->{data}->{wsobj}->{name}."/".$specs->{data}->{path}."/".$specs->{data}->{name},$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
+	    } else {
+		cp($self->_db_path()."/".$specs->{data}->{wsobj}->{owner}."/".$specs->{data}->{wsobj}->{name}."/".$specs->{data}->{path}."/".$specs->{data}->{name},$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
+	    }
+	}
+    } elsif ($specs->{createUploadNodes} == 1) {
+	#Creating upload node if requested
+	$object->{shock} = 1;
+	$object->{shocknode} = $self->_shockurl()."/node/".$self->_create_shock_node();
+    } elsif ($specs->{downloadFromLinks} == 1) {
+	#Creating upload node and setting download link, which will be processed asynchronously
+	$object->{shock} = 1;
+	$object->{shocknode} = $self->_shockurl()."/node/".$self->_create_shock_node();
+	$object->{downloadLink} = $specs->{data};
+	$object->{downloaded} == 0;
+    } else {
+	#Writing data to file system directly and setting file size
+	my $data = $specs->{data};
+	if (!-d $self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}) {
+	    File::Path::mkpath ($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path});
+	}
+	open (my $fh,">",$self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
+	if (ref($data) eq 'ARRAY' || ref($data) eq 'HASH') {
+	    my $JSON = JSON::XS->new->utf8(1);
+	    $data = $JSON->encode($data);	
+	}
+	print $fh $data;
+	close($fh);
+	my $fstat = stat($self->_db_path()."/".$specs->{user}."/".$specs->{workspace}."/".$specs->{path}."/".$specs->{name});
+	$object->{size} = $fstat->size();
+    }
+    # Creating object in mongodb
+    # We need to remove wsobj from the object so it doesn't land in the database.
+    #
+    my $wsobj_del = delete $object->{wsobj};
+    $self->_mongodb()->get_collection('objects')->insert($object);
+    
+    $self->_write_log("create_object", $object->{uuid}, $object->{workspace_uuid},
+		      $object->{path}, $object->{name}, $object->{shocknode});
+    $object->{wsobj} = $wsobj_del;
     return $object;
 }
 #Retreive a workspace from the database either by uuid or by name/user**
@@ -1220,6 +1221,7 @@ sub _list_objects {
 	if ($recursive == 1) {
 		if (length($path) > 0) {
 			$path = "^".$path;
+		$path =~ s/[()]/\\$&/g; #RDO 2020-1201
 			$query->{path} = qr/$path/;
 		}
 	} else {
@@ -1705,16 +1707,13 @@ sub new
     }
     return $self;
 }
-
 =head1 METHODS
-
-
-
 =head2 create
 
   $output = $obj->create($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -1727,7 +1726,7 @@ create_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a FullObjectPath
 	1: an ObjectType
-	2: a UserMetadata
+	2: an UserMetadata
 	3: an ObjectData
 	4: (creation_time) a Timestamp
 
@@ -1744,25 +1743,25 @@ ObjectData is a string
 Timestamp is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
 ObjectSize is an int
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
-
 </pre>
 
 =end html
@@ -1775,7 +1774,7 @@ create_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a FullObjectPath
 	1: an ObjectType
-	2: a UserMetadata
+	2: an UserMetadata
 	3: an ObjectData
 	4: (creation_time) a Timestamp
 
@@ -1792,32 +1791,31 @@ ObjectData is a string
 Timestamp is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
 ObjectSize is an int
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -1876,13 +1874,12 @@ sub create
 }
 
 
-
-
 =head2 update_metadata
 
   $output = $obj->update_metadata($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -1894,37 +1891,38 @@ $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a FullObjectPath
-	1: a UserMetadata
+	1: an UserMetadata
 	2: an ObjectType
 	3: (creation_time) a Timestamp
 
 	autometadata has a value which is a bool
+	append has a value which is a bool
 	adminmode has a value which is a bool
 FullObjectPath is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 ObjectType is a string
 Timestamp is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
 ObjectSize is an int
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-
 </pre>
 
 =end html
@@ -1936,30 +1934,32 @@ $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a FullObjectPath
-	1: a UserMetadata
+	1: an UserMetadata
 	2: an ObjectType
 	3: (creation_time) a Timestamp
 
 	autometadata has a value which is a bool
+	append has a value which is a bool
 	adminmode has a value which is a bool
 FullObjectPath is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 ObjectType is a string
 Timestamp is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
@@ -1967,13 +1967,11 @@ ObjectSize is an int
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -2061,13 +2059,12 @@ sub update_metadata
 }
 
 
-
-
 =head2 get
 
   $output = $obj->get($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -2084,19 +2081,20 @@ get_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2107,7 +2105,6 @@ UserMetadata is a reference to a hash where the key is a string and the value is
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
 ObjectData is a string
-
 </pre>
 
 =end html
@@ -2124,19 +2121,20 @@ get_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2148,13 +2146,11 @@ AutoMetadata is a reference to a hash where the key is a string and the value is
 WorkspacePerm is a string
 ObjectData is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -2217,13 +2213,12 @@ sub get
 }
 
 
-
-
 =head2 update_auto_meta
 
   $output = $obj->update_auto_meta($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -2237,19 +2232,20 @@ update_auto_meta_params is a reference to a hash where the following keys are de
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2259,7 +2255,6 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-
 </pre>
 
 =end html
@@ -2273,19 +2268,20 @@ update_auto_meta_params is a reference to a hash where the following keys are de
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2296,13 +2292,11 @@ UserMetadata is a reference to a hash where the key is a string and the value is
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -2361,13 +2355,12 @@ sub update_auto_meta
 }
 
 
-
-
 =head2 get_download_url
 
   $urls = $obj->get_download_url($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -2379,7 +2372,6 @@ $urls is a reference to a list where each element is a string
 get_download_url_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 FullObjectPath is a string
-
 </pre>
 
 =end html
@@ -2392,13 +2384,11 @@ get_download_url_params is a reference to a hash where the following keys are de
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 FullObjectPath is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -2533,13 +2523,12 @@ sub get_download_url
 }
 
 
-
-
 =head2 get_archive_url
 
   $url = $obj->get_archive_url($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -2555,7 +2544,6 @@ get_archive_url_params is a reference to a hash where the following keys are def
 	archive_type has a value which is a string
 FullObjectPath is a string
 bool is an int
-
 </pre>
 
 =end html
@@ -2572,13 +2560,11 @@ get_archive_url_params is a reference to a hash where the following keys are def
 FullObjectPath is a string
 bool is an int
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -2611,13 +2597,12 @@ sub get_archive_url
 }
 
 
-
-
 =head2 ls
 
   $output = $obj->ls($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -2636,19 +2621,20 @@ list_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2658,7 +2644,6 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-
 </pre>
 
 =end html
@@ -2677,19 +2662,20 @@ list_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2700,13 +2686,11 @@ UserMetadata is a reference to a hash where the key is a string and the value is
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -2768,13 +2752,12 @@ sub ls
 }
 
 
-
-
 =head2 copy
 
   $output = $obj->copy($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -2794,19 +2777,20 @@ copy_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2816,7 +2800,6 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-
 </pre>
 
 =end html
@@ -2836,19 +2819,20 @@ copy_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2859,13 +2843,11 @@ UserMetadata is a reference to a hash where the key is a string and the value is
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -2915,13 +2897,12 @@ sub copy
 }
 
 
-
-
 =head2 delete
 
   $output = $obj->delete($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -2937,19 +2918,20 @@ delete_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2959,7 +2941,6 @@ ObjectSize is an int
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
-
 </pre>
 
 =end html
@@ -2975,19 +2956,20 @@ delete_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -2998,13 +2980,11 @@ UserMetadata is a reference to a hash where the key is a string and the value is
 AutoMetadata is a reference to a hash where the key is a string and the value is a string
 WorkspacePerm is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -3072,13 +3052,12 @@ sub delete
 }
 
 
-
-
 =head2 set_permissions
 
   $output = $obj->set_permissions($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -3087,12 +3066,12 @@ sub delete
 <pre>
 $input is a set_permissions_params
 $output is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
@@ -3101,7 +3080,6 @@ FullObjectPath is a string
 Username is a string
 WorkspacePerm is a string
 bool is an int
-
 </pre>
 
 =end html
@@ -3110,12 +3088,12 @@ bool is an int
 
 $input is a set_permissions_params
 $output is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
@@ -3125,13 +3103,11 @@ Username is a string
 WorkspacePerm is a string
 bool is an int
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -3156,7 +3132,7 @@ sub set_permissions
     $input = $self->_validateargs($input,["path"],{
     	permissions => [],
     	new_global_permission => undef
-    });
+	});
     my ($user,$ws,$path,$name) = $self->_parse_ws_path($input->{path});
     #Checking that workspace exists and a top lever directory is being adjusted
     my $wsobj = $self->_wscache($user,$ws,1);
@@ -3166,7 +3142,7 @@ sub set_permissions
     #Checking that user has permissions to change permissions
     if ($wsobj->{global_permission} eq "p") {
     	if ($wsobj->{owner} ne $self->_getUsername() && $self->_adminmode() == 0) {
-    		$self->_error("Only owner and administrators can change permissions on a published workspace!");
+	    $self->_error("Only owner and administrators can change permissions on a published workspace!");
     	}
     } else {
     	$self->_check_ws_permissions($wsobj,"a",1);
@@ -3174,13 +3150,13 @@ sub set_permissions
     #Checking that none of the user-permissions are "p"
     for (my $i=0; $i < @{$input->{permissions}}; $i++) {
     	if ($input->{permissions}->[$i]->[1] eq "p") {
-    		$self->_error("Cannot set user-specific permissions to publish!");
+	    $self->_error("Cannot set user-specific permissions to publish!");
     	}
     }
     if (defined($input->{new_global_permission})) {
     	#Only workspace owner or administrator can set global permissions to "p"
     	if ($input->{new_global_permission} eq "p") {
-    		$self->_check_ws_permissions($wsobj,"o",1);
+	    $self->_check_ws_permissions($wsobj,"o",1);
     	}
     	$input->{new_global_permission} = $self->_validate_workspace_permission($input->{new_global_permission});
     	$self->_updateDB("workspaces",
@@ -3192,21 +3168,21 @@ sub set_permissions
     {
     	$perm->[1] = $self->_validate_workspace_permission($perm->[1]);
     	if ($perm->[1] eq "n" && defined($wsobj->{permissions}->{$perm->[0]})) {
-    		$self->_updateDB("workspaces",
-			     { uuid => $wsobj->{uuid} },
-			     {'$unset' =>
-			      { 'permissions.'. $self->_escape_username_for_mongo($perm->[0]) =>
-				    $wsobj->{permissions}->{$perm->[0]}}});
-    		delete $wsobj->{permissions}->{$perm->[0]};
+	    $self->_updateDB("workspaces",
+			 { uuid => $wsobj->{uuid} },
+			 {'$unset' =>
+			  { 'permissions.'. $self->_escape_username_for_mongo($perm->[0]) =>
+				$wsobj->{permissions}->{$perm->[0]}}});
+	    delete $wsobj->{permissions}->{$perm->[0]};
     	} else {
 	    my($user, $perm) = @{$perm};
 	    my $esc_user = $self->_escape_username_for_mongo($user);
-
+	    
 	    $self->_updateDB("workspaces",
 			 {uuid => $wsobj->{uuid}},
 			 { '$set' => { "permissions." . $esc_user => $perm } });
-	# {'$set' => {'permissions.'.$perm->[0] => $perm->[1]}});
-    		$wsobj->{permissions}->{$user} = $perm;
+	    # {'$set' => {'permissions.'.$perm->[0] => $perm->[1]}});
+	    $wsobj->{permissions}->{$user} = $perm;
     	}
     }
     $output = [];
@@ -3214,7 +3190,7 @@ sub set_permissions
     	push(@{$output},[$puser,$wsobj->{permissions}->{$puser}]);
     }
     push(@{$output},["global_permission",$wsobj->{global_permission}]);
-
+    
     #END set_permissions
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
@@ -3226,13 +3202,12 @@ sub set_permissions
 }
 
 
-
-
 =head2 list_permissions
 
   $output = $obj->list_permissions($input)
 
 =over 4
+
 
 =item Parameter and return types
 
@@ -3241,7 +3216,7 @@ sub set_permissions
 <pre>
 $input is a list_permissions_params
 $output is a reference to a hash where the key is a string and the value is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
@@ -3250,7 +3225,6 @@ FullObjectPath is a string
 bool is an int
 Username is a string
 WorkspacePerm is a string
-
 </pre>
 
 =end html
@@ -3259,7 +3233,7 @@ WorkspacePerm is a string
 
 $input is a list_permissions_params
 $output is a reference to a hash where the key is a string and the value is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
@@ -3269,13 +3243,11 @@ bool is an int
 Username is a string
 WorkspacePerm is a string
 
-
 =end text
 
 
 
 =item Description
-
 
 
 =back
@@ -3359,6 +3331,7 @@ sub version {
 }
 
 
+
 =head1 TYPES
 
 
@@ -3368,11 +3341,9 @@ sub version {
 =over 4
 
 
-
 =item Description
 
 User permission in worksace (e.g. w - write, r - read, a - admin, n - none)
-
 
 =item Definition
 
@@ -3399,11 +3370,9 @@ a string
 =over 4
 
 
-
 =item Description
 
 Login name for user
-
 
 =item Definition
 
@@ -3428,7 +3397,6 @@ a string
 =head2 bool
 
 =over 4
-
 
 
 =item Definition
@@ -3456,11 +3424,9 @@ an int
 =over 4
 
 
-
 =item Description
 
 Indication of a system time
-
 
 =item Definition
 
@@ -3487,11 +3453,9 @@ a string
 =over 4
 
 
-
 =item Description
 
 Name assigned to an object saved to a workspace
-
 
 =item Definition
 
@@ -3518,11 +3482,9 @@ a string
 =over 4
 
 
-
 =item Description
 
 Unique UUID assigned to every object in a workspace on save - IDs never reused
-
 
 =item Definition
 
@@ -3549,11 +3511,9 @@ a string
 =over 4
 
 
-
 =item Description
 
 Specified type of an object (e.g. Genome)
-
 
 =item Definition
 
@@ -3580,11 +3540,9 @@ a string
 =over 4
 
 
-
 =item Description
 
 Size of the object
-
 
 =item Definition
 
@@ -3611,11 +3569,9 @@ an int
 =over 4
 
 
-
 =item Description
 
 Generic type containing object data
-
 
 =item Definition
 
@@ -3642,11 +3598,9 @@ a string
 =over 4
 
 
-
 =item Description
 
 Path to any object in workspace database
-
 
 =item Definition
 
@@ -3673,11 +3627,9 @@ a string
 =over 4
 
 
-
 =item Description
 
 This is a key value hash of user-specified metadata
-
 
 =item Definition
 
@@ -3704,11 +3656,9 @@ a reference to a hash where the key is a string and the value is a string
 =over 4
 
 
-
 =item Description
 
 This is a key value hash of automated metadata populated based on object type
-
 
 =item Definition
 
@@ -3735,7 +3685,6 @@ a reference to a hash where the key is a string and the value is a string
 =over 4
 
 
-
 =item Description
 
 ObjectMeta: tuple containing information about an object in the workspace 
@@ -3752,26 +3701,27 @@ ObjectMeta: tuple containing information about an object in the workspace
        WorkspacePerm user_permission - permissions for the authenticated user of this workspace.
        WorkspacePerm global_permission - whether this workspace is globally readable.
        string shockurl - shockurl included if object is a reference to a shock node
-
+       string error - set if there was an error on the operation on this object.
 
 =item Definition
 
 =begin html
 
 <pre>
-a reference to a list containing 12 items:
+a reference to a list containing 13 items:
 0: an ObjectName
 1: an ObjectType
 2: a FullObjectPath
 3: (creation_time) a Timestamp
 4: an ObjectID
-5: (object_owner) a Username
+5: (object_owner) an Username
 6: an ObjectSize
-7: a UserMetadata
+7: an UserMetadata
 8: an AutoMetadata
 9: (user_permission) a WorkspacePerm
 10: (global_permission) a WorkspacePerm
 11: (shockurl) a string
+12: (error) a string
 
 </pre>
 
@@ -3779,19 +3729,20 @@ a reference to a list containing 12 items:
 
 =begin text
 
-a reference to a list containing 12 items:
+a reference to a list containing 13 items:
 0: an ObjectName
 1: an ObjectType
 2: a FullObjectPath
 3: (creation_time) a Timestamp
 4: an ObjectID
-5: (object_owner) a Username
+5: (object_owner) an Username
 6: an ObjectSize
-7: a UserMetadata
+7: an UserMetadata
 8: an AutoMetadata
 9: (user_permission) a WorkspacePerm
 10: (global_permission) a WorkspacePerm
 11: (shockurl) a string
+12: (error) a string
 
 
 =end text
@@ -3805,11 +3756,9 @@ a reference to a list containing 12 items:
 =over 4
 
 
-
 =item Description
 
 ********* DATA LOAD FUNCTIONS *******************
-
 
 =item Definition
 
@@ -3820,7 +3769,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 0: a FullObjectPath
 1: an ObjectType
-2: a UserMetadata
+2: an UserMetadata
 3: an ObjectData
 4: (creation_time) a Timestamp
 
@@ -3841,7 +3790,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 0: a FullObjectPath
 1: an ObjectType
-2: a UserMetadata
+2: an UserMetadata
 3: an ObjectData
 4: (creation_time) a Timestamp
 
@@ -3864,7 +3813,6 @@ setowner has a value which is a string
 =over 4
 
 
-
 =item Description
 
 "update_metadata" command
@@ -3876,7 +3824,6 @@ setowner has a value which is a string
         bool autometadata - this flag can only be used by the workspace itself
         bool adminmode - run this command as an admin, meaning you can set permissions on anything anywhere
 
-
 =item Definition
 
 =begin html
@@ -3885,11 +3832,12 @@ setowner has a value which is a string
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a FullObjectPath
-1: a UserMetadata
+1: an UserMetadata
 2: an ObjectType
 3: (creation_time) a Timestamp
 
 autometadata has a value which is a bool
+append has a value which is a bool
 adminmode has a value which is a bool
 
 </pre>
@@ -3901,11 +3849,12 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a FullObjectPath
-1: a UserMetadata
+1: an UserMetadata
 2: an ObjectType
 3: (creation_time) a Timestamp
 
 autometadata has a value which is a bool
+append has a value which is a bool
 adminmode has a value which is a bool
 
 
@@ -3920,11 +3869,9 @@ adminmode has a value which is a bool
 =over 4
 
 
-
 =item Description
 
 ********* DATA RETRIEVAL FUNCTIONS *******************
-
 
 =item Definition
 
@@ -3959,7 +3906,6 @@ adminmode has a value which is a bool
 =over 4
 
 
-
 =item Description
 
 "update_shock_meta" command
@@ -3969,7 +3915,6 @@ adminmode has a value which is a bool
 
         Parameters:
         list<FullObjectPath> objects - list of full paths to objects for which shock nodes should be updated
-
 
 =item Definition
 
@@ -4002,7 +3947,6 @@ adminmode has a value which is a bool
 =over 4
 
 
-
 =item Description
 
 "get_download_url" command
@@ -4013,7 +3957,6 @@ adminmode has a value which is a bool
 
         Parameters:
         list<FullObjectPath> objects - list of full paths to objects for which URLs are to be constructed
-
 
 =item Definition
 
@@ -4044,7 +3987,6 @@ objects has a value which is a reference to a list where each element is a FullO
 =over 4
 
 
-
 =item Description
 
 "get_archive_url" command
@@ -4058,7 +4000,6 @@ objects has a value which is a reference to a list where each element is a FullO
         bool recursive - if true, recurse into folders
         string archive_name - name to be given to the archive file
         string archive_type - type of archive, one of "zip", "tar.gz", "tar.bz2"
-
 
 =item Definition
 
@@ -4095,7 +4036,6 @@ archive_type has a value which is a string
 =over 4
 
 
-
 =item Description
 
 "list" command
@@ -4110,7 +4050,6 @@ archive_type has a value which is a string
         bool fullHierachicalOutput - return a hash of all directories with contents of each; only useful with "recursive" (optional; default = "0")
         mapping<string,string> query - filter output object lists by specified key/value query (optional; default = {})
         bool adminmode - run this command as an admin, meaning you can see anything anywhere
-
 
 =item Definition
 
@@ -4153,11 +4092,9 @@ adminmode has a value which is a bool
 =over 4
 
 
-
 =item Description
 
 ********* REORGANIZATION FUNCTIONS ******************
-
 
 =item Definition
 
@@ -4202,11 +4139,9 @@ adminmode has a value which is a bool
 =over 4
 
 
-
 =item Description
 
 ********* DELETION FUNCTIONS ******************
-
 
 =item Definition
 
@@ -4243,11 +4178,9 @@ adminmode has a value which is a bool
 =over 4
 
 
-
 =item Description
 
 ********* FUNCTIONS RELATED TO SHARING *******************
-
 
 =item Definition
 
@@ -4257,7 +4190,7 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 path has a value which is a FullObjectPath
 permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-0: a Username
+0: an Username
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
@@ -4272,7 +4205,7 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 path has a value which is a FullObjectPath
 permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-0: a Username
+0: an Username
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
@@ -4290,7 +4223,6 @@ adminmode has a value which is a bool
 =over 4
 
 
-
 =item Description
 
 "list_permissions" command
@@ -4300,7 +4232,6 @@ adminmode has a value which is a bool
         Parameters:
         list<FullObjectPath> objects - path to objects for which permissions are to be listed
         bool adminmode - run this command as an admin, meaning you can list permissions on anything anywhere
-
 
 =item Definition
 
@@ -4325,7 +4256,6 @@ adminmode has a value which is a bool
 =end text
 
 =back
-
 
 
 =cut
