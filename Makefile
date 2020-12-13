@@ -13,8 +13,8 @@ SERVICE_PORT = 7125
 DOWNLOAD_SERVICE = WorkspaceDownload
 DOWNLOAD_SERVICE_PORT = 7129
 
-SERVICE_URL = http://p3.theseed.org/services/$(SERVICE)
-DOWNLOAD_URL = http://p3.theseed.org/services/$(DOWNLOAD_SERVICE)
+SERVICE_URL = https://p3.theseed.org/services/$(SERVICE)
+DOWNLOAD_URL = https://p3.theseed.org/services/$(DOWNLOAD_SERVICE)
 
 SERVICE_NAME = Workspace
 SERVICE_NAME_PY = $(SERVICE_NAME)
