@@ -1,3 +1,5 @@
+aligned_dna_fasta
+alignted_protein_fasta
 bam
 bai
 bigwig
