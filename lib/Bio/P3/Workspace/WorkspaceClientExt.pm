@@ -300,6 +300,7 @@ sub save_data_to_file
        
     $type ||= 'unspecified';
 
+    my $obj;
     if ($use_shock)
     {
 	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
@@ -315,6 +316,7 @@ sub save_data_to_file
 	    die "Create failed";
 	}
 	$res = $res->[0];
+	$obj = $res;
 	my $shock_url = $res->[11];
 	$shock_url or die "Workspace did not return shock url. Return object: " . Dumper($res);
 	
@@ -334,8 +336,10 @@ sub save_data_to_file
     {
 	my $res = $self->create({ objects => [[$path, $type, $metadata, $data ]],
 				overwrite => ($overwrite ? 1 : 0) });
+	$obj = $res;
 	print STDERR Dumper($res);
     }
+    return $obj;
 }
 
 sub save_file_to_file
@@ -355,9 +359,11 @@ sub save_file_to_file
 	my $ua = LWP::UserAgent->new();
 	$ua->timeout(86400);
 
+	print STDERR "Create $path\n";
 	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
 				overwrite => ($overwrite ? 1 : 0),
 				createUploadNodes => 1 });
+	print STDERR "create returns " . Dumper($res);
 	if (!ref($res) || @$res == 0)
 	{
 	    die "Create failed";
@@ -371,6 +377,7 @@ sub save_file_to_file
 					      Content => [upload => [$local_file]]);
 	$req->method('PUT');
 	my $sres = $ua->request($req);
+	print STDERR "shock finishes\n";
 	if (!$sres->is_success)
 	{
 	    die "Failure uploading $local_file to shock: " . $sres->status_line;
@@ -466,12 +473,14 @@ sub stat
 {
     my($self, $path) = @_;
     my $res = eval { $self->get({ objects => [$path], metadata_only => 1 }); };
-    return undef if $@ =~ /_ERROR_/;
+
+    return undef if $@ =~ /_ERROR_/ || !defined($res);
 
     my($obj_meta, $obj_data) = @{$res->[0]};
+    return undef if @$obj_meta == 0;
     my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
        $user_perm, $global_perm, $shockurl) = @$obj_meta;
-    # print Dumper($obj_meta);
+
 
     my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$atime,$mtime,$ctime,$blksize,$blocks);
 
