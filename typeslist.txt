@@ -1,3 +1,5 @@
+aligned_dna_fasta
+aligned_protein_fasta
 bam
 bai
 bigwig
@@ -52,6 +54,7 @@ tar_gz
 tbi
 transcriptomics_experiment
 transcripts
+tsv
 txt
 unspecified
 vcf
