@@ -20,16 +20,41 @@ sub show_pretty_ls
 
     my @admin = $opt->administrator ? (adminmode => 1) : ();
 
-    my $res = $ws->get({ objects => [$path], metadata_only => 1, @admin});
-
-    if (!$res || @$res == 0)
+    my $res;
+    my $type;
+    if ($opt->from_id)
     {
-	die "$path not found\n";
+	$res = $ws->get({ objects => [$path], metadata_only => 1, @admin});
+	if (!$res || @$res == 0)
+	{
+	    die "$path not found\n";
+	}
+	
+	$res = $res->[0]->[0];
+	$type = $res->[1];
+	my $id = $path;
+	$path = $res->[2] . $res->[0];
+	print "$id => $path\n";
+    }
+    elsif ($path eq '/')
+    {
+	$type = 'folder';
+	$res = ['/', 'folder', '', 0, 0, 0, 0, {}, {}, 0, 0, 0];
+    }
+    else
+    {
+	$res = $ws->get({ objects => [$path], metadata_only => 1, @admin});
+	
+	if (!$res || @$res == 0)
+	{
+	    die "$path not found\n";
+	}
+	
+	$res = $res->[0]->[0];
+	$type = $res->[1];
     }
 
-    $res = $res->[0]->[0];
-
-    if ($res->[1] eq 'folder' && !$opt->directory)
+    if ($type eq 'folder' && !$opt->directory)
     {
 	my $dir = $ws->ls({ paths => [$path], @admin });
 
@@ -80,6 +105,7 @@ sub show_pretty_ls
 sub compute_long_listing
 {
     my($ws_obj, $opt) = @_;
+    if (ref($ws_obj) ne 'ARRAY') { die "bad ref: " . Dumper($ws_obj) . "\n"; }
     my($name, $type, $path, $created, $oid, $owner, $size, $user_meta, $auto_meta, $user_perm, $global_perm, $shock) = @$ws_obj;
 
     my @short_perms;
