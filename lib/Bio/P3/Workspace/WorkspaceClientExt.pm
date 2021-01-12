@@ -330,14 +330,14 @@ sub save_data_to_file
 	{
 	    die "Failure writing to shock at $shock_url: " . $sres->code . " " . $sres->content;
 	}
-	print STDERR Dumper($sres->content);
+#	print STDERR Dumper($sres->content);
     }
     else
     {
 	my $res = $self->create({ objects => [[$path, $type, $metadata, $data ]],
 				overwrite => ($overwrite ? 1 : 0) });
-	$obj = $res;
-	print STDERR Dumper($res);
+	$obj = $res->[0];
+#	print STDERR Dumper($res);
     }
     return $obj;
 }
