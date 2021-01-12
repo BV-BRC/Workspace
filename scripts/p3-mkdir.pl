@@ -16,18 +16,19 @@ if (!$token->token())
 {
     die "You must be logged in to PATRIC via the p3-login command to use p3-mkdir.\n";
 }
-my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
-
 my @paths;
 
 my($opt, $usage) =
     describe_options("%c %o path [path...]",
 		     ["Create one or more directories in the workspace"],
+		     ["url=s", "Use this workspace URL instead of the default"],
 		     [],
 		     ["help|h", "Show this help message"],
 		    );
 print($usage->text), exit 0 if $opt->help;
 die($usage->text) if @ARGV == 0;
+
+my $ws = Bio::P3::Workspace::WorkspaceClientExt->new($opt->url);
 
 my @paths = @ARGV;
 
@@ -36,8 +37,13 @@ for my $path (@paths)
     my $cur = eval { $ws->get( { objects => [$path], metadata_only => 1 } ); };
     if ($cur && @$cur == 1)
     {
-	print STDERR "$path already exists\n";
-	next;
+	my $meta = $cur->[0]->[0];
+	if (defined($meta->[0]))
+	{
+	    print STDERR "$path already exists\n";
+	    print STDERR Dumper($cur->[0]->[0]);
+	    next;
+	}
     }
     eval {
 	my $res = $ws->create({ objects => [[$path, 'folder']] });

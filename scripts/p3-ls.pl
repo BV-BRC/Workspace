@@ -31,6 +31,7 @@ my($opt, $usage) =
 		     ["reverse|r", "Reverse sort order"],
 		     ["type|T", "Show file type in long listing"],
 		     ["ids", "Show workspace UUIDs in long listing"],
+		     ["from-id", "Parameters are workspace UUIDs, not file paths"],
 		     ["shock", "Show shock node IDs in long listing"],
 		     ["full-shock", "Show full shock URLs in long listing"],
 		     ["administrator|A", "Run as administrator (if user has those privileges)"],

@@ -67,14 +67,15 @@ my $admin;
 my @sources;
 my $dest;
 
+
 my $token = P3AuthToken->new();
 if (!$token->token())
 {
     die "You must be logged in to PATRIC via the p3-login command to use p3-cp.\n";
 }
-my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
-
 my @paths;
+
+my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
 
 GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "overwrite|f" => \$overwrite,
@@ -82,6 +83,7 @@ GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "target|t" => \$dest,
 	   "map-suffix|m=s\%" => \%suffix_map,
 	   "administrator|A" => \$admin,
+	   "url=s" => sub { $ws->{url} = $_[1]; },
 	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws) },
 	   "help|h" => sub {
 	       print pod2usage(-sections => 'Usage synopsis', -verbose => 99, -exitval => 0);
@@ -92,6 +94,8 @@ if (@paths < 2)
 {
     print pod2usage(-sections => 'Usage synopsis', -verbose => 99, -exitval => 1);
 }
+
+
 
 #
 # Handle the three cases listed in the synopsis.
@@ -173,7 +177,7 @@ PROCESS:
 	if (!$dest->exists())
 	{
 	    warn "Destination path $dest does not exist\n";
-	    last PROCESS;
+	    last PROCESS unless $admin;
 	}
 	if (!$dest->is_dir())
 	{
@@ -185,7 +189,7 @@ PROCESS:
 	    if (!$p->exists())
 	    {
 		warn "Source path $p does not exist\n";
-		next;
+		next unless $admin;
 	    }
 	    if ($p->is_dir())
 	    {
@@ -391,12 +395,18 @@ sub copy_to
 	print "Copy $self to $dest with type=$type\n";
 	my $res;
 	eval {
+	    my $shock = (-s $self->{path}) > 5000 ? 1 : 0;
 	    $res = $self->ws->save_file_to_file($self->{path}, {}, $dest->path(),
-						$type, $overwrite, 1, $token->token());
+						$type, $overwrite, $shock, $token->token());
 	};
+
 	if ($@)
 	{
-	    my ($err) = $@ =~ /_ERROR_(.*)_ERROR_/;
+	    my $err = $@;
+	    if ($err =~ /_ERROR_(.*)_ERROR_/)
+	    {
+		$err = $1;
+	    }
 	    warn "Failure uploading $self to $dest: $err\n";
 	}
 	delete $dest->{stat};
@@ -458,7 +468,9 @@ sub copy_to
     if (ref($dest) eq 'WsFile')
     {
 	eval {
-	    $self->ws->copy({ objects => [[$self->path(), $dest->path()]], $overwrite ? 1 : 0 });
+	    $self->ws->copy({ objects => [[$self->path(), $dest->path()]],
+				  overwrite => ($overwrite ? 1 : 0),
+			      adminmode => ($admin ? 1 : 0)});
 	};
 	if ($@)
 	{
