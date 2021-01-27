@@ -241,7 +241,7 @@ sub do_copy_recursive
 	
 	my $dh = $src->opendir();
 	$dh or die "Opendir $src failed\n";
-	while (my $p = $dh->read())
+	while (defined(my $p = $dh->read()))
 	{
 	    next if $p eq '.' || $p eq '..';
 	    do_copy_recursive($src->append($p), $dest->append($p));
