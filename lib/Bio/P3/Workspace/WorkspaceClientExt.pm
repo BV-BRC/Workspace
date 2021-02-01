@@ -359,11 +359,11 @@ sub save_file_to_file
 	my $ua = LWP::UserAgent->new();
 	$ua->timeout(86400);
 
-	print STDERR "Create $path\n";
+	# print STDERR "Create $path\n";
 	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
 				overwrite => ($overwrite ? 1 : 0),
 				createUploadNodes => 1 });
-	print STDERR "create returns " . Dumper($res);
+	# print STDERR "create returns " . Dumper($res);
 	if (!ref($res) || @$res == 0)
 	{
 	    die "Create failed";
