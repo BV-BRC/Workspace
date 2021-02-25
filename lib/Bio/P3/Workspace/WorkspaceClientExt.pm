@@ -344,12 +344,18 @@ sub save_data_to_file
 
 sub save_file_to_file
 {
-    my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token) = @_;
+    my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token, $admin) = @_;
 
     $token //= $self->{token};
        
     $type ||= 'unspecified';
 
+    my @opts;
+    if ($admin)
+    {
+	push(@opts, adminmode => 1);
+    }
+    
     my $obj;
     if ($use_shock)
     {
@@ -361,7 +367,8 @@ sub save_file_to_file
 
 	# print STDERR "Create $path\n";
 	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
-				overwrite => ($overwrite ? 1 : 0),
+				      overwrite => ($overwrite ? 1 : 0),
+				      @opts,
 				createUploadNodes => 1 });
 	# print STDERR "create returns " . Dumper($res);
 	if (!ref($res) || @$res == 0)
@@ -377,7 +384,7 @@ sub save_file_to_file
 					      Content => [upload => [$local_file]]);
 	$req->method('PUT');
 	my $sres = $ua->request($req);
-	print STDERR "shock finishes\n";
+	# print STDERR "shock finishes\n";
 	if (!$sres->is_success)
 	{
 	    die "Failure uploading $local_file to shock: " . $sres->status_line;
@@ -401,9 +408,12 @@ sub save_file_to_file
 
 sub opendir
 {
-    my($self, $path) = @_;
+    my($self, $path, $admin) = @_;
 
-    my $res = $self->ls({paths => [$path]});
+    my @opts;
+    push(@opts, adminmode => 1) if $admin;
+
+    my $res = $self->ls({paths => [$path], @opts});
     my $info = $res->{$path};
     if ($info)
     {
@@ -471,8 +481,10 @@ sub readdir
 
 sub stat
 {
-    my($self, $path) = @_;
-    my $res = eval { $self->get({ objects => [$path], metadata_only => 1 }); };
+    my($self, $path, $admin) = @_;
+    my @opts;
+    push(@opts, (adminmode => 1)) if $admin;
+    my $res = eval { $self->get({ objects => [$path], metadata_only => 1, @opts }); };
 
     return undef if $@ =~ /_ERROR_/ || !defined($res);
 

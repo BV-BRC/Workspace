@@ -40,7 +40,7 @@ The following options may be provided:
 				   	If source ends in /, copy the contents of the directory.
     -p or --workspace-path-prefix STR	Prefix for relative workspace pathnames specified with ws: 
     -f or --overwrite			If a file to be uploaded already exists, overwrite it.
-    -m or --map-suffix suffix=type		When copying to workspace, map a file with the given
+    -m or --map-suffix suffix=type	When copying to workspace, map a file with the given
     					suffix to the given type.
     
 =cut
@@ -84,7 +84,7 @@ GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "map-suffix|m=s\%" => \%suffix_map,
 	   "administrator|A" => \$admin,
 	   "url=s" => sub { $ws->{url} = $_[1]; },
-	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws) },
+	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws, $admin) },
 	   "help|h" => sub {
 	       print pod2usage(-sections => 'Usage synopsis', -verbose => 99, -exitval => 0);
 	   },
@@ -251,7 +251,7 @@ sub do_copy_recursive
 
 sub process_pathname
 {
-    my($path, $ws_prefix, $path_list, $ws) = @_;
+    my($path, $ws_prefix, $path_list, $ws, $admin) = @_;
     my $wspath;
     my $item;
     if ($path =~ /^ws:(.*)/)
@@ -265,7 +265,7 @@ sub process_pathname
 	    }
 	    $wspath = $ws_prefix . "/" . $wspath;
 	}
-	$item = new WsFile($wspath, $ws);
+	$item = new WsFile($wspath, $ws, $admin);
     }
     else
     {
@@ -279,15 +279,16 @@ use strict;
 use Fcntl ':mode';
 sub new
 {
-    my($class, $path, $ws) = @_;
+    my($class, $path, $ws, $admin) = @_;
     my $self = {
 	path => $path,
 	ws => $ws,
+	admin => $admin,
     };
     return bless $self, $class;
 }
 sub ws { return $_[0]->{ws}; }
-
+sub admin { return $_[0]->{admin}; }
 
 #
 # Create a new wrapper with an extended path.
@@ -429,7 +430,7 @@ sub stat
 {
     my($self) = @_;
     return $self->{stat} if $self->{stat};
-    my $s = $self->{ws}->stat($self->{path});
+    my $s = $self->{ws}->stat($self->{path}, $self->admin);
     $self->{stat} = $s;
     return $s;
 }
@@ -500,7 +501,7 @@ sub new
 
     eval
     {
-	my $dh = $ws->opendir($path);
+	my $dh = $ws->opendir($path, $admin);
 	$self->{dh} = $dh;
     };
     if ($@)
