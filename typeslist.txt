@@ -42,6 +42,7 @@ model_edit
 modeltemplate
 nwk
 pdf
+phyloxml
 png
 ppt
 pptx
