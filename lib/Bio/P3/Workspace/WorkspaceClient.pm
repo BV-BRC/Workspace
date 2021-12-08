@@ -118,7 +118,7 @@ create_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a FullObjectPath
 	1: an ObjectType
-	2: a UserMetadata
+	2: an UserMetadata
 	3: an ObjectData
 	4: (creation_time) a Timestamp
 
@@ -135,19 +135,20 @@ ObjectData is a string
 Timestamp is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
@@ -166,7 +167,7 @@ create_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a FullObjectPath
 	1: an ObjectType
-	2: a UserMetadata
+	2: an UserMetadata
 	3: an ObjectData
 	4: (creation_time) a Timestamp
 
@@ -183,19 +184,20 @@ ObjectData is a string
 Timestamp is a string
 WorkspacePerm is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
@@ -269,30 +271,32 @@ $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a FullObjectPath
-	1: a UserMetadata
+	1: an UserMetadata
 	2: an ObjectType
 	3: (creation_time) a Timestamp
 
 	autometadata has a value which is a bool
+	append has a value which is a bool
 	adminmode has a value which is a bool
 FullObjectPath is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 ObjectType is a string
 Timestamp is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
@@ -311,30 +315,32 @@ $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a FullObjectPath
-	1: a UserMetadata
+	1: an UserMetadata
 	2: an ObjectType
 	3: (creation_time) a Timestamp
 
 	autometadata has a value which is a bool
+	append has a value which is a bool
 	adminmode has a value which is a bool
 FullObjectPath is a string
 UserMetadata is a reference to a hash where the key is a string and the value is a string
 ObjectType is a string
 Timestamp is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectID is a string
 Username is a string
@@ -414,19 +420,20 @@ get_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -454,19 +461,20 @@ get_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -547,19 +555,20 @@ update_auto_meta_params is a reference to a hash where the following keys are de
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -583,19 +592,20 @@ update_auto_meta_params is a reference to a hash where the following keys are de
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -739,7 +749,7 @@ sub get_download_url
 
 =head2 get_archive_url
 
-  $url = $obj->get_archive_url($input)
+  $url, $file_count, $total_size = $obj->get_archive_url($input)
 
 =over 4
 
@@ -750,6 +760,8 @@ sub get_download_url
 <pre>
 $input is a get_archive_url_params
 $url is a string
+$file_count is an int
+$total_size is an int
 get_archive_url_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	recursive has a value which is a bool
@@ -766,6 +778,8 @@ bool is an int
 
 $input is a get_archive_url_params
 $url is a string
+$file_count is an int
+$total_size is an int
 get_archive_url_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	recursive has a value which is a bool
@@ -848,19 +862,20 @@ list_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -889,19 +904,20 @@ list_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -987,19 +1003,20 @@ copy_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -1029,19 +1046,20 @@ copy_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -1123,19 +1141,20 @@ delete_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -1161,19 +1180,20 @@ delete_params is a reference to a hash where the following keys are defined:
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ObjectMeta is a reference to a list containing 12 items:
+ObjectMeta is a reference to a list containing 13 items:
 	0: an ObjectName
 	1: an ObjectType
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) a Username
+	5: (object_owner) an Username
 	6: an ObjectSize
-	7: a UserMetadata
+	7: an UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
 	11: (shockurl) a string
+	12: (error) a string
 ObjectName is a string
 ObjectType is a string
 Timestamp is a string
@@ -1248,12 +1268,12 @@ sub delete
 <pre>
 $input is a set_permissions_params
 $output is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
@@ -1271,12 +1291,12 @@ bool is an int
 
 $input is a set_permissions_params
 $output is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
@@ -1350,7 +1370,7 @@ sub set_permissions
 <pre>
 $input is a list_permissions_params
 $output is a reference to a hash where the key is a string and the value is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
@@ -1368,7 +1388,7 @@ WorkspacePerm is a string
 
 $input is a list_permissions_params
 $output is a reference to a hash where the key is a string and the value is a reference to a list where each element is a reference to a list containing 2 items:
-	0: a Username
+	0: an Username
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
@@ -1824,6 +1844,7 @@ ObjectMeta: tuple containing information about an object in the workspace
        WorkspacePerm user_permission - permissions for the authenticated user of this workspace.
        WorkspacePerm global_permission - whether this workspace is globally readable.
        string shockurl - shockurl included if object is a reference to a shock node
+       string error - set if there was an error on the operation on this object.
 
 
 =item Definition
@@ -1831,19 +1852,20 @@ ObjectMeta: tuple containing information about an object in the workspace
 =begin html
 
 <pre>
-a reference to a list containing 12 items:
+a reference to a list containing 13 items:
 0: an ObjectName
 1: an ObjectType
 2: a FullObjectPath
 3: (creation_time) a Timestamp
 4: an ObjectID
-5: (object_owner) a Username
+5: (object_owner) an Username
 6: an ObjectSize
-7: a UserMetadata
+7: an UserMetadata
 8: an AutoMetadata
 9: (user_permission) a WorkspacePerm
 10: (global_permission) a WorkspacePerm
 11: (shockurl) a string
+12: (error) a string
 
 </pre>
 
@@ -1851,19 +1873,20 @@ a reference to a list containing 12 items:
 
 =begin text
 
-a reference to a list containing 12 items:
+a reference to a list containing 13 items:
 0: an ObjectName
 1: an ObjectType
 2: a FullObjectPath
 3: (creation_time) a Timestamp
 4: an ObjectID
-5: (object_owner) a Username
+5: (object_owner) an Username
 6: an ObjectSize
-7: a UserMetadata
+7: an UserMetadata
 8: an AutoMetadata
 9: (user_permission) a WorkspacePerm
 10: (global_permission) a WorkspacePerm
 11: (shockurl) a string
+12: (error) a string
 
 
 =end text
@@ -1892,7 +1915,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 0: a FullObjectPath
 1: an ObjectType
-2: a UserMetadata
+2: an UserMetadata
 3: an ObjectData
 4: (creation_time) a Timestamp
 
@@ -1913,7 +1936,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 0: a FullObjectPath
 1: an ObjectType
-2: a UserMetadata
+2: an UserMetadata
 3: an ObjectData
 4: (creation_time) a Timestamp
 
@@ -1957,11 +1980,12 @@ setowner has a value which is a string
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a FullObjectPath
-1: a UserMetadata
+1: an UserMetadata
 2: an ObjectType
 3: (creation_time) a Timestamp
 
 autometadata has a value which is a bool
+append has a value which is a bool
 adminmode has a value which is a bool
 
 </pre>
@@ -1973,11 +1997,12 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a FullObjectPath
-1: a UserMetadata
+1: an UserMetadata
 2: an ObjectType
 3: (creation_time) a Timestamp
 
 autometadata has a value which is a bool
+append has a value which is a bool
 adminmode has a value which is a bool
 
 
@@ -2329,7 +2354,7 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 path has a value which is a FullObjectPath
 permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-0: a Username
+0: an Username
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
@@ -2344,7 +2369,7 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 path has a value which is a FullObjectPath
 permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-0: a Username
+0: an Username
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm

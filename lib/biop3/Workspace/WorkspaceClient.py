@@ -193,7 +193,7 @@ class Workspace(object):
     def get_archive_url(self, input):
         resp = self._call('Workspace.get_archive_url',
                           [input])
-        return resp[0]
+        return resp
 
     def ls(self, input):
         resp = self._call('Workspace.ls',

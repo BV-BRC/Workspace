@@ -2,6 +2,7 @@
 use strict;
 use Bio::P3::Workspace::ScriptHelpers;
 use LWP::UserAgent;
+use P3AuthToken;
 
 =head1 NAME
 
@@ -42,6 +43,8 @@ if ($opt->shock)
     $ua = LWP::UserAgent->new();
 }
 
+my $token = P3AuthToken->new();
+
 for my $ent (@$res)
 {
     my($meta, $data) = @$ent;
@@ -49,7 +52,7 @@ for my $ent (@$res)
     if ((my $url = $meta->[11]) && $opt->shock)
     {
 	my $res = $ua->get("$url?download",
-			   Authorization => "OAuth " . Bio::P3::Workspace::ScriptHelpers::token(),
+			   Authorization => "OAuth " . $token->token(),
 			   ':content_cb' => $cb);
     }
     else

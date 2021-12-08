@@ -11,9 +11,62 @@ use Cwd qw(getcwd abs_path);
 use File::Find;
 use Fcntl ':mode';
 use JSON::XS;
+use Date::Parse;
 
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
+
+#
+# Wrap the get method with optional caching, enabled with $self->{get_cache} exists.
+#
+sub get
+{
+    my($self, $params) = @_;
+
+    my $cache = $self->{get_cache};
+    if (!$cache)
+    {
+	return $self->SUPER::get($params);
+    }
+
+    my $objs = $params->{objects};
+
+    my %to_query;
+    my @to_query;
+    my @out;
+
+    for (my $i = 0; $i < @$objs; $i++)
+    {
+	my $obj = $objs->[$i];
+	if (my $val = $cache->{$obj, $params->{metadata_only}, $params->{admin}})
+	{
+	    $out[$i] = $val;
+	}
+	else
+	{
+	    $to_query{$obj} = $i;
+	    push(@to_query, $obj);
+	}
+    }
+    if (@to_query)
+    {
+	my $gparams = { %$params };
+	$gparams->{objects} = \@to_query;
+	my $quot = $self->SUPER::get($gparams);
+	for my $ent (@$quot)
+	{
+	    my($md, $val) = @$ent;
+	    my $path = $md->[2] . $md->[0];
+	    print "Got $path\n";
+
+	    my $idx = $to_query{$path};
+	    $out[$idx] = $ent;
+	    $cache->{$path, $params->{metadata_only}, $params->{admin}} = $ent;
+	}
+    }
+    return \@out;
+}
+    
 
 sub file_is_gzipped
 {
@@ -31,8 +84,11 @@ sub file_is_gzipped
 	return 0;
     }
 
+    my %comp_map = ("\x1f\x8b" => 'gzip',
+		    "BZ" => 'bzip2');
+
     my $hdr = $self->shock_read_bytes($shockurl, 0, 2);
-    return $hdr eq "\x1f\x8b";
+    return $comp_map{$hdr};
 }
 
 #
@@ -187,7 +243,7 @@ sub download_file_to_string
 
 sub download_json
 {
-    my($self, $path, $token) = @_;
+    my($self, $path, $token, $options) = @_;
 
     $token //= $self->{token};
        
@@ -195,7 +251,7 @@ sub download_json
     open(my $fh, ">", \$str) or die "Cannot open string reference filehandle: $!";
 
     eval {
-	$self->copy_files_to_handles(1, $token, [[$path, $fh]]);
+	$self->copy_files_to_handles(1, $token, [[$path, $fh]], $options);
     };
     if ($@)
     {
@@ -234,23 +290,27 @@ sub copy_files_to_handles
 	push(@get_opts, adminmode => 1);
     }
 
-    my %fhmap = map { @$_ } @$file_handle_pairs;
-    my $res = $self->get({ @get_opts, objects => [ map { $_->[0] } @$file_handle_pairs] });
-
-    # print Dumper(\%fhmap, $file_handle_pairs, $res);
-    for my $i (0 .. $#$res)
+    for my $pair (@$file_handle_pairs)
     {
-	my $ent = $res->[$i];
+	my($filename, $fh) = @$pair;
+	my $res = eval { $self->get({ @get_opts, objects => [ $filename ] }) };
+	if (!$res)
+	{
+	    #
+	    # This might have failed to the pathname needing utf8 decoding.
+	    #
+	    utf8::decode($filename);
+	    print STDERR "Retry download after decoding $filename\n";
+	    $res = eval { $self->get({@get_opts, objects => [$filename]}); };
+	    if (!$res)
+	    {
+		die "Workspace object not found for $filename\n";
+	    }
+	}
+	my $ent = $res->[0];
 	my($meta, $data) = @$ent;
 
-	if (!defined($meta->[0]))
-	{
-	    my $f = $file_handle_pairs->[$i]->[0];
-	    die "Workspace object not found for $f\n";
-	}
-
 	bless $meta, 'Bio::P3::Workspace::ObjectMeta';
-	my $fh = $fhmap{$meta->full_path};
 
 	if ($use_shock && $meta->shock_url)
 	{
@@ -293,52 +353,6 @@ sub save_data_to_file
        
     $type ||= 'unspecified';
 
-    if ($use_shock)
-    {
-	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
-
-	$token = $token->token if ref($token);
-	my $ua = LWP::UserAgent->new();
-
-	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
-				overwrite => ($overwrite ? 1 : 0),
-				createUploadNodes => 1 });
-	if (!ref($res) || @$res == 0)
-	{
-	    die "Create failed";
-	}
-	$res = $res->[0];
-	my $shock_url = $res->[11];
-	$shock_url or die "Workspace did not return shock url. Return object: " . Dumper($res);
-	
-	my $req = HTTP::Request::Common::POST($shock_url, 
-					      Authorization => "OAuth " . $token,
-					      Content_Type => 'multipart/form-data',
-					      Content => [upload => [undef, 'file', Content => $data]]);
-	$req->method('PUT');
-	my $sres = $ua->request($req);
-	if (!$sres->is_success)
-	{
-	    die "Failure writing to shock at $shock_url: " . $sres->code . " " . $sres->content;
-	}
-	print STDERR Dumper($sres->content);
-    }
-    else
-    {
-	my $res = $self->create({ objects => [[$path, $type, $metadata, $data ]],
-				overwrite => ($overwrite ? 1 : 0) });
-	print STDERR Dumper($res);
-    }
-}
-
-sub save_file_to_file
-{
-    my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token) = @_;
-
-    $token //= $self->{token};
-       
-    $type ||= 'unspecified';
-
     my $obj;
     if ($use_shock)
     {
@@ -355,6 +369,66 @@ sub save_file_to_file
 	    die "Create failed";
 	}
 	$res = $res->[0];
+	$obj = $res;
+	my $shock_url = $res->[11];
+	$shock_url or die "Workspace did not return shock url. Return object: " . Dumper($res);
+	
+	my $req = HTTP::Request::Common::POST($shock_url, 
+					      Authorization => "OAuth " . $token,
+					      Content_Type => 'multipart/form-data',
+					      Content => [upload => [undef, 'file', Content => $data]]);
+	$req->method('PUT');
+	my $sres = $ua->request($req);
+	if (!$sres->is_success)
+	{
+	    die "Failure writing to shock at $shock_url: " . $sres->code . " " . $sres->content;
+	}
+#	print STDERR Dumper($sres->content);
+    }
+    else
+    {
+	my $res = $self->create({ objects => [[$path, $type, $metadata, $data ]],
+				overwrite => ($overwrite ? 1 : 0) });
+	$obj = $res->[0];
+#	print STDERR Dumper($res);
+    }
+    return $obj;
+}
+
+sub save_file_to_file
+{
+    my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token, $admin) = @_;
+
+    $token //= $self->{token};
+       
+    $type ||= 'unspecified';
+
+    my @opts;
+    if ($admin)
+    {
+	push(@opts, adminmode => 1);
+    }
+    
+    my $obj;
+    if ($use_shock)
+    {
+	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
+
+	$token = $token->token if ref($token);
+	my $ua = LWP::UserAgent->new();
+	$ua->timeout(86400);
+
+	# print STDERR "Create $path\n";
+	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
+				      overwrite => ($overwrite ? 1 : 0),
+				      @opts,
+				createUploadNodes => 1 });
+	# print STDERR "create returns " . Dumper($res);
+	if (!ref($res) || @$res == 0)
+	{
+	    die "Create failed";
+	}
+	$res = $res->[0];
 	my $shock_url = $res->[11];
 	
 	my $req = HTTP::Request::Common::POST($shock_url, 
@@ -363,6 +437,7 @@ sub save_file_to_file
 					      Content => [upload => [$local_file]]);
 	$req->method('PUT');
 	my $sres = $ua->request($req);
+	# print STDERR "shock finishes\n";
 	if (!$sres->is_success)
 	{
 	    die "Failure uploading $local_file to shock: " . $sres->status_line;
@@ -386,9 +461,12 @@ sub save_file_to_file
 
 sub opendir
 {
-    my($self, $path) = @_;
+    my($self, $path, $admin) = @_;
 
-    my $res = $self->ls({paths => [$path]});
+    my @opts;
+    push(@opts, adminmode => 1) if $admin;
+
+    my $res = $self->ls({paths => [$path], @opts});
     my $info = $res->{$path};
     if ($info)
     {
@@ -456,16 +534,29 @@ sub readdir
 
 sub stat
 {
-    my($self, $path) = @_;
-    my $res = eval { $self->get({ objects => [$path], metadata_only => 1 }); };
-    return undef if $@ =~ /_ERROR_/;
+    my($self, $path, $admin) = @_;
+    my @opts;
+    push(@opts, (adminmode => 1)) if $admin;
+    my $res = eval { $self->get({ objects => [$path], metadata_only => 1, @opts }); };
+
+    return undef if $@ =~ /_ERROR_/ || !defined($res);
 
     my($obj_meta, $obj_data) = @{$res->[0]};
-    my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
+    return undef if @$obj_meta == 0;
+
+    return $self->convert_meta_to_stat($obj_meta);
+}
+
+sub convert_meta_to_stat
+{
+    my($self, $obj_meta) = @_;
+    
+    my($name, $type, $mpath, $ts, $oid, $owner, $size, $usermeta, $autometa,
        $user_perm, $global_perm, $shockurl) = @$obj_meta;
-    # print Dumper($obj_meta);
 
     my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$atime,$mtime,$ctime,$blksize,$blocks);
+
+    $atime = $mtime = $ctime = str2time($ts);
 
     $mode = 0;
     if ($user_perm eq 'r') {

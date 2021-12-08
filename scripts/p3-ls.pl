@@ -17,8 +17,6 @@ if (!$token->token())
 {
     die "You must be logged in to PATRIC via the p3-login command to use p3-ls.\n";
 }
-my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
-
 my @paths;
 
 my($opt, $usage) =
@@ -33,13 +31,17 @@ my($opt, $usage) =
 		     ["reverse|r", "Reverse sort order"],
 		     ["type|T", "Show file type in long listing"],
 		     ["ids", "Show workspace UUIDs in long listing"],
+		     ["from-id", "Parameters are workspace UUIDs, not file paths"],
 		     ["shock", "Show shock node IDs in long listing"],
 		     ["full-shock", "Show full shock URLs in long listing"],
 		     ["administrator|A", "Run as administrator (if user has those privileges)"],
+		     ["url=s", "Use this workspace URL instead of the default"],
 		     ["help|h", "Show this help message"],
 		    );
 print($usage->text), exit 0 if $opt->help;
 die($usage->text) if @ARGV == 0;
+
+my $ws = Bio::P3::Workspace::WorkspaceClientExt->new($opt->url);
 
 my @paths = @ARGV;
 
