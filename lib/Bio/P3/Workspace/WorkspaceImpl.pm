@@ -1210,7 +1210,7 @@ sub _compute_mongo_regex_for_path
     if (length($path) > 0) {
 	my $term = "(/|\$)";	# Play games with quoting here so indentation isn't broken. ugh.
 
-	$path =~ s/[.()]/\\$&/g; #RDO 2020-1201
+	$path =~ quotemeta($path);
 	
 	return qr/^$path$term/;
     }
@@ -1245,9 +1245,10 @@ sub _list_objects {
 		$query->{folder} = 1;
 	}
 	if ($recursive == 1) {
-		if (length($path) > 0) {
-			$path = "^".quotemeta($path);
-			$query->{path} = qr/$path/;
+	    if (length($path) > 0) {
+		$query->{path} = $self->_compute_mongo_regex_for_path($path);
+		# $path = "^".quotemeta($path);
+		# $query->{path} = qr/$path/;
 		}
 	} else {
 		$query->{path} = $path;
@@ -1666,6 +1667,7 @@ sub _autometadata_script_path_for_type
     
 sub _compute_autometadata {
     my($self, $objs) = @_;
+
     my $path = $self->{_params}->{"job-directory"};
     if (!-d $path) {
 	File::Path::mkpath ($path);
