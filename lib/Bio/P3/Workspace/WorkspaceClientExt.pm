@@ -11,9 +11,62 @@ use Cwd qw(getcwd abs_path);
 use File::Find;
 use Fcntl ':mode';
 use JSON::XS;
+use Date::Parse;
 
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
+
+#
+# Wrap the get method with optional caching, enabled with $self->{get_cache} exists.
+#
+sub get
+{
+    my($self, $params) = @_;
+
+    my $cache = $self->{get_cache};
+    if (!$cache)
+    {
+	return $self->SUPER::get($params);
+    }
+
+    my $objs = $params->{objects};
+
+    my %to_query;
+    my @to_query;
+    my @out;
+
+    for (my $i = 0; $i < @$objs; $i++)
+    {
+	my $obj = $objs->[$i];
+	if (my $val = $cache->{$obj, $params->{metadata_only}, $params->{admin}})
+	{
+	    $out[$i] = $val;
+	}
+	else
+	{
+	    $to_query{$obj} = $i;
+	    push(@to_query, $obj);
+	}
+    }
+    if (@to_query)
+    {
+	my $gparams = { %$params };
+	$gparams->{objects} = \@to_query;
+	my $quot = $self->SUPER::get($gparams);
+	for my $ent (@$quot)
+	{
+	    my($md, $val) = @$ent;
+	    my $path = $md->[2] . $md->[0];
+	    print "Got $path\n";
+
+	    my $idx = $to_query{$path};
+	    $out[$idx] = $ent;
+	    $cache->{$path, $params->{metadata_only}, $params->{admin}} = $ent;
+	}
+    }
+    return \@out;
+}
+    
 
 sub file_is_gzipped
 {
@@ -490,11 +543,20 @@ sub stat
 
     my($obj_meta, $obj_data) = @{$res->[0]};
     return undef if @$obj_meta == 0;
-    my($name, $type, $path, $ts, $oid, $owner, $size, $usermeta, $autometa,
+
+    return $self->convert_meta_to_stat($obj_meta);
+}
+
+sub convert_meta_to_stat
+{
+    my($self, $obj_meta) = @_;
+    
+    my($name, $type, $mpath, $ts, $oid, $owner, $size, $usermeta, $autometa,
        $user_perm, $global_perm, $shockurl) = @$obj_meta;
 
-
     my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$atime,$mtime,$ctime,$blksize,$blocks);
+
+    $atime = $mtime = $ctime = str2time($ts);
 
     $mode = 0;
     if ($user_perm eq 'r') {

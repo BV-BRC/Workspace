@@ -6,8 +6,11 @@ use Data::Dumper;
 use Moose;
 use POSIX;
 use JSON;
+use File::Temp;
+use File::Slurp;
 use Class::Load qw();
 use Config::Simple;
+
 my $get_time = sub { time, 0 };
 eval {
     require Time::HiRes;
@@ -16,6 +19,10 @@ eval {
 
 use P3AuthToken;
 use P3TokenValidator;
+
+my $g_hostname = `hostname`;
+chomp $g_hostname;
+$g_hostname ||= 'unknown-host';
 
 extends 'RPC::Any::Server::JSONRPC::PSGI';
 
@@ -289,10 +296,7 @@ sub call_method {
 	my $tag = $self->_plack_req->header("Kbrpc-Tag");
 	if (!$tag)
 	{
-	    if (!$self->{hostname}) {
-		chomp($self->{hostname} = `hostname`);
-                $self->{hostname} ||= 'unknown-host';
-	    }
+	    $self->{hostname} ||= $g_hostname;
 
 	    my ($t, $us) = &$get_time();
 	    $us = sprintf("%06d", $us);
@@ -307,6 +311,13 @@ sub call_method {
 
 	my $stderr = Bio::P3::Workspace::ServiceStderrWrapper->new($ctx, $get_time);
 	$ctx->stderr($stderr);
+
+	#
+	# Set up environment for user-level error reporting.
+	#
+	my $user_error = File::Temp->new(UNLINK => 1);
+	close($user_error);
+	$ENV{P3_USER_ERROR_DESTINATION} = "$user_error";
 
         my $xFF = $self->_plack_req->header("X-Forwarded-For");
 	
@@ -330,6 +341,13 @@ sub call_method {
 	    my $str = "$err";
 	    my $msg = $str;
 	    $msg =~ s/ at [^\s]+.pm line \d+.\n$//;
+	    
+	    # If user-level error present, replace message with that
+	    if (-s "$user_error")
+	    {
+	        $msg = read_file("$user_error");
+		$str = $msg;
+	    }
 	    $nicerr =  {code => -32603, # perl error from RPC::Any::Exception
                             message => $msg,
                             data => $str,
@@ -435,10 +453,10 @@ sub new
     }
     
     my $self = {
+        hostname => $g_hostname,
         @opts,
     };
-    chomp($self->{hostname} = `hostname`);
-    $self->{hostname} ||= 'unknown-host';
+
     return bless $self, $class;
 }
 
