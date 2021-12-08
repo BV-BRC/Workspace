@@ -504,19 +504,22 @@ sub _count_directory_contents {
 sub _get_directory_contents {
 	my ($self,$obj,$recursive) = @_;
 	my $query = {};
+#pathfix
+	my $esc_path = quotemeta($obj->{path});
+	my $esc_name = quotemeta($obj->{name});
 	if ($recursive == 1) {
-		my $path = "^".$obj->{path}."/".$obj->{name};
+		my $path = "^".$esc_path."/".$esc_name;
 		if (length($obj->{path}) == 0) {
-			$path = "^".$obj->{name};
+			$path = "^".$esc_name;
 		}
 		$query = {
 			workspace_uuid => $obj->{workspace_uuid},
 			path => qr/$path/
 		};
 	} else {
-		my $path = $obj->{path}."/".$obj->{name};
+		my $path = $esc_path."/".$esc_name;
 		if (length($obj->{path}) == 0) {
-			$path = $obj->{name};
+			$path = $esc_name;
 		}
 		$query = {
 			workspace_uuid => $obj->{workspace_uuid},
@@ -1219,7 +1222,7 @@ sub _list_objects {
 	}
 	if ($recursive == 1) {
 		if (length($path) > 0) {
-			$path = "^".$path;
+			$path = "^".quotemeta($path);
 			$query->{path} = qr/$path/;
 		}
 	} else {
@@ -1839,6 +1842,8 @@ sub create
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN create
+
+#die "The workspace is currently in readonly mode\n";
     $output = [];
     $input = $self->_validateargs($input,["objects"],{
 		createUploadNodes => 0,
