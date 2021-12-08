@@ -50,6 +50,7 @@ TPAGE_ARGS =  \
 	--define kb_psgi=$(SERVICE_PSGI_FILE) \
 	--define kb_download_port=$(DOWNLOAD_SERVICE_PORT) \
 	--define kb_download_psgi=$(DOWNLOAD_SERVICE_PSGI_FILE) \
+	--define kb_starman_workers=25 \
 	$(TPAGE_TEMPDIR) \
 	$(TPAGE_SERVICE_LOGDIR)
 

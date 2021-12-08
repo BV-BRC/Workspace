@@ -59,6 +59,11 @@ $metadata->{N90} = $metrics->{N90};
 $metadata->{num_contigs} = @{$data->{contigs}};
 my($gc, $per_contig) = $data->compute_contigs_gc();
 
+#
+# Mongo doesn't like dotted field names.
+#
+delete $per_contig->{$_} foreach grep { /\./ } (keys %$per_contig);
+
 $metadata->{gc_content} = $gc;
 $metadata->{per_contig_gc_content} = $per_contig if $metadata->{num_contigs} < 100;
 

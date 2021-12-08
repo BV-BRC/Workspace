@@ -23,6 +23,7 @@ use File::stat;
 use File::Which qw(which);
 use Fcntl ':mode';
 use Data::UUID;
+use Data::UUID::MT;
 use REST::Client;
 use LWP::UserAgent;
 use JSON::XS;
@@ -33,6 +34,7 @@ use MongoDB::Connection;
 use URI::Escape;
 use AnyEvent;
 use AnyEvent::HTTP;
+use AnyEvent::Run;
 use Config::Simple;
 use Plack::Request;
 use Fcntl ':seek';
@@ -505,19 +507,22 @@ sub _count_directory_contents {
 sub _get_directory_contents {
 	my ($self,$obj,$recursive) = @_;
 	my $query = {};
+#pathfix
+	my $esc_path = quotemeta($obj->{path});
+	my $esc_name = quotemeta($obj->{name});
 	if ($recursive == 1) {
-		my $path = "^".$obj->{path}."/".$obj->{name};
+		my $path = "^".$esc_path."/".$esc_name;
 		if (length($obj->{path}) == 0) {
-			$path = "^".$obj->{name};
+			$path = "^".$esc_name;
 		}
 		$query = {
 			workspace_uuid => $obj->{workspace_uuid},
 			path => qr/$path/
 		};
 	} else {
-		my $path = $obj->{path}."/".$obj->{name};
+		my $path = $esc_path."/".$esc_name;
 		if (length($obj->{path}) == 0) {
-			$path = $obj->{name};
+			$path = $esc_name;
 		}
 		$query = {
 			workspace_uuid => $obj->{workspace_uuid},
@@ -1194,6 +1199,26 @@ sub _list_workspaces {
 	return $objs;
 }
 
+#
+# Given a path string, return the regex suitable for
+# a mongo search to return all objects below that path.
+#
+sub _compute_mongo_regex_for_path
+{
+    my($self, $path) = @_;
+    if (length($path) > 0) {
+	my $term = "(/|\$)";	# Play games with quoting here so indentation isn't broken. ugh.
+
+	$path =~ s/[.()]/\\$&/g; #RDO 2020-1201
+	
+	return qr/^$path$term/;
+    }
+    else
+    {
+	return "";
+    }
+}
+
 #List all objects matching input query**
 sub _list_objects {
 	my ($self,$fullpath,$query,$excludeDirectories,$excludeObjects,$recursive) = @_;
@@ -1220,8 +1245,7 @@ sub _list_objects {
 	}
 	if ($recursive == 1) {
 		if (length($path) > 0) {
-			$path = "^".$path;
-		$path =~ s/[()]/\\$&/g; #RDO 2020-1201
+			$path = "^".quotemeta($path);
 			$query->{path} = qr/$path/;
 		}
 	} else {
@@ -1315,11 +1339,92 @@ sub _download_request
     my $req = Plack::Request->new($env);
     my $path = $req->path_info;
 
-    my($dlid, $name) = $path =~ m,^/([^/]+)/([^/]+)$,;
-    if (!($name && $dlid))
+    if ($path =~ m,^/archive/([a-z0-9]{40})$,)
+    {
+	my $key = $1;
+	$self->_handle_archive_request($req, $key);
+    }
+    else
+    {
+	my($dlid, $name) = $path =~ m,^/([^/]+)/([^/]+)$,;
+	if (!($name && $dlid))
+	{
+	    return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+	}
+	$self->_handle_dl_file_request($req, $name, $dlid);
+    }
+}
+
+sub _handle_archive_request
+{
+    my($self, $req, $key) = @_;
+
+    #
+    # Query mongo for the request details.
+    #
+
+    my $coll = $self->_mongodb()->get_collection('downloads');
+
+    my $res = $coll->find_one({ download_signature => $key });
+
+    if (!$res)
     {
 	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
     }
+
+    my $objs = $res->{objects};
+    
+    if (ref($objs) ne 'ARRAY' || @$objs == 0)
+    {
+	return [404, ['Content-Type' => 'text/plain' ], ["Not found\n"]];
+    }
+    
+    #
+    # Valid request.
+    #
+    # Return handler closure that will run the zip archive program.
+    #
+    return sub {
+	my($responder) = @_;
+
+	print "IN SUB\n";
+	my $fn;
+	if ($res->{archive_name})
+	{
+	    $fn = qq(; filename="$res->{archive_name}");
+	}
+	my $writer = $responder->([200,
+				   ['Content-type' => 'application/zip',
+				    'Content-Disposition' => "attachment$fn"]]);
+	my $handle;
+	my $stderr = File::Temp->new();
+	close($stderr);
+	$handle = AnyEvent::Run->new(cmd => ["p3x-create-archive", "--log-stderr", "$stderr", @$objs],
+				     on_read => sub {
+					 my $rh = shift;
+					 print STDERR "GOT " . length($rh->{rbuf}) . "\n";
+					 $writer->write($rh->{rbuf});
+					 $rh->{rbuf} = '';
+				     },
+				     on_error => sub {
+					 my($rh, $fatal, $message) = @_;
+					 print STDERR "Error on zip: $message\n";
+					 if ($fatal)
+					 {
+					     undef $handle;
+					 }
+				     },
+				     on_eof => sub {
+					 print STDERR "Run zip EOF $handle\n";
+					 undef $handle;
+				     });
+    }
+}
+     
+
+sub _handle_dl_file_request
+{
+    my($self, $req, $name, $dlid) = @_;
 
     #
     # Query mongo for the file details.
@@ -1837,6 +1942,8 @@ sub create
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
     #BEGIN create
+
+#die "The workspace is currently in readonly mode\n";
     $output = [];
     $input = $self->_validateargs($input,["objects"],{
 		createUploadNodes => 0,
