@@ -749,7 +749,7 @@ sub get_download_url
 
 =head2 get_archive_url
 
-  $url = $obj->get_archive_url($input)
+  $url, $file_count, $total_size = $obj->get_archive_url($input)
 
 =over 4
 
@@ -760,6 +760,8 @@ sub get_download_url
 <pre>
 $input is a get_archive_url_params
 $url is a string
+$file_count is an int
+$total_size is an int
 get_archive_url_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	recursive has a value which is a bool
@@ -776,6 +778,8 @@ bool is an int
 
 $input is a get_archive_url_params
 $url is a string
+$file_count is an int
+$total_size is an int
 get_archive_url_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	recursive has a value which is a bool

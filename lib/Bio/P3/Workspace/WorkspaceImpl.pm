@@ -16,7 +16,7 @@ Workspace
 
 #BEGIN_HEADER
 use base 'RPC::Any::Package::JSONRPC';
-use POSIX;
+use POSIX qw(:time_h :sys_wait_h);
 use File::Path;
 use File::Copy ("cp","mv");
 use File::stat;
@@ -43,6 +43,7 @@ use DateTime::Format::ISO8601;
 use P3AuthLogin;
 use IO::File;
 use Time::HiRes 'gettimeofday';
+use Digest::HMAC_SHA1 qw(hmac_sha1 hmac_sha1_hex);
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -1387,7 +1388,6 @@ sub _handle_archive_request
     return sub {
 	my($responder) = @_;
 
-	print "IN SUB\n";
 	my $fn;
 	if ($res->{archive_name})
 	{
@@ -1399,25 +1399,70 @@ sub _handle_archive_request
 	my $handle;
 	my $stderr = File::Temp->new();
 	close($stderr);
-	$handle = AnyEvent::Run->new(cmd => ["p3x-create-archive", "--log-stderr", "$stderr", @$objs],
+	$handle = AnyEvent::Run->new(cmd => ["p3x-create-archive",
+					     # "--uncompressed",
+					     "--log-stderr", "$stderr", @$objs],
 				     on_read => sub {
 					 my $rh = shift;
-					 print STDERR "GOT " . length($rh->{rbuf}) . "\n";
-					 $writer->write($rh->{rbuf});
+					 # print STDERR "GOT " . length($rh->{rbuf}) . "\n";
+					 eval {
+					     $writer->write($rh->{rbuf});
+					 };
+					 if ($@)
+					 {
+					     print STDERR "CAUGHT ERROR $@\n";
+					     print STDERR "Propagated error data:\n";
+					     if (open(my $fh, "<", $stderr))
+					     {
+						 while (<$fh>)
+						 {
+						     print STDERR $_;
+						 }
+						 close($fh);
+					     }
+					     print STDERR "End error data\n";
+					     undef $handle;
+					     return;
+					 }
 					 $rh->{rbuf} = '';
 				     },
 				     on_error => sub {
 					 my($rh, $fatal, $message) = @_;
 					 print STDERR "Error on zip: $message\n";
+					 if (open(my $fh, "<", $stderr))
+					 {
+					     while (<$fh>)
+					     {
+						 print STDERR $_;
+					     }
+					     close($fh);
+					 }
 					 if ($fatal)
 					 {
 					     undef $handle;
 					 }
 				     },
 				     on_eof => sub {
-					 print STDERR "Run zip EOF $handle\n";
+					 my $res = waitpid($self->{child_pid}, WNOHANG);
+					 my $stat = $?;
+					 print STDERR "exitcode $self->{child_pid} $res $stat\n";
+					 if ($stat != 0)
+					 {
+					     my $rc = $stat << 8;
+					     print STDERR "Child died with status $stat. Propagated error data:\n";
+					     if (open(my $fh, "<", $stderr))
+					     {
+						 while (<$fh>)
+						 {
+						     print STDERR $_;
+						 }
+						 close($fh);
+					     }
+					     print STDERR "End error data\n";
+					 }
 					 undef $handle;
 				     });
+	$handle->{read_size} = 32768;
     }
 }
      
@@ -2632,7 +2677,7 @@ sub get_download_url
 
 =head2 get_archive_url
 
-  $url = $obj->get_archive_url($input)
+  $url, $file_count, $total_size = $obj->get_archive_url($input)
 
 =over 4
 
@@ -2644,6 +2689,8 @@ sub get_download_url
 <pre>
 $input is a get_archive_url_params
 $url is a string
+$file_count is an int
+$total_size is an int
 get_archive_url_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	recursive has a value which is a bool
@@ -2659,6 +2706,8 @@ bool is an int
 
 $input is a get_archive_url_params
 $url is a string
+$file_count is an int
+$total_size is an int
 get_archive_url_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	recursive has a value which is a bool
@@ -2691,16 +2740,179 @@ sub get_archive_url
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
-    my($url);
+    my($url, $file_count, $total_size);
     #BEGIN get_archive_url
+
+    $input = $self->_validateargs($input,["objects"],{
+	recursive => 0,
+	archive_name => undef,
+	archive_type => 'zip',
+    });
+
+    #
+    # Scan our input objects and if we are not recursive, remove
+    # any folders.
+    #
+    # We also compute a the download size estimate. If we are
+    # performing a recursive archive, we perform an aggregate
+    # query to mongo to get the size of the child objects.
+    #
+    
+    my @objs;
+    $total_size = 0;
+    $file_count = 0;
+    my $col = $self->_mongodb()->get_collection('objects');
+
+    for my $ws_path (@{$input->{objects}})
+    {
+    	my ($user,$ws,$path,$name) = $self->_parse_ws_path($ws_path);
+
+    	if (!defined($ws) || length($ws) == 0) {
+    		$self->_error("Path $ws_path does not include at least a top level directory!");
+    	}
+
+    	my $wsobj = $self->_wscache($user,$ws);
+    	$self->_check_ws_permissions($wsobj,"r",1);
+
+	my $obj = $self->_get_db_object({
+	    workspace_uuid => $wsobj->{uuid},
+	    path => $path,
+	    name => $name
+	    });
+
+	print "$wsobj->{uuid} obj $obj->{path} $obj->{name} $obj->{folder}\n";
+	print Dumper($obj);
+
+	#
+	# Check recursive if a folder or an entire workspace.
+	#
+	if ($obj->{folder} || ($path eq '' && $name eq ''))
+	{
+	    if (!$input->{recursive})
+	    {
+		warn "Skipping folder $ws_path because recursive not set\n";
+		next;
+	    }
+
+	    my @path_q;
+	    if ($path ne '' || $name ne '')
+	    {
+		my $subpath = ($path eq '' && $name eq '') ? "" : ($path ? "$path/$name" : $name);
+		@path_q = (path => $self->_compute_mongo_regex_for_path($subpath));
+	    }
+	    my $path_spec = {
+		@path_q,
+		workspace_uuid => $wsobj->{uuid},
+		folder => 0,
+	    };
+
+	    my $res = $col->aggregate([
+				   { '$match' => $path_spec },
+				   { '$group' => {
+				       _id => 0,
+				       total_size => { '$sum' => '$size' },
+				       file_count => { '$sum' => 1 },
+				   } },
+				       ]);
+
+	    print Dumper($path_spec, $res);
+	    $total_size += $res->[0]->{total_size};
+	    $file_count += $res->[0]->{file_count};
+
+	    if (0)
+	    {
+		# Debug - print matches.
+		my $res = $col->find($path_spec);
+		my $n = 0;
+		while (my $r = $res->next)
+		{
+		    print "$r->{name} $r->{path} $r->{folder} $r->{size}\n";
+		    last if $n++ > 100;
+		}
+	    }
+
+	}
+	elsif (!$obj->{wsobj})
+	{
+	    next;
+	}
+	else
+	{
+	    print "add $obj->{size}\n";
+	    $total_size += $obj->{size};
+	    $file_count++;
+	}
+
+	#
+	# In the download-url code, we tweak shock. We do not need to do this
+	# here since the zip-archiving code itself uses the Workspace::get method.
+	# It adds some inefficiency but keeps the code clean. 
+	#
+	
+	push(@objs, $ws_path);
+    }
+
+    my $download_lifetime = $self->{_params}->{'download-lifetime'};
+    if (!$download_lifetime)
+    {
+	$download_lifetime = 60 * 60;
+	warn "default dl lifetime to $download_lifetime\n";
+    }
+    my $expires = time + $download_lifetime;
+
+    my $gen = Data::UUID::MT->new;
+    my $key = $gen->create_hex();
+    $key =~ s/^0x//;
+
+    my $user = $self->_getUsername();
+    my $token = Bio::P3::Workspace::WorkspaceImpl::_authentication();
+
+    #
+    # The visible path that we provide the user
+    # is a HMAC hash created by signing the random
+    # download key with the signature from the user's token.
+    #
+
+    my $token_obj = P3AuthToken->new(token => $token);
+    my $dl_sig = hmac_sha1_hex($key, $token_obj->signature);
+
+    # return value
+    $url = $self->{_params}->{'download-url-base'} . "/archive/$dl_sig";
+
+    my $archive = $input->{archive_name};
+    if (!$archive)
+    {
+	$archive = strftime("ws-archive-%Y-%m-%d-%H-%M.zip", gmtime);
+    }
+
+    my $doc = {
+	user_token => $token,
+	user => $user,
+	archive_type => $input->{archive_type},
+	archive_name => $archive,
+	objects => \@objs,
+	download_key => $key,
+	download_signature => $dl_sig,
+	expiration_time => $expires,
+	total_size => $total_size,
+	file_count => $file_count,
+    };
+    print STDERR Dumper($doc);
+
+    my $coll = $self->_mongodb()->get_collection('downloads');
+
+    $coll->insert($doc);
+
     #END get_archive_url
     my @_bad_returns;
     (!ref($url)) or push(@_bad_returns, "Invalid type for return variable \"url\" (value was \"$url\")");
+    (!ref($file_count)) or push(@_bad_returns, "Invalid type for return variable \"file_count\" (value was \"$file_count\")");
+    (!ref($total_size)) or push(@_bad_returns, "Invalid type for return variable \"total_size\" (value was \"$total_size\")");
     if (@_bad_returns) {
 	my $msg = "Invalid returns passed to get_archive_url:\n" . join("", map { "\t$_\n" } @_bad_returns);
 	die $msg;
     }
-    return($url);
+    return($url, $file_count, $total_size);
 }
 
 
