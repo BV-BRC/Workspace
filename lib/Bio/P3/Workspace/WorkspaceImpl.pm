@@ -1427,6 +1427,7 @@ sub _handle_archive_request
 	my $stderr = File::Temp->new();
 	close($stderr);
 	$handle = AnyEvent::Run->new(cmd => ["p3x-create-archive",
+					     "--auth-token", $res->{user_token},
 					     # "--uncompressed",
 					     "--log-stderr", "$stderr", @$objs],
 				     on_read => sub {
