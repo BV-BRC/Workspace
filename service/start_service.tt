@@ -21,6 +21,8 @@ export KB_DEPLOYMENT_CONFIG="$KB_TOP/deployment.cfg"
 # For phispy
 export R_LIBS="$KB_TOP/lib"
 
+export PERL_LWP_SSL_VERIFY_HOSTNAME=0
+
 [% IF kb_tempdir -%]
 export TMPDIR=[% kb_tempdir %]
 export TEMPDIR=[% kb_tempdir %]

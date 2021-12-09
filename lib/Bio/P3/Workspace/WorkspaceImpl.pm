@@ -536,7 +536,7 @@ sub _get_directory_contents {
 
 #Retrive objects from mongodb based on input query**
 sub _query_database {
-	my ($self,$query,$count,$update_shock) = @_;
+	my ($self,$query,$count,$update_shock, $hint) = @_;
 	if (defined($query->{path})) {
 		$query->{path} =~ s/^\///;
 		$query->{path} =~ s/\/$//;
@@ -545,7 +545,14 @@ sub _query_database {
 		return $self->_mongodb()->get_collection('objects')->count($query);
 	}
 	my $output = [];
+	# print "RUN QUERY " . Dumper($query);
 	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
+	if ($hint)
+	{
+	    # print STDERR "USE HINT $hint\n";
+	    $cursor = $cursor->hint($hint);
+	    # print Dumper($cursor);
+	}
 	my $hash;
 	while (my $object = $cursor->next) {
 		$object->{wsobj} = $self->_wscache("_uuid",$object->{workspace_uuid});
@@ -1208,11 +1215,16 @@ sub _compute_mongo_regex_for_path
 {
     my($self, $path) = @_;
     if (length($path) > 0) {
-	my $term = "(/|\$)";	# Play games with quoting here so indentation isn't broken. ugh.
-
-	$path =~ quotemeta($path);
+	my $term = '(/|$)';
 	
-	return qr/^$path$term/;
+	# print STDERR "Before $path\n";
+	#$path =~ s/[.()]/\\$&/g;
+	$path = quotemeta($path);
+	# print STDERR "After $path\n";
+	
+	my $rc = qr/^$path$term/;
+	# print STDERR "RE $rc\n";
+	return $rc;
     }
     else
     {
@@ -1223,6 +1235,7 @@ sub _compute_mongo_regex_for_path
 #List all objects matching input query**
 sub _list_objects {
 	my ($self,$fullpath,$query,$excludeDirectories,$excludeObjects,$recursive) = @_;
+	my $hint;
 	my ($user,$ws,$path,$name) = $self->_parse_ws_path($fullpath);
 	if (length($name) > 0) {
 		if (length($path) > 0) {
@@ -1243,17 +1256,30 @@ sub _list_objects {
 		$query->{folder} = 0;
 	} elsif ($excludeObjects == 1) {
 		$query->{folder} = 1;
-	}
-	if ($recursive == 1) {
+	    }
+	#
+	# HACK: Force query hint for huge workspace.
+	#
+	if ($recursive == 1)
+	{
+
 	    if (length($path) > 0) {
+		# print STDERR "INVOKE $path\n";
 		$query->{path} = $self->_compute_mongo_regex_for_path($path);
-		# $path = "^".quotemeta($path);
-		# $query->{path} = qr/$path/;
+
+		# print STDERR "GOT $path $query->{path}\n";
+		#$path = "^".quotemeta($path);
+		#$query->{path} = qr/$path/;
+
+		if ($wsobj->{uuid} eq '7E50286E-C07E-11EB-954E-D6FC682E0674')
+		{
+		    $hint = "path_1_workspace_uuid_1";
+		}
 		}
 	} else {
 		$query->{path} = $path;
 	}
-	return $self->_query_database($query,0, 1);
+	return $self->_query_database($query,0, 1, $hint);
 }
 
 #Formating queries to support direct mongo queries - this will need to get far more sophisticated**
@@ -1802,12 +1828,15 @@ sub new
 		chomp($line);
 		$self->{_types}->{$line} = 1;
 	}
-	close($fh);
+        close($fh);
+        my $timeout = 120_000;
 	my $config = {
 		host => $params->{"mongodb-host"},
 		db_name => $params->{"mongodb-database"},
 		auto_connect => 1,
-		auto_reconnect => 1
+		auto_reconnect => 1,
+	        timeout => $timeout,
+		query_timeout => $timeout
 	};
 	if (defined($params->{adminlist})) {
 		my $array = [split(/;/,$params->{adminlist})];
