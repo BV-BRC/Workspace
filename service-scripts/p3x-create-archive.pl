@@ -5,7 +5,6 @@
 use Archive::Zip qw(:CONSTANTS);
 use Bio::P3::Workspace::WSFileMember;
 use Bio::P3::Workspace::WSNewFileMember;
-use Bio::KBase::AppService::LongestCommonSubstring qw(BuildString BuildTree LongestCommonSubstring);
 use File::Basename;
 
 use Bio::P3::Workspace::WorkspaceClientExt;
@@ -17,6 +16,7 @@ use Getopt::Long::Descriptive;
 
 my($opt, $usage) = describe_options("%c %o path [path ...]",
 				    ["output|o=s", "Write to this file (default to stdout)"],
+				    ["auth-token=s", "Use this authorization token"],
 				    ["max-size=i", "Only archive files smaller than this size"],
 				    ["prefix=s", "Prefix to remove from paths before archiving"],
 				    ["uncompressed", "Disable compression"],
@@ -27,6 +27,8 @@ print($usage->text), exit 0 if $opt->help;
 die($usage->text) if @ARGV == 0;
 
 require Carp::Always if $opt->carp;
+
+$ENV{KB_AUTH_TOKEN} = $opt->auth_token if $opt->auth_token;
 
 my $ws = Bio::P3::Workspace::WorkspaceClientExt->new;
 
