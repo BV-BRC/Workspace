@@ -549,7 +549,7 @@ sub _query_database {
 	my $cursor = $self->_mongodb()->get_collection('objects')->find($query);
 	if ($hint)
 	{
-	    #print STDERR "USE HINT $hint\n";
+	    # print STDERR "USE HINT $hint\n";
 	    $cursor = $cursor->hint($hint);
 	    # print Dumper($cursor);
 	}
@@ -1258,10 +1258,9 @@ sub _list_objects {
 		$query->{folder} = 1;
 	    }
 	#
-	#HACK: Disable recursive listing on huge genbank workspace.
+	# HACK: Force query hint for huge workspace.
 	#
-	if ($recursive == 1 &&
-	    $wsobj->{uuid} ne '7E50286E-C07E-11EB-954E-D6FC682E0674')
+	if ($recursive == 1)
 	{
 
 	    if (length($path) > 0) {
@@ -1272,7 +1271,10 @@ sub _list_objects {
 		#$path = "^".quotemeta($path);
 		#$query->{path} = qr/$path/;
 
-		# $hint = "path_1_workspace_uuid_1";
+		if ($wsobj->{uuid} eq '7E50286E-C07E-11EB-954E-D6FC682E0674')
+		{
+		    $hint = "path_1_workspace_uuid_1";
+		}
 		}
 	} else {
 		$query->{path} = $path;
@@ -1827,14 +1829,14 @@ sub new
 		$self->{_types}->{$line} = 1;
 	}
         close($fh);
-        # my $timeout = 30_000;
+        my $timeout = 120_000;
 	my $config = {
 		host => $params->{"mongodb-host"},
 		db_name => $params->{"mongodb-database"},
 		auto_connect => 1,
 		auto_reconnect => 1,
-	        # timeout => $timeout,
-		# query_timeout => $timeout
+	        timeout => $timeout,
+		query_timeout => $timeout
 	};
 	if (defined($params->{adminlist})) {
 		my $array = [split(/;/,$params->{adminlist})];
