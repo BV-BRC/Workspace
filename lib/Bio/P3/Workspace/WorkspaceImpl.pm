@@ -1260,7 +1260,7 @@ sub _list_objects {
 	#
 	# HACK: Force query hint for huge workspace.
 	#
-	if ($recursive == 1)
+	if ($recursive == 1 && $wsobj->{uuid} ne '7E50286E-C07E-11EB-954E-D6FC682E0674')
 	{
 
 	    if (length($path) > 0) {
