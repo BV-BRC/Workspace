@@ -49,9 +49,9 @@ sub _openFile {
     my $fdata;
     if (!$meta)
     {
-	print STDERR "Get to fill in meta for $fn\n";
+	# print STDERR "Get to fill in meta for $fn\n";
 	my $res = $self->{ws}->get({objects => [$fn]});
-	print STDERR " ... done\n";
+	# print STDERR " ... done\n";
 	if (!$res || @$res == 0)
 	{
 	    _ioError("Can't open", $fn);
@@ -91,7 +91,7 @@ sub _openFile {
 
 	if (!$fh)
 	{
-	    print STDERR "Retrieve shock data for $fn size=$meta->[6] $url\n";
+	    # print STDERR "Retrieve shock data for $fn size=$meta->[6] $url\n";
 	    my @cmd = ("curl",
 		       "-s",
 		       "-X", "GET",
@@ -124,16 +124,15 @@ sub _openFile {
 		my $st = stat($sfh);
 		if ($st->size == $self->{uncompressedSize})
 		{
-		    print "Using local $ws_path for $fn\n";
 		    $fh = $sfh;
 		    $status = 1;
 		}
 	    }
 	    else
 	    {
-		print STDERR "get to fill in data for $fn\n";
+		# print STDERR "get to fill in data for $fn\n";
 		my $res = $self->{ws}->get({objects => [$fn]});
-		print STDERR "... done size=" . length($res->[0]->[1]) . " comp=$self->{compressedSIze} uncomp=$self->{uncompressedSize}\n";
+		# print STDERR "... done size=" . length($res->[0]->[1]) . " comp=$self->{compressedSIze} uncomp=$self->{uncompressedSize}\n";
 		
 		if (!$res || @$res == 0)
 		{
