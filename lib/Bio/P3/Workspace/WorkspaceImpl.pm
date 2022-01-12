@@ -1260,7 +1260,10 @@ sub _list_objects {
 	#
 	# HACK: Force query hint for huge workspace.
 	#
-	if ($recursive == 1 && $wsobj->{uuid} ne '7E50286E-C07E-11EB-954E-D6FC682E0674')
+	my %bad_ws = ('942D0C20-D8CF-11EA-A092-E9C4682E0674' => 1,
+		      '7E50286E-C07E-11EB-954E-D6FC682E0674' => 1);
+
+	if ($recursive == 1 && !$bad_ws{$wsobj->{uuid}})
 	{
 
 	    if (length($path) > 0) {
@@ -1271,11 +1274,11 @@ sub _list_objects {
 		#$path = "^".quotemeta($path);
 		#$query->{path} = qr/$path/;
 
-		if ($wsobj->{uuid} eq '7E50286E-C07E-11EB-954E-D6FC682E0674')
+		if ($bad_ws{$wsobj->{uuid}})
 		{
 		    $hint = "path_1_workspace_uuid_1";
 		}
-		}
+	    }
 	} else {
 		$query->{path} = $path;
 	}
