@@ -1585,8 +1585,10 @@ sub _handle_dl_file_request
 	    http_request(GET => $url,
 			 @headers,
 			 # handle_params => { max_read_size => 32768 },
+			 on_header => sub { print STDERR Dumper(@_); },
 			 on_body => sub {
 			     my($data, $hdr) = @_;
+			     print STDERR Dumper($hdr);
 			     if ($data)
 			     {
 				 $writer->write($data);

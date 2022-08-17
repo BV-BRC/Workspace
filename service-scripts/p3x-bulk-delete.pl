@@ -61,7 +61,10 @@ while (my $ent = $res->next())
     $ws_id = $ent->{uuid};
 }
 print "WS $ws_id\n";
-
+if (!$ws_id)
+{
+    die "No workspace found for owner $owner name $ws\n";
+}
 my $do_query = sub {
     print "qry path=$path ws=$ws_id\n";
     return $obj_col->find({path => qr/^$path/, workspace_uuid => $ws_id, shock => 1,
@@ -95,106 +98,114 @@ while (1)
 	@{$ent}{qw(_id uuid size shocknode type path name)};
     my($id) = $shocknode =~ m,/node/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$,i;
 
-    ref($_id) or die "id not a ref\n";
-
-    $id  or die $shocknode;
-    $uuid or die "No uuid $uuid\n";
-				      
-    $total += $size;
-    print join("\t", $uuid, $size, $id, $name, $type, $path), "\n";
-
-
-    # Shock lookup
-
-    my $node = $col->find_one({id => $id});
-    if (!$node)
-    {
-	warn "Not found: ", join("\t", $uuid, $size, $id, $name, $type, $path),  "\n";
-	next;
-    }
-
-    # Validate
-
-    if (0)
-    {
-	my $virt = $col->find_one({"file.virtual_parts" => $id});
-	if ($virt)
-	{
-	    warn "node is referenced by virtual node \n";
-	    next;
-	}
-    }
+    eval {
+	ref($_id) or die "id not a ref\n";
 	
-    my $path = get_path($id);
-    my $data_file = "$path/$id.data";
-#    if (! -f $data_file)
-#    {
-#	warn "No $data_file\n";
-#    }
-
-    if (0)
-    {
-	my $dups = $col->find({"file.path" => $data_file});
-	my @dups;
-	while (my $n = $dups->next)
+	$id  or die "No id found in '$shocknode'\n";
+	$uuid or die "No uuid $uuid\n";
+	
+	$total += $size;
+	print join("\t", $uuid, $size, $id, $name, $type, $path), "\n";
+	
+	
+	# Shock lookup
+	
+	my $node = $col->find_one({id => $id});
+	if (!$node)
 	{
-	    push(@dups, $n);
-	}
-	if (@dups)
-	{
-	    warn "skipping dups for $id\n";
+	    warn "Not found: ", join("\t", $uuid, $size, $id, $name, $type, $path),  "\n";
 	    next;
-	}
-    }
-    
-    my $owner = $users{$node->{acl}->{owner}};
-    print "$path\t$node->{file}->{name}\t$owner->{username}\n";
-    # print "    $node->{attributes}->{app_id}\t$node->{attributes}->{task_file_id}\n";
-    #system("ls", "-l", $data_file);
-
-    my $err;
-    my $res;
-    # system("du", "-hs", $path);
-
-    if ($opt->execute)
-    {
-	my $ret = remove_tree($path, { verbose => 0, safe => 1, error => \$err, result => \$res});
-	if ($err && @$err)
-	{
-	    die "error on remove: @$err\n";
-	}
-	if ($ret == 0)
-	{
-	    print "Did not remove any files\n";
-	    next;
-	}
-	print "Removed: $ret\n";
-    }
-    else
-    {
-	print "Would remove $path\n";
-    }
-
-    if ($opt->execute)
-    {
-	my $result = $col->remove({id => $id}, { safe => 1});
-	if (!$result->{ok} || $result->{n} != 1)
-	{
-	    die "Remove failed at line $. $_: " . Dumper($result);
 	}
 	
-	my $res = $obj_col->remove({_id => $_id}, { safe => 1});
-	# print "Deleted $res->{n} from objects\n";
-	die if $res->{n} > 1;
-    }
-    else
+	# Validate
+	
+	if (0)
+	{
+	    my $virt = $col->find_one({"file.virtual_parts" => $id});
+	    if ($virt)
+	    {
+		warn "node is referenced by virtual node \n";
+		next;
+	    }
+	}
+	
+	my $path = get_path($id);
+	my $data_file = "$path/$id.data";
+	#    if (! -f $data_file)
+	#    {
+	#	warn "No $data_file\n";
+	#    }
+	
+	if (0)
+	{
+	    my $dups = $col->find({"file.path" => $data_file});
+	    my @dups;
+	    while (my $n = $dups->next)
+	    {
+		push(@dups, $n);
+	    }
+	    if (@dups)
+	    {
+		warn "skipping dups for $id\n";
+		next;
+	    }
+	}
+	
+	my $owner = $users{$node->{acl}->{owner}};
+	print "$path\t$node->{file}->{name}\t$owner->{username}\n";
+	# print "    $node->{attributes}->{app_id}\t$node->{attributes}->{task_file_id}\n";
+	#system("ls", "-l", $data_file);
+	
+	my $err;
+	my $res;
+	# system("du", "-hs", $path);
+	
+	if ($opt->execute)
+	{
+	    my $ret = remove_tree($path, { verbose => 0, safe => 1, error => \$err, result => \$res});
+	    if ($err && @$err)
+	    {
+		die "error on remove: @$err\n";
+	    }
+	    if ($ret == 0)
+	    {
+		print "Did not remove any files\n";
+		next;
+	    }
+	    print "Removed: $ret\n";
+	}
+	else
+	{
+	    print "Would remove $path\n";
+	}
+	
+	if ($opt->execute)
+	{
+	    my $result = $col->remove({id => $id}, { safe => 1});
+	    if (!$result->{ok} || $result->{n} != 1)
+	    {
+		die "Remove failed at line $. $_: " . Dumper($result);
+	    }
+	    
+	    my $res = $obj_col->remove({_id => $_id}, { safe => 1});
+	    # print "Deleted $res->{n} from objects\n";
+	    die if $res->{n} > 1;
+	}
+	else
+	{
+	    print "Would remove shock $id and ws $_id\n";
+	}
+	print "cur total " . $total / 1e9 . "\n";
+    };
+    if ($@)
     {
-	print "Would remove shock $id and ws $_id\n";
+	print "Skip $uuid $path $name due to eval error: $@";
     }
-    print "cur total " . $total / 1e9 . "\n";
 }
-
-
+	
+    
+    
+    
 sub get_path
 {
     my($id) = @_;

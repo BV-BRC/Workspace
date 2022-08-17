@@ -23,7 +23,7 @@ my($opt, $usage) =
     describe_options("%c %o path [path...]",
 		     ["List one or more workspace paths"],
 		     [],
-		     ["all|a", "Do not ignore entries starting with ."],
+		     ["all|a", "Do not ignore entries starting with . ", { hidden => 1 }],
 		     ["long||l", "Show file details"],
 		     ["one-column|1", "Show results in one column"],
 		     ["directory|d", "Show file details for directory instead of listing contents"],
