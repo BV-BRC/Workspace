@@ -5,7 +5,6 @@ use Getopt::Long::Descriptive;
 use Data::Dumper;
 use File::Basename;
 use Pod::Usage;
-use IO::Pager;
 
 =head1 Dump a workspace file to stdout
 
