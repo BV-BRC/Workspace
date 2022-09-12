@@ -42,6 +42,7 @@ The following options may be provided:
     -f or --overwrite			If a file to be uploaded already exists, overwrite it.
     -m or --map-suffix suffix=type	When copying to workspace, map a file with the given
     					suffix to the given type.
+    -t or --default-type TYPE		If no other type is defined, use the given type as the default
     
 =cut
 
@@ -56,6 +57,7 @@ my %suffix_map = ("fa" => "reads",
 		  "fna" => "contigs",
 		  "faa" => "feature_protein_fasta",
 		  "txt" => "txt",
+		  "html" => "html",
 		 );
 
 
@@ -63,6 +65,7 @@ my $workspace_path_prefix;
 my $recursive;
 my $overwrite;
 my $admin;
+my $default_type;
 
 my @sources;
 my $dest;
@@ -82,6 +85,7 @@ GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "recursive|r" => \$recursive,
 	   "target|t" => \$dest,
 	   "map-suffix|m=s\%" => \%suffix_map,
+	   "default-type|t=s" => \$default_type,
 	   "administrator|A" => \$admin,
 	   "url=s" => sub { $ws->{url} = $_[1]; },
 	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws, $admin) },
@@ -391,7 +395,7 @@ sub copy_to
 	    }
 	}
 		
-	    
+	$type //= $default_type;
 	$type //= "unspecified";
 	print "Copy $self to $dest with type=$type\n";
 	my $res;
