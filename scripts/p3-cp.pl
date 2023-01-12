@@ -3,6 +3,7 @@ use Bio::P3::Workspace::WorkspaceClientExt;
 use P3AuthToken;
 use Getopt::Long;
 use Data::Dumper;
+use Date::Parse;
 use File::Basename;
 use Pod::Usage;
 
@@ -43,6 +44,7 @@ The following options may be provided:
     -m or --map-suffix suffix=type	When copying to workspace, map a file with the given
     					suffix to the given type.
     -t or --default-type TYPE		If no other type is defined, use the given type as the default
+    --creation-date STR			If copying to the workspace, set the creation date to the given date.
     
 =cut
 
@@ -66,6 +68,7 @@ my $recursive;
 my $overwrite;
 my $admin;
 my $default_type;
+my $creation_epoch;
 
 my @sources;
 my $dest;
@@ -87,6 +90,14 @@ GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "map-suffix|m=s\%" => \%suffix_map,
 	   "default-type|t=s" => \$default_type,
 	   "administrator|A" => \$admin,
+	   "creation-date=s" => sub {
+	       my $date = $_[1];
+	       $creation_epoch = str2time($date);
+	       if (!$creation_epoch)
+	       {
+		   die "Cannot parse creation date \"$date\"\n";
+	       }
+	   },
 	   "url=s" => sub { $ws->{url} = $_[1]; },
 	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws, $admin) },
 	   "help|h" => sub {
@@ -128,7 +139,7 @@ PROCESS:
 		$dest = $dest->append(basename($src->path()));
 	    }
 
-	    do_copy_recursive($src, $dest);
+	    do_copy_recursive($src, $dest, $creation_epoch);
 	    last PROCESS;
 	}
 	
@@ -143,7 +154,7 @@ PROCESS:
 		warn "Source path $p does not exist\n";
 		next;
 	    }
-	    do_copy_recursive($p, $dest);
+	    do_copy_recursive($p, $dest, $creation_epoch);
 	}
     }
     else
@@ -169,7 +180,7 @@ PROCESS:
 		}
 		else
 		{
-		    do_copy($src, $dest);
+		    do_copy($src, $dest, $creation_epoch);
 		}
 		last PROCESS;
 	    }
@@ -200,17 +211,17 @@ PROCESS:
 		warn "Source path $p is a directory and -R was not specified\n";
 		next;
 	    }
-	    do_copy($p, $dest->append(basename($p->path())));
+	    do_copy($p, $dest->append(basename($p->path())), $creation_epoch);
 	}
     }
 }
 
 sub do_copy
 {
-    my($src, $dest) = @_;
+    my($src, $dest, $creation_date) = @_;
     # print "Copy $src => $dest\n";
 
-    $src->copy_to($dest);
+    $src->copy_to($dest, $creation_date);
 }
 
 #
@@ -371,7 +382,7 @@ sub mkdir
 #
 sub copy_to
 {
-    my($self, $dest) = @_;
+    my($self, $dest, $creation_date) = @_;
 
     if ($dest->exists() && !$overwrite)
     {
@@ -402,7 +413,7 @@ sub copy_to
 	eval {
 	    my $shock = (-s $self->{path}) > 5000 ? 1 : 0;
 	    $res = $self->ws->save_file_to_file($self->{path}, {}, $dest->path(),
-						$type, $overwrite, $shock, $token->token());
+						$type, $overwrite, $shock, $token->token(), $admin, $creation_date);
 	};
 
 	if ($@)
@@ -464,7 +475,7 @@ sub mkdir
 #
 sub copy_to
 {
-    my($self, $dest) = @_;
+    my($self, $dest, $creation_date) = @_;
 
     my $opts;
     $opts->{admin} = 1 if $admin;
