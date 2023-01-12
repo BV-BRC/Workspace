@@ -12,9 +12,12 @@ SERVICE = Workspace
 SERVICE_PORT = 7125
 DOWNLOAD_SERVICE = WorkspaceDownload
 DOWNLOAD_SERVICE_PORT = 7129
+COMPLETION_SERVICE = WorkspaceCompletion
+COMPLETION_SERVICE_PORT = 7140
 
 SERVICE_URL = https://p3.theseed.org/services/$(SERVICE)
 DOWNLOAD_URL = https://p3.theseed.org/services/$(DOWNLOAD_SERVICE)
+COMPLETION_URL = https://p3.theseed.org/services/$(COMPLETION_SERVICE)
 
 SERVICE_NAME = Workspace
 SERVICE_NAME_PY = $(SERVICE_NAME)
@@ -22,6 +25,7 @@ DOWNLOAD_SERVICE_NAME = WorkspaceDownload
 
 SERVICE_PSGI_FILE = $(SERVICE_NAME).psgi
 DOWNLOAD_SERVICE_PSGI_FILE = $(DOWNLOAD_SERVICE_NAME).psgi
+COMPLETION_SERVICE_PSGI_FILE = $(COMPLETION_SERVICE_NAME).psgi
 
 SRC_SERVICE_PERL = $(wildcard service-scripts/*.pl) $(wildcard internal-scripts/*.pl)
 BIN_SERVICE_PERL = $(addprefix $(BIN_DIR)/,$(basename $(notdir $(SRC_SERVICE_PERL))))
@@ -50,6 +54,8 @@ TPAGE_ARGS =  \
 	--define kb_psgi=$(SERVICE_PSGI_FILE) \
 	--define kb_download_port=$(DOWNLOAD_SERVICE_PORT) \
 	--define kb_download_psgi=$(DOWNLOAD_SERVICE_PSGI_FILE) \
+	--define kb_completion_port=$(COMPLETION_SERVICE_PORT) \
+	--define kb_completion_psgi=$(COMPLETION_SERVICE_PSGI_FILE) \
 	--define kb_starman_workers=25 \
 	$(TPAGE_TEMPDIR) \
 	$(TPAGE_SERVICE_LOGDIR)

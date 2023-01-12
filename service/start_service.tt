@@ -61,3 +61,19 @@ plackup_params="$plackup_params -s Twiggy"
 $KB_RUNTIME/bin/perl $KB_RUNTIME/bin/start_server $ss_params -- $KB_RUNTIME/bin/perl $KB_RUNTIME/bin/plackup $plackup_params $KB_TOP/lib/[% kb_download_psgi %] 2> $KB_SERVICE_LOG_DIR/download.error.log &
 
 [% END -%]
+
+#
+# Completion service
+
+[% IF kb_completion_port -%]
+ss_params="--port [% kb_completion_port %]"
+ss_params="$ss_params --status-file $KB_SERVICE_LOG_DIR/completion.status"
+ss_params="$ss_params --pid-file $KB_SERVICE_LOG_DIR/completion.pid"
+
+plackup_params="--access-log $KB_SERVICE_LOG_DIR/completion.access.log"
+plackup_params="$plackup_params -s Monoceros"
+
+$KB_RUNTIME/bin/perl $KB_RUNTIME/bin/start_server $ss_params -- $KB_RUNTIME/bin/perl $KB_RUNTIME/bin/plackup $plackup_params $KB_TOP/lib/[% kb_completion_psgi %] 2> $KB_SERVICE_LOG_DIR/completion.error.log &
+
+[% END -%]
+
