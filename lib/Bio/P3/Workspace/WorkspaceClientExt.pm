@@ -276,6 +276,8 @@ sub copy_files_to_handles
 
     $opts //= {};
 
+    $opts->{admin} = 1 if $ENV{P3_FORCE_ADMIN};
+
     $token //= $self->{token};
        
     my $ua;
@@ -397,7 +399,7 @@ sub save_data_to_file
 
 sub save_file_to_file
 {
-    my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token, $admin) = @_;
+    my($self, $local_file, $metadata, $path, $type, $overwrite, $use_shock, $token, $admin, $creation_time) = @_;
 
     $token //= $self->{token};
        
@@ -408,6 +410,7 @@ sub save_file_to_file
     {
 	push(@opts, adminmode => 1);
     }
+    push(@opts, overwrite => ($overwrite ? 1 : 0));
     
     my $obj;
     if ($use_shock)
@@ -419,8 +422,7 @@ sub save_file_to_file
 	$ua->timeout(86400);
 
 	# print STDERR "Create $path\n";
-	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
-				      overwrite => ($overwrite ? 1 : 0),
+	my $res = $self->create({ objects => [[$path, $type, $metadata, undef, $creation_time ]],
 				      @opts,
 				createUploadNodes => 1 });
 	# print STDERR "create returns " . Dumper($res);
@@ -447,8 +449,8 @@ sub save_file_to_file
     else
     {
 	my $res = eval {
-	    $self->create({ objects => [[$path, $type, $metadata, scalar read_file($local_file) ]],
-				overwrite => ($overwrite ? 1 : 0) });
+	    $self->create({ objects => [[$path, $type, $metadata, scalar read_file($local_file), $creation_time]],
+				@opts });
 	};
 	if ($@)
 	{
@@ -536,7 +538,7 @@ sub stat
 {
     my($self, $path, $admin) = @_;
     my @opts;
-    push(@opts, (adminmode => 1)) if $admin;
+    push(@opts, (adminmode => 1)) if $admin || $ENV{P3_FORCE_ADMIN};
     my $res = eval { $self->get({ objects => [$path], metadata_only => 1, @opts }); };
 
     return undef if $@ =~ /_ERROR_/ || !defined($res);

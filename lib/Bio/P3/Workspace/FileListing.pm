@@ -62,10 +62,13 @@ sub show_pretty_ls
 
 	my @files = ref($files) eq 'ARRAY' ? @$files : ();
 
-	if (!$opt->all)
-	{
-	    @files = grep { $_->[0] !~ /^\./ } @files;
-	}
+	#
+	# Because important folders always start with dot, do not hide them.
+	#
+	# if (!$opt->all)
+	# {
+	#     @files = grep { $_->[0] !~ /^\./ } @files;
+	# }
 
 	@files = sort { compare_paths_for_sort($a, $b, $opt) } @files;
 
