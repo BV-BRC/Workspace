@@ -118,7 +118,7 @@ create_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a FullObjectPath
 	1: an ObjectType
-	2: an UserMetadata
+	2: a UserMetadata
 	3: an ObjectData
 	4: (creation_time) a Timestamp
 
@@ -141,9 +141,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -167,7 +167,7 @@ create_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 	0: a FullObjectPath
 	1: an ObjectType
-	2: an UserMetadata
+	2: a UserMetadata
 	3: an ObjectData
 	4: (creation_time) a Timestamp
 
@@ -190,9 +190,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -271,7 +271,7 @@ $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a FullObjectPath
-	1: an UserMetadata
+	1: a UserMetadata
 	2: an ObjectType
 	3: (creation_time) a Timestamp
 
@@ -289,9 +289,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -315,7 +315,7 @@ $output is a reference to a list where each element is an ObjectMeta
 update_metadata_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 	0: a FullObjectPath
-	1: an UserMetadata
+	1: a UserMetadata
 	2: an ObjectType
 	3: (creation_time) a Timestamp
 
@@ -333,9 +333,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -426,9 +426,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -467,9 +467,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -561,9 +561,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -598,9 +598,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -868,9 +868,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -910,9 +910,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -1009,9 +1009,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -1052,9 +1052,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -1147,9 +1147,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -1186,9 +1186,9 @@ ObjectMeta is a reference to a list containing 13 items:
 	2: a FullObjectPath
 	3: (creation_time) a Timestamp
 	4: an ObjectID
-	5: (object_owner) an Username
+	5: (object_owner) a Username
 	6: an ObjectSize
-	7: an UserMetadata
+	7: a UserMetadata
 	8: an AutoMetadata
 	9: (user_permission) a WorkspacePerm
 	10: (global_permission) a WorkspacePerm
@@ -1268,12 +1268,12 @@ sub delete
 <pre>
 $input is a set_permissions_params
 $output is a reference to a list where each element is a reference to a list containing 2 items:
-	0: an Username
+	0: a Username
 	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-	0: an Username
+	0: a Username
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
@@ -1291,12 +1291,12 @@ bool is an int
 
 $input is a set_permissions_params
 $output is a reference to a list where each element is a reference to a list containing 2 items:
-	0: an Username
+	0: a Username
 	1: a WorkspacePerm
 set_permissions_params is a reference to a hash where the following keys are defined:
 	path has a value which is a FullObjectPath
 	permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-	0: an Username
+	0: a Username
 	1: a WorkspacePerm
 
 	new_global_permission has a value which is a WorkspacePerm
@@ -1370,7 +1370,7 @@ sub set_permissions
 <pre>
 $input is a list_permissions_params
 $output is a reference to a hash where the key is a string and the value is a reference to a list where each element is a reference to a list containing 2 items:
-	0: an Username
+	0: a Username
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
@@ -1388,7 +1388,7 @@ WorkspacePerm is a string
 
 $input is a list_permissions_params
 $output is a reference to a hash where the key is a string and the value is a reference to a list where each element is a reference to a list containing 2 items:
-	0: an Username
+	0: a Username
 	1: a WorkspacePerm
 list_permissions_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
@@ -1858,9 +1858,9 @@ a reference to a list containing 13 items:
 2: a FullObjectPath
 3: (creation_time) a Timestamp
 4: an ObjectID
-5: (object_owner) an Username
+5: (object_owner) a Username
 6: an ObjectSize
-7: an UserMetadata
+7: a UserMetadata
 8: an AutoMetadata
 9: (user_permission) a WorkspacePerm
 10: (global_permission) a WorkspacePerm
@@ -1879,9 +1879,9 @@ a reference to a list containing 13 items:
 2: a FullObjectPath
 3: (creation_time) a Timestamp
 4: an ObjectID
-5: (object_owner) an Username
+5: (object_owner) a Username
 6: an ObjectSize
-7: an UserMetadata
+7: a UserMetadata
 8: an AutoMetadata
 9: (user_permission) a WorkspacePerm
 10: (global_permission) a WorkspacePerm
@@ -1915,7 +1915,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 0: a FullObjectPath
 1: an ObjectType
-2: an UserMetadata
+2: a UserMetadata
 3: an ObjectData
 4: (creation_time) a Timestamp
 
@@ -1936,7 +1936,7 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 5 items:
 0: a FullObjectPath
 1: an ObjectType
-2: an UserMetadata
+2: a UserMetadata
 3: an ObjectData
 4: (creation_time) a Timestamp
 
@@ -1980,7 +1980,7 @@ setowner has a value which is a string
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a FullObjectPath
-1: an UserMetadata
+1: a UserMetadata
 2: an ObjectType
 3: (creation_time) a Timestamp
 
@@ -1997,7 +1997,7 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a reference to a list containing 4 items:
 0: a FullObjectPath
-1: an UserMetadata
+1: a UserMetadata
 2: an ObjectType
 3: (creation_time) a Timestamp
 
@@ -2354,7 +2354,7 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 path has a value which is a FullObjectPath
 permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-0: an Username
+0: a Username
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
@@ -2369,7 +2369,7 @@ adminmode has a value which is a bool
 a reference to a hash where the following keys are defined:
 path has a value which is a FullObjectPath
 permissions has a value which is a reference to a list where each element is a reference to a list containing 2 items:
-0: an Username
+0: a Username
 1: a WorkspacePerm
 
 new_global_permission has a value which is a WorkspacePerm
