@@ -88,7 +88,7 @@ GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "recursive|r" => \$recursive,
 	   "target|t" => \$dest,
 	   "map-suffix|m=s\%" => \%suffix_map,
-	   "default-type|t=s" => \$default_type,
+	   "default-type|T=s" => \$default_type,
 	   "administrator|A" => \$admin,
 	   "creation-date=s" => sub {
 	       my $date = $_[1];
