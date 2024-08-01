@@ -1,7 +1,7 @@
 use strict;
 use Bio::P3::Workspace::WorkspaceClientExt;
 use P3AuthToken;
-use Getopt::Long qw(:config no_ignore_case;
+use Getopt::Long qw(:config no_ignore_case);
 use Data::Dumper;
 use Date::Parse;
 use File::Basename;
