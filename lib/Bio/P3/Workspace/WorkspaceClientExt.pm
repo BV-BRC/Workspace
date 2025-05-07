@@ -12,6 +12,7 @@ use File::Find;
 use Fcntl ':mode';
 use JSON::XS;
 use Date::Parse;
+use Scalar::Util 'blessed';
 
 our %folder_types = (folder => 1,
 		     modelfolder => 1 );
@@ -26,7 +27,13 @@ sub get
     my $cache = $self->{get_cache};
     if (!$cache)
     {
-	return $self->SUPER::get($params);
+	my $res = $self->SUPER::get($params);
+	if (blessed($res) && $res->isa('JSON::RPC::Legacy::ReturnObject'))
+	{
+	    $res = $res->result;
+	}
+	return $res;
+	    
     }
 
     my $objs = $params->{objects};
@@ -301,12 +308,12 @@ sub copy_files_to_handles
 	    #
 	    # This might have failed to the pathname needing utf8 decoding.
 	    #
+	    print STDERR "Error downloading '$filename', trying decode\n";
 	    utf8::decode($filename);
-	    print STDERR "Retry download after decoding $filename\n";
 	    $res = eval { $self->get({@get_opts, objects => [$filename]}); };
 	    if (!$res)
 	    {
-		die "Workspace object not found for $filename\n";
+		die "Workspace object not found for '$filename'\n" . Dumper($filename);
 	    }
 	}
 	my $ent = $res->[0];

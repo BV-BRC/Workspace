@@ -1,7 +1,7 @@
 use strict;
 use Bio::P3::Workspace::WorkspaceClientExt;
 use P3AuthToken;
-use Getopt::Long;
+use Getopt::Long qw(:config no_ignore_case);
 use Data::Dumper;
 use Date::Parse;
 use File::Basename;
@@ -88,7 +88,7 @@ GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "recursive|r" => \$recursive,
 	   "target|t" => \$dest,
 	   "map-suffix|m=s\%" => \%suffix_map,
-	   "default-type|t=s" => \$default_type,
+	   "default-type|T=s" => \$default_type,
 	   "administrator|A" => \$admin,
 	   "creation-date=s" => sub {
 	       my $date = $_[1];
