@@ -41,6 +41,8 @@ use Fcntl ':seek';
 use DateTime;
 use DateTime::Format::ISO8601;
 use P3AuthLogin;
+use P3AuthToken;
+use P3TokenValidator;
 use IO::File;
 use Time::HiRes 'gettimeofday';
 use Digest::HMAC_SHA1 qw(hmac_sha1 hmac_sha1_hex);
@@ -1362,6 +1364,61 @@ sub _download_cleanup
     {
 	print STDERR "Error expiring download records: " . Dumper($res);
     }
+}
+
+#
+# Handle the request to create a session token in a cookie
+# that is bound to the user's auth token
+#
+
+sub _set_auth_request
+{
+    my($self, $env) = @_;
+    my $req = Plack::Request->new($env);
+    my $path = $req->path_info;
+
+    my $token = $req->header("Authorization");
+    if (!$token)
+    {
+	return [401, [], ["Authentication required"]];
+    }
+
+    my $auth_token = P3AuthToken->new(token => $token, ignore_authrc => 1);
+    my($valid, $validate_err) = P3TokenValidator->new->validate($auth_token);
+
+    if (!$valid)
+    {
+        warn "Token validation error $validate_err\n";
+	return [403, [], "Authentication failed"];
+    }
+
+
+    my $coll = $self->_mongodb()->get_collection('auth_cookie');
+
+    my $download_lifetime = $self->{_params}->{'download-lifetime'};
+    if (!$download_lifetime)
+    {
+	$download_lifetime = 60 * 60;
+	warn "default dl lifetime to $download_lifetime\n";
+    }
+    my $expires = time + $download_lifetime;
+
+    my $gen = Data::UUID->new;
+    my $session_token = $gen->create_b64();
+    $session_token =~ s/=*$//;
+    $session_token =~ s/\+/-/g;
+    $session_token =~ s,/,_,g;
+
+    my $doc = {
+	session_token => $session_token,
+	expiration_time => $expires,
+	auth_token => $token,
+    };
+    $coll->insert($doc);
+    my $res = Plack::Response->new(200);
+    $res->header('Set-Cookie' => "session=$session_token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
+    $res->body('Cookie set');
+    return $res->finalize;
 }
 
 sub _download_request
@@ -2695,7 +2752,7 @@ sub get_download_url
 	    $doc->{name} = $name;
 	    $doc->{size} = $size;
 	    $coll->insert($doc);
-	    $url = $self->{_params}->{'download-url-base'} . "/$dlid/" . uri_escape($name);
+	    $url = $self->{_params}->{'download-url-base'} . "/download/$dlid/" . uri_escape($name);
 	}
 	push(@$urls, $url);
     }    
