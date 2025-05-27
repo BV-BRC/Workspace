@@ -37,6 +37,7 @@ use AnyEvent::HTTP;
 use AnyEvent::Run;
 use Config::Simple;
 use Plack::Request;
+use Plack::Response;
 use Fcntl ':seek';
 use DateTime;
 use DateTime::Format::ISO8601;
@@ -1417,7 +1418,7 @@ sub _set_auth_request
     $coll->insert($doc);
     my $res = Plack::Response->new(200);
     $res->header('Set-Cookie' => "session=$session_token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
-    $res->body('Cookie set');
+    $res->body("Cookie set\n");
     return $res->finalize;
 }
 
@@ -1441,6 +1442,15 @@ sub _download_request
 	}
 	$self->_handle_dl_file_request($req, $name, $dlid);
     }
+}
+
+sub _view_request
+{
+    my($self, $env) = @_;
+    my $req = Plack::Request->new($env);
+    my $path = $req->path_info;
+
+    return [200, ['Content-type' => 'text/plain'], [Dumper($path, $req)]];
 }
 
 sub _handle_archive_request
