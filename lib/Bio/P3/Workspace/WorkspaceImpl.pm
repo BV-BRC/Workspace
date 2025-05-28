@@ -52,6 +52,11 @@ use Bio::P3::Workspace::Service;
 use MIME::Types;
 
 our $mime_types = MIME::Types->new;
+{
+    my $faType = MIME::Type->new(extensions => [".fa", ".fasta", ".fna", ".faa"],
+				 type => "text/plain");
+    $mime_types->addType($faType);
+}
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -1693,8 +1698,9 @@ sub _send_ws_file
     my @resp_headers;
     if ($inline)
     {
+	my $mime_type = $mime_types->mimeTypeOf($ws_obj->{name}) // "text/plain";
 	@resp_headers = ('Content-Disposition' => "inline",
-		    'Content-Type' => $mime_types->mimeTypeOf($ws_obj->{name}),
+		    'Content-Type' => $mime_type,
 		   );
     }
     else
@@ -1762,12 +1768,12 @@ sub _send_ws_file
 		$url = $ws_obj->{shock_node} . "?download";
 	    }
 	    
-	    print STDERR "retrieve $url\n";
 	    my @headers;
 	    if ($token)
 	    {
 		@headers = (headers => {Authorization => "OAuth $token" });
 	    }
+	    # print STDERR "retrieve $url\n" . Dumper(@headers);
 	    http_request(GET => $url,
 			 @headers,
 			 # handle_params => { max_read_size => 32768 },
