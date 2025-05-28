@@ -1690,16 +1690,16 @@ sub _send_ws_file
 {
     my($self, $req, $ws_obj, $token, $inline) = @_;
 
-    my @headers;
+    my @resp_headers;
     if ($inline)
     {
-	@headers = ('Content-Disposition' => "inline",
+	@resp_headers = ('Content-Disposition' => "inline",
 		    'Content-Type' => $mime_types->mimeTypeOf($ws_obj->{name}),
 		   );
     }
     else
     {
-	@headers = ('Content-Disposition' => "attachment; filename=\"$ws_obj->{name}\"",
+	@resp_headers = ('Content-Disposition' => "attachment; filename=\"$ws_obj->{name}\"",
 			'Content-type' => 'application/octet-stream',
 			);
 
@@ -1749,7 +1749,7 @@ sub _send_ws_file
 	    if ($have_range)
 	    {
 		$writer = $responder->([206,
-					[@headers,
+					[@resp_headers,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
@@ -1758,7 +1758,7 @@ sub _send_ws_file
 	    }
 	    else
 	    {
-		$writer = $responder->([200, \@headers]);
+		$writer = $responder->([200, \@resp_headers]);
 		$url = $ws_obj->{shock_node} . "?download";
 	    }
 	    
@@ -1820,14 +1820,14 @@ sub _send_ws_file
 	    if ($have_range)
 	    {
 		$writer = $responder->([206,
-					[@headers,
+					[@resp_headers,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
 	    }
 	    else
 	    {
-		$writer = $responder->([200, \@headers]);
+		$writer = $responder->([200, \@resp_headers]);
 	    }
 
 	    print STDERR "retrieve $ws_obj->{file_path}\n";
