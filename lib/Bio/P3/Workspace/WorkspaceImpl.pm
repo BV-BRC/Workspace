@@ -47,6 +47,8 @@ use P3TokenValidator;
 use IO::File;
 use Time::HiRes 'gettimeofday';
 use Digest::HMAC_SHA1 qw(hmac_sha1 hmac_sha1_hex);
+use Scalar::Util qw (blessed);
+use Bio::P3::Workspace::Service;
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -1350,20 +1352,23 @@ sub _download_service_start
 sub _download_cleanup
 {
     my($self, $db) = @_;
-    my $coll = $db->get_collection("downloads");
-    my $now = time;
-    $coll->remove({expiration_time => {'$lt', $now}});
-    my $res = $db->last_error();
-    if ($res->{ok})
+    for my $coll_name (qw(downloads auth_cookie))
     {
-	if ($res->{n} > 0)
+	my $coll = $db->get_collection($coll_name);
+	my $now = time;
+	$coll->remove({expiration_time => {'$lt', $now}});
+	my $res = $db->last_error();
+	if ($res->{ok})
 	{
-	    print STDERR "Removed $res->{n} expired download records\n";
+	    if ($res->{n} > 0)
+	    {
+		print STDERR "Removed $res->{n} expired records from $coll_name\n";
+	    }
 	}
-    }
-    else
-    {
-	print STDERR "Error expiring download records: " . Dumper($res);
+	else
+	{
+	    print STDERR "Error expiring records from $coll_name: " . Dumper($res);
+	}
     }
 }
 
@@ -1417,6 +1422,7 @@ sub _set_auth_request
     };
     $coll->insert($doc);
     my $res = Plack::Response->new(200);
+#    $res->header('Set-Cookie' => "session=$session_token; HttpOnly; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
     $res->header('Set-Cookie' => "session=$session_token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
     $res->body("Cookie set\n");
     return $res->finalize;
@@ -1450,7 +1456,48 @@ sub _view_request
     my $req = Plack::Request->new($env);
     my $path = $req->path_info;
 
-    return [200, ['Content-type' => 'text/plain'], [Dumper($path, $req)]];
+    my $session = $req->cookies->{session};
+    if (!$session)
+    {
+	return [503, ['Content-Type' => 'text/plain' ], ["Invalid session\n"]];
+    }
+
+    my $coll = $self->_mongodb()->get_collection('auth_cookie');
+
+    my $res = $coll->find_one({session_token => $session});
+    if (!$res)
+    {
+	warn "No session found for $session\n";
+	return [503, ['Content-Type' => 'text/plain' ], ["Invalid session\n"]];
+    }
+    # print STDERR Dumper($res);
+    if ($res->{expiration_time} < time)
+    {
+	warn "Session token has expired\n";
+	return [503, ['Content-Type' => 'text/plain' ], ["Invalid session\n"]];
+    }
+    my $token = $res->{auth_token};
+    my $auth_token = P3AuthToken->new(token => $token, ignore_authrc => 1);
+
+    #
+    # We're coming in thru the REST API so we don't have a standard service context set up
+    #
+
+    my $doc = eval {
+	local $CallContext = new Bio::P3::Workspace::ServiceContext;
+	$CallContext->authenticated(1);
+	$CallContext->token($token);
+	$CallContext->user_id($auth_token->user_id);
+
+	$self->_lookup_ws_file_details($path, $token);
+    };
+    if ($@)
+    {
+	warn "Cannot find file details for $path\n";
+	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+    }
+
+    $self->_send_ws_file($req, $doc, $token, 1);
 }
 
 sub _handle_archive_request
@@ -1563,25 +1610,92 @@ sub _handle_archive_request
 	$handle->{read_size} = 32768;
     }
 }
-     
+
+#
+# Dies on errors, use with eval.
+#
+sub _lookup_ws_file_details
+{
+    my($self, $ws_path, $token) = @_;
+
+    my $auth_token = P3AuthToken->new(token => $token, ignore_authrc => 1);
+
+    my ($user,$ws,$path,$name) = $self->_parse_ws_path($ws_path);
+    
+    if (!defined($ws) || length($ws) == 0) {
+	die("Path $ws_path does not include at least a top level directory!");
+    }
+
+    my $wsobj = $self->_wscache($user,$ws);
+    $self->_check_ws_permissions($wsobj,"r",1);
+
+    my $obj = $self->_get_db_object({
+	workspace_uuid => $wsobj->{uuid},
+	path => $path,
+	name => $name
+	});
+
+    if ($obj->{folder} == 1) {
+	die "Object is folder not a file";
+    }
+    elsif (!$obj->{wsobj})
+    {
+	die "No wsobj found";
+    }
+
+    my $doc = {
+	workspace_path => $ws_path,
+	name => $obj->{name},
+	size => $obj->{size},
+    };
+
+    if (!defined($obj->{shock}) || $obj->{shock} == 0) {
+	my $filename = $self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name};
+	$doc->{file_path} = $filename;
+    } else {
+	my $ua = LWP::UserAgent->new();
+
+	my $user = $auth_token->user_id;
+	#
+	# ACL change requires using the workspace owner token
+	#
+	my $res = $ua->put($obj->{shocknode}."/acl/read?users=$user", Authorization => "OAuth " . $self->_wsauth());
+	
+	$doc->{shock_node} = $obj->{shocknode};
+    }
+    return $doc;
+}
 
 sub _handle_dl_file_request
 {
     my($self, $req, $name, $dlid) = @_;
 
-    #
-    # Query mongo for the file details.
-    #
-
     my $coll = $self->_mongodb()->get_collection('downloads');
-
+	
     my $res = $coll->find_one({ download_key => $dlid });
-
+	
     if (!$res)
     {
 	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
     }
 
+    $self->_send_ws_file($req, $res, $res->{user_token}, 0);
+    [200, ['Content-Type' => 'text/plain'], [$dlid]];
+}
+
+sub _send_ws_file
+{
+    my($self, $req, $ws_obj, $token, $inline) = @_;
+
+    my @disposition;
+    if ($inline)
+    {
+	@disposition = ('Content-Disposition' => "inline");
+    }
+    else
+    {
+	@disposition = ('Content-Disposition' => "attachment; filename=\"$ws_obj->{name}\"");
+    }
     #
     # Determine if we are being asked for a byte range.
     # Right now we will just support a single range.
@@ -1591,12 +1705,12 @@ sub _handle_dl_file_request
     
     my($range_beg, $range_end) = $range =~ /bytes=(\d+)-(\d*)\s*$/;
     
-    my $file_size = $res->{size};
+    my $file_size = $ws_obj->{size};
 
     my $have_range;
     if (defined($range_beg))
     {
-	$have_range++;
+	$have_range = 1;
 	if ($range_end eq '' || $range_end >= $file_size)
 	{
 	    $range_end = $file_size - 1;
@@ -1607,7 +1721,7 @@ sub _handle_dl_file_request
 
     # print STDERR Dumper($range, $hdrs, $file_size, $range_beg, $range_end, $range_len);
 
-    if ($res->{shock_node})
+    if ($ws_obj->{shock_node})
     {
 	#
 	# For shock, construct http request for file.
@@ -1628,26 +1742,27 @@ sub _handle_dl_file_request
 	    {
 		$writer = $responder->([206,
 					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; filename=\"$res->{name}\"",
+					 @disposition,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
 		
-		$url = $res->{shock_node} . "?download&seek=$range_beg&length=$range_len";
+		$url = $ws_obj->{shock_node} . "?download&seek=$range_beg&length=$range_len";
 	    }
 	    else
 	    {
 		$writer = $responder->([200,
 					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; filename=\"$res->{name}\""]]);
-		$url = $res->{shock_node} . "?download";
+					 @disposition,
+					 ]]);
+		$url = $ws_obj->{shock_node} . "?download";
 	    }
 	    
 	    print STDERR "retrieve $url\n";
 	    my @headers;
-	    if ($res->{user_token})
+	    if ($token)
 	    {
-		@headers = (headers => {Authorization => "OAuth $res->{user_token}" });
+		@headers = (headers => {Authorization => "OAuth $token" });
 	    }
 	    http_request(GET => $url,
 			 @headers,
@@ -1655,7 +1770,7 @@ sub _handle_dl_file_request
 			 on_header => sub { print STDERR Dumper(@_); },
 			 on_body => sub {
 			     my($data, $hdr) = @_;
-			     print STDERR Dumper($hdr);
+			     # print STDERR Dumper($hdr);
 			     if ($data)
 			     {
 				 $writer->write($data);
@@ -1675,9 +1790,9 @@ sub _handle_dl_file_request
     else
     {
 	my $fh;
-	if (!open($fh, "<", $res->{file_path}))
+	if (!open($fh, "<", $ws_obj->{file_path}))
 	{
-	    warn "Could not open $res->{file_path}: $!";
+	    warn "Could not open $ws_obj->{file_path}: $!";
 	    return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
 	}
 	my $stat = stat($fh);
@@ -1691,7 +1806,7 @@ sub _handle_dl_file_request
 	    seek($fh, $range_beg, SEEK_SET);
 	}
 
-	print STDERR "Opened $res->{file_path} fh=$fh\n";
+	print STDERR "Opened $ws_obj->{file_path} fh=$fh\n";
 
 	return sub {
 	    my($responder) = @_;
@@ -1702,7 +1817,7 @@ sub _handle_dl_file_request
 	    {
 		$writer = $responder->([206,
 					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; \"filename=$res->{name}\"",
+					 @disposition,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
@@ -1711,10 +1826,11 @@ sub _handle_dl_file_request
 	    {
 		$writer = $responder->([200,
 					['Content-type' => 'application/octet-stream',
-					'Content-Disposition' => "attachment; filename=\"$res->{name}\""]]);
+					 @disposition
+					 ]]);
 	    }
 
-	    print STDERR "retrieve $res->{file_path}\n";
+	    print STDERR "retrieve $ws_obj->{file_path}\n";
 	    my $ah;
 	    $ah = new AnyEvent::Handle(fh => $fh,
 				       on_error => sub { print STDERR "Error\n"; },
@@ -1752,7 +1868,7 @@ sub _handle_dl_file_request
 	};
     }
 
-    [200, ['Content-Type' => 'text/plain'], [$dlid]];
+    [200, ['Content-Type' => 'text/plain'], []];
 }
 
 sub _autometadata_script_path_for_type
