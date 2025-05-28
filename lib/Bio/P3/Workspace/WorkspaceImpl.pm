@@ -49,6 +49,9 @@ use Time::HiRes 'gettimeofday';
 use Digest::HMAC_SHA1 qw(hmac_sha1 hmac_sha1_hex);
 use Scalar::Util qw (blessed);
 use Bio::P3::Workspace::Service;
+use MIME::Types;
+
+our $mime_types = MIME::Types->new;
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -1687,14 +1690,19 @@ sub _send_ws_file
 {
     my($self, $req, $ws_obj, $token, $inline) = @_;
 
-    my @disposition;
+    my @headers;
     if ($inline)
     {
-	@disposition = ('Content-Disposition' => "inline");
+	@headers = ('Content-Disposition' => "inline",
+		    'Content-Type' => $mime_types->mimeTypeOf($ws_obj->{name}),
+		   );
     }
     else
     {
-	@disposition = ('Content-Disposition' => "attachment; filename=\"$ws_obj->{name}\"");
+	@headers = ('Content-Disposition' => "attachment; filename=\"$ws_obj->{name}\"",
+			'Content-type' => 'application/octet-stream',
+			);
+
     }
     #
     # Determine if we are being asked for a byte range.
@@ -1741,8 +1749,7 @@ sub _send_ws_file
 	    if ($have_range)
 	    {
 		$writer = $responder->([206,
-					['Content-type' => 'application/octet-stream',
-					 @disposition,
+					[@headers,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
@@ -1751,10 +1758,7 @@ sub _send_ws_file
 	    }
 	    else
 	    {
-		$writer = $responder->([200,
-					['Content-type' => 'application/octet-stream',
-					 @disposition,
-					 ]]);
+		$writer = $responder->([200, \@headers]);
 		$url = $ws_obj->{shock_node} . "?download";
 	    }
 	    
@@ -1816,18 +1820,14 @@ sub _send_ws_file
 	    if ($have_range)
 	    {
 		$writer = $responder->([206,
-					['Content-type' => 'application/octet-stream',
-					 @disposition,
+					[@headers,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
 	    }
 	    else
 	    {
-		$writer = $responder->([200,
-					['Content-type' => 'application/octet-stream',
-					 @disposition
-					 ]]);
+		$writer = $responder->([200, \@headers]);
 	    }
 
 	    print STDERR "retrieve $ws_obj->{file_path}\n";
