@@ -1426,7 +1426,7 @@ sub _set_auth_request
     $coll->insert($doc);
     my $res = Plack::Response->new(200);
 #    $res->header('Set-Cookie' => "session=$session_token; HttpOnly; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
-    $res->header('Set-Cookie' => "session=$session_token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
+    $res->header('Set-Cookie' => "bvbrc_ws_view_session=$session_token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
     $res->body("Cookie set\n");
     return $res->finalize;
 }
@@ -1459,7 +1459,7 @@ sub _view_request
     my $req = Plack::Request->new($env);
     my $path = $req->path_info;
 
-    my $session = $req->cookies->{session};
+    my $session = $req->cookies->{bvbrc_ws_view_session};
     if (!$session)
     {
 	return [503, ['Content-Type' => 'text/plain' ], ["Invalid session\n"]];
