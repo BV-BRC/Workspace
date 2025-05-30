@@ -60,6 +60,7 @@ our $mime_types = MIME::Types->new;
 our %mime_overrides = (pdb => "text/plain",
 		       sdf => "text/plain",
 		       gb => "text/plain",
+		       sh => "text/plain",
 		      );
 
 
