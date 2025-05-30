@@ -1431,12 +1431,38 @@ sub _set_auth_request
     $coll->insert($doc);
     my $res = Plack::Response->new(200);
 #    $res->header('Set-Cookie' => "session=$session_token; HttpOnly; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
-    $res->header('Set-Cookie' => "bvbrc_ws_view_session=$session_token; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
+    $res->header('Set-Cookie' => "bvbrc_ws_view_session=$session_token; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=$download_lifetime");
     $res->body("Cookie set\n");
     return $res->finalize;
 }
 
 sub _download_request
+{
+    my($self, $env) = @_;
+    my $req = Plack::Request->new($env);
+    my $path = $req->path_info;
+
+    if ($path =~ m,^/archive/([a-z0-9]{40})$,)
+    {
+	my $key = $1;
+	$self->_handle_archive_request($req, $key);
+    }
+    else
+    {
+	my($dlid, $name) = $path =~ m,^/([^/]+)/([^/]+)$,;
+	if (!($name && $dlid))
+	{
+	    return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+	}
+	$self->_handle_dl_file_request($req, $name, $dlid);
+    }
+}
+
+#
+# This handler is mounted at / and should only be hit when
+# /download or /view not included.
+#
+sub _download_request_orig
 {
     my($self, $env) = @_;
     my $req = Plack::Request->new($env);
@@ -1688,7 +1714,6 @@ sub _handle_dl_file_request
     }
 
     $self->_send_ws_file($req, $res, $res->{user_token}, 0);
-    [200, ['Content-Type' => 'text/plain'], [$dlid]];
 }
 
 sub _send_ws_file
