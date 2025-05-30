@@ -57,6 +57,11 @@ our $mime_types = MIME::Types->new;
 				 type => "text/plain");
     $mime_types->addType($faType);
 }
+our %mime_overrides = (pdb => "text/plain",
+		       sdf => "text/plain",
+		       gb => "text/plain",
+		      );
+
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -1723,7 +1728,17 @@ sub _send_ws_file
     my @resp_headers;
     if ($inline)
     {
-	my $mime_type = $mime_types->mimeTypeOf($ws_obj->{name}) // "text/plain";
+	my($ext) = $ws_obj->{name} =~ /\.([^.]+)$/;
+	my $mime_type;
+	if (my $ov = $mime_overrides{$ext})
+	{
+	    $mime_type = $ov;
+	}
+	else
+	{
+	    $mime_type = $mime_types->mimeTypeOf($ws_obj->{name}) // "text/plain";
+	}
+	
 	@resp_headers = ('Content-Disposition' => "inline",
 		    'Content-Type' => $mime_type,
 		   );
