@@ -1,6 +1,8 @@
 
 use strict;
 use Bio::P3::Workspace::ScriptHelpers;
+use P3AuthToken;
+
 =head1 NAME
 
 ws-create
@@ -47,12 +49,13 @@ my $res = Bio::P3::Workspace::ScriptHelpers::wscall("create",{
 });
 
 if ($opt->useshock) {
+    my $token = P3AuthToken->new();
 	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
 	my $ua = LWP::UserAgent->new();
 	my $item = $res->[0];
 	my $shock_url = $item->[11];
 	my $req = HTTP::Request::Common::POST($shock_url, 
-					  Authorization => "OAuth " . Bio::P3::Workspace::ScriptHelpers::token(),
+					  Authorization => "OAuth " . $token->token,
 					  Content_Type => 'multipart/form-data',
 					  Content => [upload => [$filename]]);
     $req->method('PUT');

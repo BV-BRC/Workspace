@@ -13,8 +13,8 @@ use LWP::UserAgent;
 use Bio::P3::Workspace::WorkspaceClient;
 use Bio::P3::Workspace::WorkspaceClientExt;
 
-our $defaultWSURL   = "http://p3.theseed.org/services/Workspace";
-our $defaultAPPURL = "http://p3.theseed.org/services/app_service";
+our $defaultWSURL   = "https://p3.theseed.org/services/Workspace";
+our $defaultAPPURL = "https://p3.theseed.org/services/app_service";
 our $defaultMSURL = "https://p3.theseed.org/services/ProbModelSEED";
 our $overrideWSURL = undef;
 our $adminmode = undef;
@@ -84,7 +84,7 @@ sub ConfigFilename {
 	# Replace with explicit search in the homedir which is safer anyway.
 	#
 	$filename = File::Spec->catfile(File::HomeDir->my_home, ".patric_config"); 
-	undef $filename unless -f $filename;
+	# undef $filename unless -f $filename;
     }
     return $filename;
 }

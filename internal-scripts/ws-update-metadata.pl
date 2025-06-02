@@ -143,7 +143,7 @@ for my $obj_rec (@$objs)
 	}
 	
 	$ws->update_metadata({
-	    objects => [["/obj_path", $data]],
+	    objects => [["/" . $obj_path, $metadata]],
 	    autometadata => 1,
 	    adminmode => 1
 	    });

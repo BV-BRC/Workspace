@@ -12,16 +12,21 @@ SERVICE = Workspace
 SERVICE_PORT = 7125
 DOWNLOAD_SERVICE = WorkspaceDownload
 DOWNLOAD_SERVICE_PORT = 7129
+COMPLETION_SERVICE = WorkspaceCompletion
+COMPLETION_SERVICE_PORT = 7140
 
-SERVICE_URL = http://p3.theseed.org/services/$(SERVICE)
-DOWNLOAD_URL = http://p3.theseed.org/services/$(DOWNLOAD_SERVICE)
+SERVICE_URL = https://p3.theseed.org/services/$(SERVICE)
+DOWNLOAD_URL = https://p3.theseed.org/services/$(DOWNLOAD_SERVICE)
+COMPLETION_URL = https://p3.theseed.org/services/$(COMPLETION_SERVICE)
 
 SERVICE_NAME = Workspace
 SERVICE_NAME_PY = $(SERVICE_NAME)
 DOWNLOAD_SERVICE_NAME = WorkspaceDownload
+COMPLETION_SERVICE_NAME = WorkspaceCompletion
 
 SERVICE_PSGI_FILE = $(SERVICE_NAME).psgi
 DOWNLOAD_SERVICE_PSGI_FILE = $(DOWNLOAD_SERVICE_NAME).psgi
+COMPLETION_SERVICE_PSGI_FILE = $(COMPLETION_SERVICE_NAME).psgi
 
 SRC_SERVICE_PERL = $(wildcard service-scripts/*.pl) $(wildcard internal-scripts/*.pl)
 BIN_SERVICE_PERL = $(addprefix $(BIN_DIR)/,$(basename $(notdir $(SRC_SERVICE_PERL))))
@@ -50,6 +55,9 @@ TPAGE_ARGS =  \
 	--define kb_psgi=$(SERVICE_PSGI_FILE) \
 	--define kb_download_port=$(DOWNLOAD_SERVICE_PORT) \
 	--define kb_download_psgi=$(DOWNLOAD_SERVICE_PSGI_FILE) \
+	--define kb_completion_port=$(COMPLETION_SERVICE_PORT) \
+	--define kb_completion_psgi=$(COMPLETION_SERVICE_PSGI_FILE) \
+	--define kb_starman_workers=25 \
 	$(TPAGE_TEMPDIR) \
 	$(TPAGE_SERVICE_LOGDIR)
 
@@ -100,13 +108,13 @@ deploy: deploy-client deploy-service
 deploy-all: deploy-client deploy-service
 deploy-client: compile-typespec deploy-docs deploy-libs deploy-scripts 
 
-deploy-service: deploy-dir deploy-monit deploy-libs deploy-service-scripts
+deploy-service: deploy-dir deploy-monit deploy-libs deploy-service-scripts-local
 	$(TPAGE) $(TPAGE_DEPLOY_ARGS) $(TPAGE_ARGS) service/start_service.tt > $(TARGET)/services/$(SERVICE)/start_service
 	chmod +x $(TARGET)/services/$(SERVICE)/start_service
 	$(TPAGE) $(TPAGE_DEPLOY_ARGS) $(TPAGE_ARGS) service/stop_service.tt > $(TARGET)/services/$(SERVICE)/stop_service
 	chmod +x $(TARGET)/services/$(SERVICE)/stop_service
 
-deploy-service-scripts:
+deploy-service-scripts-local:
 	export KB_TOP=$(DEPLOY_TARGET); \
 	export KB_RUNTIME=$(DEPLOY_RUNTIME); \
 	export KB_PERL_PATH=$(TARGET)/lib ; \
@@ -135,13 +143,7 @@ deploy-dir:
 	if [ ! -d $(SERVICE_DIR)/webroot ] ; then mkdir $(SERVICE_DIR)/webroot ; fi
 	if [ ! -d $(SERVICE_DIR)/bin ] ; then mkdir $(SERVICE_DIR)/bin ; fi
 
-$(BIN_DIR)/%: service-scripts/%.pl $(TOP_DIR)/user-env.sh
-	$(WRAP_PERL_SCRIPT) '$$KB_TOP/modules/$(CURRENT_DIR)/$<' $@
-
 $(BIN_DIR)/%: internal-scripts/%.pl $(TOP_DIR)/user-env.sh
 	$(WRAP_PERL_SCRIPT) '$$KB_TOP/modules/$(CURRENT_DIR)/$<' $@
-
-$(BIN_DIR)/%: service-scripts/%.py $(TOP_DIR)/user-env.sh
-	$(WRAP_PYTHON_SCRIPT) '$$KB_TOP/modules/$(CURRENT_DIR)/$<' $@
 
 include $(TOP_DIR)/tools/Makefile.common.rules

@@ -30,3 +30,4 @@ function stop_service() {
 
 stop_service QUIT $KB_SERVICE_LOG_DIR/service.pid
 stop_service TERM $KB_SERVICE_LOG_DIR/download.pid
+stop_service TERM $KB_SERVICE_LOG_DIR/completion.pid

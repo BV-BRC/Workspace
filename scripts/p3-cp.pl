@@ -1,8 +1,9 @@
 use strict;
 use Bio::P3::Workspace::WorkspaceClientExt;
 use P3AuthToken;
-use Getopt::Long;
+use Getopt::Long qw(:config no_ignore_case);
 use Data::Dumper;
+use Date::Parse;
 use File::Basename;
 use Pod::Usage;
 
@@ -40,8 +41,10 @@ The following options may be provided:
 				   	If source ends in /, copy the contents of the directory.
     -p or --workspace-path-prefix STR	Prefix for relative workspace pathnames specified with ws: 
     -f or --overwrite			If a file to be uploaded already exists, overwrite it.
-    -m or --map-suffix suffix=type		When copying to workspace, map a file with the given
+    -m or --map-suffix suffix=type	When copying to workspace, map a file with the given
     					suffix to the given type.
+    -t or --default-type TYPE		If no other type is defined, use the given type as the default
+    --creation-date STR			If copying to the workspace, set the creation date to the given date.
     
 =cut
 
@@ -56,6 +59,7 @@ my %suffix_map = ("fa" => "reads",
 		  "fna" => "contigs",
 		  "faa" => "feature_protein_fasta",
 		  "txt" => "txt",
+		  "html" => "html",
 		 );
 
 
@@ -63,26 +67,39 @@ my $workspace_path_prefix;
 my $recursive;
 my $overwrite;
 my $admin;
+my $default_type;
+my $creation_epoch;
 
 my @sources;
 my $dest;
+
 
 my $token = P3AuthToken->new();
 if (!$token->token())
 {
     die "You must be logged in to PATRIC via the p3-login command to use p3-cp.\n";
 }
-my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
-
 my @paths;
+
+my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
 
 GetOptions("workspace-path-prefix|p=s" => \$workspace_path_prefix,
 	   "overwrite|f" => \$overwrite,
 	   "recursive|r" => \$recursive,
 	   "target|t" => \$dest,
 	   "map-suffix|m=s\%" => \%suffix_map,
+	   "default-type|T=s" => \$default_type,
 	   "administrator|A" => \$admin,
-	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws) },
+	   "creation-date=s" => sub {
+	       my $date = $_[1];
+	       $creation_epoch = str2time($date);
+	       if (!$creation_epoch)
+	       {
+		   die "Cannot parse creation date \"$date\"\n";
+	       }
+	   },
+	   "url=s" => sub { $ws->{url} = $_[1]; },
+	   "<>" => sub { process_pathname($_[0], $workspace_path_prefix, \@paths, $ws, $admin) },
 	   "help|h" => sub {
 	       print pod2usage(-sections => 'Usage synopsis', -verbose => 99, -exitval => 0);
 	   },
@@ -92,6 +109,8 @@ if (@paths < 2)
 {
     print pod2usage(-sections => 'Usage synopsis', -verbose => 99, -exitval => 1);
 }
+
+
 
 #
 # Handle the three cases listed in the synopsis.
@@ -120,7 +139,7 @@ PROCESS:
 		$dest = $dest->append(basename($src->path()));
 	    }
 
-	    do_copy_recursive($src, $dest);
+	    do_copy_recursive($src, $dest, $creation_epoch);
 	    last PROCESS;
 	}
 	
@@ -135,7 +154,7 @@ PROCESS:
 		warn "Source path $p does not exist\n";
 		next;
 	    }
-	    do_copy_recursive($p, $dest);
+	    do_copy_recursive($p, $dest, $creation_epoch);
 	}
     }
     else
@@ -161,7 +180,7 @@ PROCESS:
 		}
 		else
 		{
-		    do_copy($src, $dest);
+		    do_copy($src, $dest, $creation_epoch);
 		}
 		last PROCESS;
 	    }
@@ -173,7 +192,7 @@ PROCESS:
 	if (!$dest->exists())
 	{
 	    warn "Destination path $dest does not exist\n";
-	    last PROCESS;
+	    last PROCESS unless $admin;
 	}
 	if (!$dest->is_dir())
 	{
@@ -185,24 +204,24 @@ PROCESS:
 	    if (!$p->exists())
 	    {
 		warn "Source path $p does not exist\n";
-		next;
+		next unless $admin;
 	    }
 	    if ($p->is_dir())
 	    {
 		warn "Source path $p is a directory and -R was not specified\n";
 		next;
 	    }
-	    do_copy($p, $dest->append(basename($p->path())));
+	    do_copy($p, $dest->append(basename($p->path())), $creation_epoch);
 	}
     }
 }
 
 sub do_copy
 {
-    my($src, $dest) = @_;
+    my($src, $dest, $creation_date) = @_;
     # print "Copy $src => $dest\n";
 
-    $src->copy_to($dest);
+    $src->copy_to($dest, $creation_date);
 }
 
 #
@@ -237,7 +256,7 @@ sub do_copy_recursive
 	
 	my $dh = $src->opendir();
 	$dh or die "Opendir $src failed\n";
-	while (my $p = $dh->read())
+	while (defined(my $p = $dh->read()))
 	{
 	    next if $p eq '.' || $p eq '..';
 	    do_copy_recursive($src->append($p), $dest->append($p));
@@ -247,7 +266,7 @@ sub do_copy_recursive
 
 sub process_pathname
 {
-    my($path, $ws_prefix, $path_list, $ws) = @_;
+    my($path, $ws_prefix, $path_list, $ws, $admin) = @_;
     my $wspath;
     my $item;
     if ($path =~ /^ws:(.*)/)
@@ -261,7 +280,7 @@ sub process_pathname
 	    }
 	    $wspath = $ws_prefix . "/" . $wspath;
 	}
-	$item = new WsFile($wspath, $ws);
+	$item = new WsFile($wspath, $ws, $admin);
     }
     else
     {
@@ -275,15 +294,16 @@ use strict;
 use Fcntl ':mode';
 sub new
 {
-    my($class, $path, $ws) = @_;
+    my($class, $path, $ws, $admin) = @_;
     my $self = {
 	path => $path,
 	ws => $ws,
+	admin => $admin,
     };
     return bless $self, $class;
 }
 sub ws { return $_[0]->{ws}; }
-
+sub admin { return $_[0]->{admin}; }
 
 #
 # Create a new wrapper with an extended path.
@@ -362,7 +382,7 @@ sub mkdir
 #
 sub copy_to
 {
-    my($self, $dest) = @_;
+    my($self, $dest, $creation_date) = @_;
 
     if ($dest->exists() && !$overwrite)
     {
@@ -386,17 +406,23 @@ sub copy_to
 	    }
 	}
 		
-	    
+	$type //= $default_type;
 	$type //= "unspecified";
 	print "Copy $self to $dest with type=$type\n";
 	my $res;
 	eval {
+	    my $shock = (-s $self->{path}) > 5000 ? 1 : 0;
 	    $res = $self->ws->save_file_to_file($self->{path}, {}, $dest->path(),
-						$type, $overwrite, 1, $token->token());
+						$type, $overwrite, $shock, $token->token(), $admin, $creation_date);
 	};
+
 	if ($@)
 	{
-	    my ($err) = $@ =~ /_ERROR_(.*)_ERROR_/;
+	    my $err = $@;
+	    if ($err =~ /_ERROR_(.*)_ERROR_/)
+	    {
+		$err = $1;
+	    }
 	    warn "Failure uploading $self to $dest: $err\n";
 	}
 	delete $dest->{stat};
@@ -419,7 +445,7 @@ sub stat
 {
     my($self) = @_;
     return $self->{stat} if $self->{stat};
-    my $s = $self->{ws}->stat($self->{path});
+    my $s = $self->{ws}->stat($self->{path}, $self->admin);
     $self->{stat} = $s;
     return $s;
 }
@@ -449,7 +475,7 @@ sub mkdir
 #
 sub copy_to
 {
-    my($self, $dest) = @_;
+    my($self, $dest, $creation_date) = @_;
 
     my $opts;
     $opts->{admin} = 1 if $admin;
@@ -458,7 +484,9 @@ sub copy_to
     if (ref($dest) eq 'WsFile')
     {
 	eval {
-	    $self->ws->copy({ objects => [[$self->path(), $dest->path()]], $overwrite ? 1 : 0 });
+	    $self->ws->copy({ objects => [[$self->path(), $dest->path()]],
+				  overwrite => ($overwrite ? 1 : 0),
+			      adminmode => ($admin ? 1 : 0)});
 	};
 	if ($@)
 	{
@@ -488,7 +516,7 @@ sub new
 
     eval
     {
-	my $dh = $ws->opendir($path);
+	my $dh = $ws->opendir($path, $admin);
 	$self->{dh} = $dh;
     };
     if ($@)

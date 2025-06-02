@@ -48,12 +48,13 @@ typedef mapping<string,string> AutoMetadata;
 	WorkspacePerm user_permission - permissions for the authenticated user of this workspace.
 	WorkspacePerm global_permission - whether this workspace is globally readable.
 	string shockurl - shockurl included if object is a reference to a shock node
+	string error - set if there was an error on the operation on this object.
 	
 */
 typedef tuple<ObjectName, ObjectType, FullObjectPath, Timestamp creation_time,
 	      ObjectID, Username object_owner, ObjectSize,
 	      UserMetadata, AutoMetadata,
-	      WorkspacePerm user_permission, WorkspacePerm global_permission, string shockurl> ObjectMeta;
+	      WorkspacePerm user_permission, WorkspacePerm global_permission, string shockurl, string error> ObjectMeta;
 
 
 /********** DATA LOAD FUNCTIONS ********************/
@@ -93,6 +94,7 @@ funcdef create(create_params input) returns (list<ObjectMeta> output) authentica
 typedef structure {
 	list<tuple<FullObjectPath,UserMetadata,ObjectType,Timestamp creation_time>> objects;
 	bool autometadata;
+	bool append;
 	bool adminmode;
 } update_metadata_params;
 funcdef update_metadata(update_metadata_params input) returns (list<ObjectMeta> output) authentication required;
@@ -161,7 +163,7 @@ typedef structure {
 	string archive_name;
 	string archive_type;
 } get_archive_url_params;
-funcdef get_archive_url(get_archive_url_params input) returns (string url)  authentication optional;
+funcdef get_archive_url(get_archive_url_params input) returns (string url, int file_count, int total_size)  authentication optional;
 
 /* "list" command
 	Description: 
@@ -218,7 +220,7 @@ funcdef copy(copy_params input) returns (list<ObjectMeta> output) authentication
 	Parameters:
 	list<FullObjectPath> objects  - list of objects or directories to be deleted
 	bool deleteDirectories - indicates that directories should be deleted (optional; default = "0")
-	bool forces - must set this flag to delete a directory that contains subobjects (optional; default = "0")
+	bool force - must set this flag to delete a directory that contains subobjects (optional; default = "0")
 	bool adminmode - run this command as an admin, meaning you can delete anything anywhere
 */
 typedef structure {

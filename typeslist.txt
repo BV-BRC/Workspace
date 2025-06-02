@@ -1,8 +1,11 @@
+aligned_dna_fasta
+aligned_protein_fasta
 bam
 bai
 bigwig
 biochemistry
 contigs
+csi
 csv
 de_novo_assembled_transcripts
 diffexp_experiment
@@ -29,6 +32,7 @@ genome_group
 gexf
 gff
 gif
+hdf
 html
 job_result
 jpg
@@ -41,6 +45,7 @@ model_edit
 modeltemplate
 nwk
 pdf
+phyloxml
 png
 ppt
 pptx
