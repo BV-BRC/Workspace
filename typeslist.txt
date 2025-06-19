@@ -43,6 +43,7 @@ modelfolder
 model_edit
 modeltemplate
 nwk
+pdb
 pdf
 phyloxml
 png
