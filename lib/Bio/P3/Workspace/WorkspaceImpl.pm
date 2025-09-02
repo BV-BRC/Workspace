@@ -1234,66 +1234,59 @@ sub _compute_mongo_regex_for_path
 
 #List all objects matching input query** accept the pre-processed $search_filters from ls
 sub _list_objects {
-    my ($self, $fullpath, $search_filters_from_ls, $excludeDirectories, $excludeObjects, $recursive) = @_;
-    # ... (parse $fullpath into $user, $ws, $object_path_part, $object_name_part) ...
-    # ... ($wsobj caching and permission checks) ...
-
-    my ($user,$ws,$object_path_part,$object_name_part) = $self->_parse_ws_path($fullpath);
-    my $base_listing_path = $object_path_part;
-    if (length($object_name_part) > 0) { 
-        if (length($base_listing_path) > 0) {
-            $base_listing_path .= "/";
-        }
-        $base_listing_path .= $object_name_part;
-    }
-    
-    my $wsobj = $self->_wscache($user,$ws); 
-    $self->_check_ws_permissions($wsobj,"r",1);
-
-    my $mongo_query = $search_filters_from_ls || {}; # Start with filters from ls
-    $mongo_query->{workspace_uuid} = $wsobj->{uuid};
-
-    if ($excludeDirectories == 1) {
-        $mongo_query->{folder} = 0;
-    } elsif ($excludeObjects == 1) {
-        $mongo_query->{folder} = 1;
-    }
-
-    my $hint;
+	my ($self,$fullpath,$query,$excludeDirectories,$excludeObjects,$recursive) = @_;
+	my $hint;
+	my ($user,$ws,$path,$name) = $self->_parse_ws_path($fullpath);
+	if (length($name) > 0) {
+		if (length($path) > 0) {
+			$path .= "/";
+		}
+		$path .= $name;
+	}
+	my $wsobj = $self->_wscache($user,$ws);
+	$self->_check_ws_permissions($wsobj,"r",1);
+	if ($excludeDirectories == 1 && $excludeObjects == 1) {
+		return [];
+	}
+	if (!defined($query)) {
+		$query = {};
+	}
+	$query->{workspace_uuid} = $wsobj->{uuid};
+	if ($excludeDirectories == 1) {
+		$query->{folder} = 0;
+	} elsif ($excludeObjects == 1) {
+		$query->{folder} = 1;
+	    }
+	#
+	# HACK: Force query hint for huge workspace.
+	#
 	my %bad_ws = ('942D0C20-D8CF-11EA-A092-E9C4682E0674' => 1,
 		      '7E50286E-C07E-11EB-954E-D6FC682E0674' => 1);
-
-	my $perform_recursive_search = $recursive;
-
-	if ($recursive == 1 && defined($bad_ws_uuids{$wsobj->{uuid}})) {
-        # Check if significant filters (name or type) are applied.
-        my $has_name_filter = defined($mongo_query->{name}); # Name filter is present (e.g., regex)
-        my $has_type_filter = defined($mongo_query->{type}); # Type filter is present
-
-        if (!$has_name_filter && !$has_type_filter) {
-            # NO name search AND NO type search are active for this bad_ws, so disable recursion.
-            print STDERR "WorkspaceImpl: Disabling recursion for bad_ws_uuid " . $wsobj->{uuid} . " due to no specific name/type filters.\n";
-            $perform_recursive_search = 0; # Override to non-recursive
-            $hint = undef; # Clear any hint that might have been set for recursion
-        } else {
-            # Name or type filter IS active, allow recursion but maybe use a hint
-            print STDERR "WorkspaceImpl: Allowing recursion for bad_ws_uuid " . $wsobj->{uuid} . " due to active name/type filters.\n";
-            $hint = "path_1_workspace_uuid_1"; # Or whatever hint was previously used for bad_ws recursive
-        }
+    my $perform_recursive_search = $recursive;
+    if ($recursive == 1 && $bad_ws{$wsobj->{uuid}} && !defined($query->{name}) && !defined($query->{type})) {
+        $perform_recursive_search = 0;
     }
 
-    if ($perform_recursive_search == 1) {
-        if (length($base_listing_path) > 0) {
-            # Recursive search starting from base_listing_path
-            $mongo_query->{path} = $self->_compute_mongo_regex_for_path($base_listing_path);
-            if ($bad_ws{$wsobj->{uuid}}) { $hint = "path_1_workspace_uuid_1"; }
-        } 
-    } else {
-        # Non-recursive: list items directly under base_listing_path
-        $mongo_query->{path} = $base_listing_path;
-    }
-    
-    return $self->_query_database($mongo_query, 0, 1, $hint); # 0 for not count, 1 for update_shock
+	if ($perform_recursive_search == 1)
+	{
+
+	    if (length($path) > 0) {
+		# print STDERR "INVOKE $path\n";
+		$query->{path} = $self->_compute_mongo_regex_for_path($path);
+
+		# print STDERR "GOT $path $query->{path}\n";
+		#$path = "^".quotemeta($path);
+		#$query->{path} = qr/$path/;
+
+		if ($bad_ws{$wsobj->{uuid}})
+		{
+		    $hint = "path_1_workspace_uuid_1";
+		}
+	    }
+	} else {
+		$query->{path} = $path;
+	}
+	return $self->_query_database($query,0, 1, $hint);
 }
 
 #Formating queries to support direct mongo queries - this will need to get far more sophisticated**
@@ -3083,79 +3076,42 @@ sub ls
     $output = {};
     $input = $self->_validateargs($input,["paths"],{
         excludeDirectories => 0,
-        excludeObjects => 0,
-        recursive => 0,
-        fullHierachicalOutput => 0,
-        query => {}
+		excludeObjects => 0,
+		recursive => 0,
+		fullHierachicalOutput => 0,
+		query => {}
     });
     foreach my $fullpath (@{$input->{paths}}) {
         my $objs = [];
-        my $client_query_params = $input->{query} || {};
-        
-        my $search_specific_mongo_filters = {};
-        my $other_client_query_params = {};
-
-        # Separate search-specific params from others
-        foreach my $key (keys %{$client_query_params}) {
-            if ($key eq 'name_search') {
-                if ($client_query_params->{name_search} && $client_query_params->{name_search} ne '') {
-                    my $searchTerm = quotemeta($client_query_params->{name_search});
-                    $search_specific_mongo_filters->{name} = qr/$searchTerm/i;
-                }
-            } elsif ($key eq 'type') {
-                if ($client_query_params->{type}) {
-                    if (ref($client_query_params->{type}) eq 'ARRAY' && @{$client_query_params->{type}}) {
-                        if (@{$client_query_params->{type}} == 1) {
-                             $search_specific_mongo_filters->{type} = $client_query_params->{type}->[0];
-                        } else {
-                             $search_specific_mongo_filters->{type} = {'$in' => $client_query_params->{type}};
-                        }
-                    } elsif ($client_query_params->{type} ne 'all' && $client_query_params->{type} ne '') {
-                        $search_specific_mongo_filters->{type} = $client_query_params->{type};
-                    }
-                }
-            } else {
-                # This parameter is not one of our special search keys
-                $other_client_query_params->{$key} = $client_query_params->{$key};
-            }
+        my $query = $input->{query};
+        if (defined($query->{name_search})) {
+            $query->{name} = qr/$query->{name_search}/i;
+            delete $query->{name_search};
         }
-
-        # Process "other" parameters using the original _formatQuery logic
-        my $generic_mongo_filters = $self->_formatQuery($other_client_query_params); # Or whatever your old one was
-
-        # Merge the search-specific filters and generic filters
-        # Note: search_specific_mongo_filters will overwrite generic_mongo_filters if there are key conflicts
-        # (e.g., if client somehow sent 'name' directly and also 'name_search'). This is usually fine.
-        my $final_filters_for_list_objects = { %{$generic_mongo_filters}, %{$search_specific_mongo_filters} };
-
-        if ($fullpath eq "" || $fullpath eq "/") {
-            # For listing workspaces, we might not apply these name/type object filters,
-            # or _list_workspaces needs its own filtering logic.
-            # The original code called _formatQuery with a flag for workspaces.
-            $objs = $self->_list_workspaces(undef, $self->_formatQuery($input->{query}, 1)); # Uses original query for workspaces
-        } elsif ($fullpath =~ m/^\/([^\/]+)\/*$/) {
-            $objs = $self->_list_workspaces($1, $self->_formatQuery($input->{query}, 1)); # Uses original query for user's workspaces
-        } else {
-            # Pass the fully constructed $final_filters_for_list_objects to _list_objects
-            $objs = $self->_list_objects($fullpath, $final_filters_for_list_objects, $input->{excludeDirectories}, $input->{excludeObjects}, $input->{recursive});
-        }
-
-        for (my $i=0; $i < @{$objs}; $i++) {
-            my $meta = $self->_generate_object_meta($objs->[$i]);
-            if ($input->{fullHierachicalOutput} == 1) {
-                $meta->[2] =~ s/\/$//; 
-                push(@{$output->{$meta->[2]}}, $meta);
-            } else {
-                push(@{$output->{$fullpath}}, $meta);
-            }
-        }
+    	if ($fullpath eq "" || $fullpath eq "/") {
+    		$objs = $self->_list_workspaces(undef,$self->_formatQuery($query,1));
+    	} elsif ($fullpath =~ m/^\/([^\/]+)\/*$/) {
+    		$objs = $self->_list_workspaces($1,$self->_formatQuery($query,1));
+    	} else {
+    		$objs = $self->_list_objects($fullpath,$self->_formatQuery($query,0),$input->{excludeDirectories},$input->{excludeObjects},$input->{recursive});
+    	}
+    	for (my $i=0; $i < @{$objs}; $i++) {
+    		my $meta = $self->_generate_object_meta($objs->[$i]);
+    		if ($input->{fullHierachicalOutput} == 1) {
+    			$meta->[2] =~ s/\/$//;
+    			push(@{$output->{$meta->[2]}},$meta);
+    		} else {
+    			push(@{$output->{$fullpath}},$meta);
+    		}
+    		
+    	}
     }
     #END ls
-    my @_bad_returns; # Ensure this is declared if used elsewhere
+    my @_bad_returns;
     (ref($output) eq 'HASH') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
-        my $msg = "Invalid returns passed to ls:\n" . join("", map { "\t$_\n" } @_bad_returns);
-        die $msg;
+	my $msg = "Invalid returns passed to ls:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	die $msg;
     }
     return($output);
 }
