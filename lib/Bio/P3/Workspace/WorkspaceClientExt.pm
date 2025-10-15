@@ -418,6 +418,17 @@ sub save_file_to_file
 	push(@opts, adminmode => 1);
     }
     push(@opts, overwrite => ($overwrite ? 1 : 0));
+
+    #
+    # Force shock for object over 1000 bytes
+    #
+    my @stat = stat($local_file);
+    my $local_file_size = -s $local_file;
+    if (! defined($local_file_size))
+    {
+	die "save_file_to_file: Cannot read $local_file: $!";
+    }
+    $use_shock = $local_file_size > 1000;
     
     my $obj;
     if ($use_shock)
