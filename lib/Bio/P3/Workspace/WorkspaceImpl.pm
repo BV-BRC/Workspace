@@ -1139,6 +1139,16 @@ sub _wscache {
 #List all workspaces matching input query**
 sub _list_workspaces {
     my ($self,$user,$query) = @_;
+
+    #
+    # Security fix. An unauthorized user cannot list all public workspaces.
+    #
+
+    if (!$CallContext->user_id && !$user)
+    {
+	return [];
+    }
+
     if (defined($user)) {
 	$query->{owner} = $user;
     }
