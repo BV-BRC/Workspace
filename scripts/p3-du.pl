@@ -55,10 +55,9 @@ if ($opt->children) {
 	    my $files = $dir->{$path};
 	    if (ref($files) eq 'ARRAY') {
 		for my $entry (@$files) {
-		    # entry->[2] is the full path, entry->[0] is the name
-		    my $child_path = $entry->[2];
-		    # Remove trailing slash if present
-		    $child_path =~ s/\/$//;
+		    # entry->[0] is the name, entry->[2] is the parent path (with trailing /)
+		    # Full child path is parent + name
+		    my $child_path = $entry->[2] . $entry->[0];
 		    push(@child_paths, $child_path);
 		}
 	    }
