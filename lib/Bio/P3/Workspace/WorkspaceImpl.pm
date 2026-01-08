@@ -3372,17 +3372,39 @@ sub du
 
             my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
 
+            # Handle user-level path (e.g., /user@example.org)
             if (!defined($ws) || length($ws) == 0) {
-                $self->_error("Path $fullpath does not include at least a top level directory!");
+                # This is a user-level path - sum up all workspaces for this user
+                my $workspaces = $self->_list_workspaces($user, {});
+                my $total_size = 0;
+                my $file_count = 0;
+                my $dir_count = 0;
+
+                for my $wsobj (@$workspaces) {
+                    eval {
+                        $self->_check_ws_permissions($wsobj, "r", 0);
+                        my ($ws_size, $ws_files, $ws_dirs) =
+                            $self->_calculate_du($wsobj, "", "", $input->{recursive});
+                        $total_size += $ws_size;
+                        $file_count += $ws_files;
+                        $dir_count += $ws_dirs;
+                        # Count the workspace itself as a directory
+                        $dir_count++;
+                    };
+                    # Skip workspaces we can't read
+                }
+
+                $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
+            } else {
+                # Standard workspace path
+                my $wsobj = $self->_wscache($user, $ws);
+                $self->_check_ws_permissions($wsobj, "r", 1);
+
+                my ($total_size, $file_count, $dir_count) =
+                    $self->_calculate_du($wsobj, $path, $name, $input->{recursive});
+
+                $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
             }
-
-            my $wsobj = $self->_wscache($user, $ws);
-            $self->_check_ws_permissions($wsobj, "r", 1);
-
-            my ($total_size, $file_count, $dir_count) =
-                $self->_calculate_du($wsobj, $path, $name, $input->{recursive});
-
-            $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
         };
         if ($@) {
             my $error = $@;
