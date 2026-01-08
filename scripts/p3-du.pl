@@ -15,6 +15,7 @@ use Pod::Usage;
     p3-du -h path                 # Show human-readable sizes
     p3-du -s path                 # Show summary only (total)
     p3-du --no-recursive path     # Don't recurse into subdirectories
+    p3-du --children path         # Show disk usage for each child of path
 
 =cut
 
@@ -30,6 +31,7 @@ my($opt, $usage) =
 		     [],
 		     ["human-readable|h", "Print sizes in human readable format (e.g., 1K 234M 2G)"],
 		     ["summarize|s", "Display only a total for each argument"],
+		     ["children|c", "Show disk usage for each child of the given path"],
 		     ["no-recursive", "Do not include subdirectories in the count"],
 		     ["administrator|A", "Run as administrator (if user has those privileges)"],
 		     ["url=s", "Use this workspace URL instead of the default"],
@@ -42,6 +44,40 @@ die($usage->text) if @ARGV == 0;
 my $ws = Bio::P3::Workspace::WorkspaceClientExt->new($opt->url);
 
 my @paths = @ARGV;
+my @admin = $opt->administrator ? (adminmode => 1) : ();
+
+# If --children flag is set, expand each path to its children first
+if ($opt->children) {
+    my @child_paths;
+    for my $path (@paths) {
+	eval {
+	    my $dir = $ws->ls({ paths => [$path], @admin });
+	    my $files = $dir->{$path};
+	    if (ref($files) eq 'ARRAY') {
+		for my $entry (@$files) {
+		    # entry->[2] is the full path, entry->[0] is the name
+		    my $child_path = $entry->[2];
+		    # Remove trailing slash if present
+		    $child_path =~ s/\/$//;
+		    push(@child_paths, $child_path);
+		}
+	    }
+	};
+	if ($@) {
+	    my $err = $@;
+	    if ($err =~ /_ERROR_(.*?)!?_ERROR_/) {
+		print STDERR "$path: $1\n";
+	    } else {
+		print STDERR "$path: $err\n";
+	    }
+	}
+    }
+    @paths = @child_paths;
+}
+
+if (@paths == 0) {
+    exit 0;
+}
 
 # Build API call parameters
 my %params = (
