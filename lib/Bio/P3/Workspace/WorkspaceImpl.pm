@@ -3370,12 +3370,11 @@ sub du
                 $self->_error("Cannot compute du for root path");
             }
 
-            my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
-
-            # Handle user-level path (e.g., /user@example.org)
-            if (!defined($ws) || length($ws) == 0) {
+            # Handle user-level path (e.g., /user@example.org) - same pattern as ls
+            if ($fullpath =~ m/^\/([^\/]+)\/*$/) {
+                my $user = $1;
                 # This is a user-level path - sum up all workspaces for this user
-                my $workspaces = $self->_list_workspaces($user, {});
+                my $workspaces = $self->_list_workspaces($user, $self->_formatQuery({}, 1));
                 my $total_size = 0;
                 my $file_count = 0;
                 my $dir_count = 0;
@@ -3396,7 +3395,13 @@ sub du
 
                 $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
             } else {
-                # Standard workspace path
+                # Standard workspace path - parse it
+                my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
+
+                if (!defined($ws) || length($ws) == 0) {
+                    $self->_error("Path $fullpath does not include at least a top level directory!");
+                }
+
                 my $wsobj = $self->_wscache($user, $ws);
                 $self->_check_ws_permissions($wsobj, "r", 1);
 
