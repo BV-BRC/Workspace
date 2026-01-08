@@ -839,6 +839,111 @@ sub get_archive_url
 
 
 
+=head2 du
+
+  $output = $obj->du($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+
+
+=end text
+
+=item Description
+
+"du" command
+Description:
+This function computes the disk usage (storage used in bytes) for all files
+at and below the specified paths. Similar to the Unix du command.
+
+Parameters:
+list<FullObjectPath> paths - list of full paths for which disk usage should be computed
+bool recursive - if true, include all files in subdirectories (default: true)
+bool adminmode - run this command as an admin, meaning you can query anything anywhere
+
+=back
+
+=cut
+
+sub du
+{
+    my($self, @args) = @_;
+
+# Authentication: optional
+
+    if ((my $n = @args) != 1)
+    {
+        die "Invalid argument count for function du (received $n, expecting 1)";
+    }
+    {
+	my($input) = @args;
+
+	my @_bad_arguments;
+        (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
+        if (@_bad_arguments) {
+	    my $msg = "Invalid arguments passed to du:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	    die $msg;
+	}
+    }
+
+    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+	method => "Workspace.du",
+	params => \@args,
+    });
+    if ($result) {
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking du:\n$msg\n";
+	} else {
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
+	}
+    } else {
+	die "Error invoking method du: " .  $self->{client}->status_line;
+    }
+}
+
+
 =head2 ls
 
   $output = $obj->ls($input)

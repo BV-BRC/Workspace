@@ -165,6 +165,34 @@ typedef structure {
 } get_archive_url_params;
 funcdef get_archive_url(get_archive_url_params input) returns (string url, int file_count, int total_size)  authentication optional;
 
+/* "du" command
+	Description:
+	This function computes the disk usage (storage used in bytes) for all files
+	at and below the specified paths. Similar to the Unix du command.
+
+	Parameters:
+	list<FullObjectPath> paths - list of full paths for which disk usage should be computed
+	bool recursive - if true, include all files in subdirectories (default: true)
+	bool adminmode - run this command as an admin, meaning you can query anything anywhere
+*/
+typedef structure {
+	list<FullObjectPath> paths;
+	bool recursive;
+	bool adminmode;
+} du_params;
+
+/* DiskUsageResult: tuple containing disk usage information for a path
+
+	FullObjectPath - the path that was queried
+	int total_size - total size in bytes of all files at and below this path
+	int file_count - number of files counted
+	int directory_count - number of directories at and below this path
+	string error - set if there was an error computing usage for this path
+*/
+typedef tuple<FullObjectPath, int total_size, int file_count, int directory_count, string error> DiskUsageResult;
+
+funcdef du(du_params input) returns (list<DiskUsageResult> output) authentication optional;
+
 /* "list" command
 	Description: 
 	This function retrieves a list of all objects and directories below the specified paths with optional ability to filter by search
