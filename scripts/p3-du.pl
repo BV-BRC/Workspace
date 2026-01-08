@@ -16,6 +16,7 @@ use Pod::Usage;
     p3-du -s path                 # Show summary only (total)
     p3-du --no-recursive path     # Don't recurse into subdirectories
     p3-du --children path         # Show disk usage for each child of path
+    p3-du --by-size --children path  # Sort children by size (largest first)
 
 =cut
 
@@ -32,6 +33,7 @@ my($opt, $usage) =
 		     ["human-readable|h", "Print sizes in human readable format (e.g., 1K 234M 2G)"],
 		     ["summarize|s", "Display only a total for each argument"],
 		     ["children|c", "Show disk usage for each child of the given path"],
+		     ["by-size|S", "Sort results by size (largest first)"],
 		     ["no-recursive", "Do not include subdirectories in the count"],
 		     ["administrator|A", "Run as administrator (if user has those privileges)"],
 		     ["url=s", "Use this workspace URL instead of the default"],
@@ -96,6 +98,11 @@ if ($@) {
     } else {
 	die "Error: $err\n";
     }
+}
+
+# Sort results by size if requested (largest first)
+if ($opt->by_size) {
+    @$results = sort { $b->[1] <=> $a->[1] } @$results;
 }
 
 # Display results
