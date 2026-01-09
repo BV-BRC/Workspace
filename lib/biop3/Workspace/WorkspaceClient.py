@@ -195,6 +195,11 @@ class Workspace(object):
                           [input])
         return resp
 
+    def du(self, input):
+        resp = self._call('Workspace.du',
+                          [input])
+        return resp[0]
+
     def ls(self, input):
         resp = self._call('Workspace.ls',
                           [input])

@@ -10,12 +10,8 @@ use File::Temp;
 use File::Slurp;
 use Class::Load qw();
 use Config::Simple;
+use Time::HiRes qw(gettimeofday);
 
-my $get_time = sub { time, 0 };
-eval {
-    require Time::HiRes;
-    $get_time = sub { Time::HiRes::gettimeofday(); };
-};
 
 use P3AuthToken;
 use P3TokenValidator;
@@ -40,6 +36,7 @@ our %return_counts = (
         'update_auto_meta' => 1,
         'get_download_url' => 1,
         'get_archive_url' => 3,
+        'du' => 1,
         'ls' => 1,
         'copy' => 1,
         'delete' => 1,
@@ -55,6 +52,7 @@ our %method_authentication = (
         'update_auto_meta' => 'required',
         'get_download_url' => 'optional',
         'get_archive_url' => 'optional',
+        'du' => 'optional',
         'ls' => 'optional',
         'copy' => 'required',
         'delete' => 'required',
@@ -80,6 +78,7 @@ sub _build_valid_methods
         'update_auto_meta' => 1,
         'get_download_url' => 1,
         'get_archive_url' => 1,
+        'du' => 1,
         'ls' => 1,
         'copy' => 1,
         'delete' => 1,
@@ -298,7 +297,7 @@ sub call_method {
 	{
 	    $self->{hostname} ||= $g_hostname;
 
-	    my ($t, $us) = &$get_time();
+	    my ($t, $us) = gettimeofday;
 	    $us = sprintf("%06d", $us);
 	    my $ts = strftime("%Y-%m-%dT%H:%M:%S.${us}Z", gmtime $t);
 	    $tag = "S:$self->{hostname}:$$:$ts";
@@ -309,7 +308,7 @@ sub call_method {
 	local $ENV{KBRPC_METADATA} = $kb_metadata if $kb_metadata;
 	local $ENV{KBRPC_ERROR_DEST} = $kb_errordest if $kb_errordest;
 
-	my $stderr = Bio::P3::Workspace::ServiceStderrWrapper->new($ctx, $get_time);
+	my $stderr = Bio::P3::Workspace::ServiceStderrWrapper->new($ctx);
 	$ctx->stderr($stderr);
 
 	#
@@ -468,9 +467,8 @@ use Time::HiRes 'gettimeofday';
 
 sub new
 {
-    my($class, $ctx, $get_time) = @_;
+    my($class, $ctx) = @_;
     my $self = {
-	get_time => $get_time,
     };
     my $dest = $ENV{KBRPC_ERROR_DEST} if exists $ENV{KBRPC_ERROR_DEST};
     my $tag = $ENV{KBRPC_TAG} if exists $ENV{KBRPC_TAG};
@@ -553,7 +551,7 @@ sub redirect_both
 sub timestamp
 {
     my($self) = @_;
-    my ($t, $us) = $self->{get_time}->();
+    my ($t, $us) = gettimeofday;
     $us = sprintf("%06d", $us);
     my $ts = strftime("%Y-%m-%dT%H:%M:%S.${us}Z", gmtime $t);
     return $ts;

@@ -3297,7 +3297,6 @@ DiskUsageResult is a reference to a list containing 5 items:
 	2: (file_count) an int
 	3: (directory_count) an int
 	4: (error) a string
-
 </pre>
 
 =end html
@@ -3319,22 +3318,12 @@ DiskUsageResult is a reference to a list containing 5 items:
 	3: (directory_count) an int
 	4: (error) a string
 
-
 =end text
 
 
 
 =item Description
 
-"du" command
-Description:
-This function computes the disk usage (storage used in bytes) for all files
-at and below the specified paths. Similar to the Unix du command.
-
-Parameters:
-list<FullObjectPath> paths - list of full paths for which disk usage should be computed
-bool recursive - if true, include all files in subdirectories (default: true)
-bool adminmode - run this command as an admin, meaning you can query anything anywhere
 
 =back
 
@@ -4856,6 +4845,98 @@ objects has a value which is a reference to a list where each element is a FullO
 recursive has a value which is a bool
 archive_name has a value which is a string
 archive_type has a value which is a string
+
+
+=end text
+
+=back
+
+
+
+=head2 du_params
+
+=over 4
+
+
+=item Description
+
+"du" command
+        Description:
+        This function computes the disk usage (storage used in bytes) for all files
+        at and below the specified paths. Similar to the Unix du command.
+
+        Parameters:
+        list<FullObjectPath> paths - list of full paths for which disk usage should be computed
+        bool recursive - if true, include all files in subdirectories (default: true)
+        bool adminmode - run this command as an admin, meaning you can query anything anywhere
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 DiskUsageResult
+
+=over 4
+
+
+=item Description
+
+DiskUsageResult: tuple containing disk usage information for a path
+
+       FullObjectPath - the path that was queried
+       int total_size - total size in bytes of all files at and below this path
+       int file_count - number of files counted
+       int directory_count - number of directories at and below this path
+       string error - set if there was an error computing usage for this path
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
 
 
 =end text

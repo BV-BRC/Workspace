@@ -5,11 +5,7 @@ use strict;
 use Data::Dumper;
 use URI;
 
-my $get_time = sub { time, 0 };
-eval {
-    require Time::HiRes;
-    $get_time = sub { Time::HiRes::gettimeofday() };
-};
+use Time::HiRes qw(gettimeofday);
 
 use P3AuthToken;
 
@@ -56,7 +52,7 @@ sub new
     }
     else
     {
-	my ($t, $us) = &$get_time();
+	my ($t, $us) = gettimeofday;
 	$us = sprintf("%06d", $us);
 	my $ts = strftime("%Y-%m-%dT%H:%M:%S.${us}Z", gmtime $t);
 	$self->{kbrpc_tag} = "C:$0:$self->{hostname}:$$:$ts";
@@ -891,15 +887,7 @@ DiskUsageResult is a reference to a list containing 5 items:
 
 =item Description
 
-"du" command
-Description:
-This function computes the disk usage (storage used in bytes) for all files
-at and below the specified paths. Similar to the Unix du command.
 
-Parameters:
-list<FullObjectPath> paths - list of full paths for which disk usage should be computed
-bool recursive - if true, include all files in subdirectories (default: true)
-bool adminmode - run this command as an admin, meaning you can query anything anywhere
 
 =back
 
@@ -942,6 +930,7 @@ sub du
 	die "Error invoking method du: " .  $self->{client}->status_line;
     }
 }
+
 
 
 =head2 ls
@@ -2284,6 +2273,102 @@ objects has a value which is a reference to a list where each element is a FullO
 recursive has a value which is a bool
 archive_name has a value which is a string
 archive_type has a value which is a string
+
+
+=end text
+
+=back
+
+
+
+=head2 du_params
+
+=over 4
+
+
+
+=item Description
+
+"du" command
+        Description:
+        This function computes the disk usage (storage used in bytes) for all files
+        at and below the specified paths. Similar to the Unix du command.
+
+        Parameters:
+        list<FullObjectPath> paths - list of full paths for which disk usage should be computed
+        bool recursive - if true, include all files in subdirectories (default: true)
+        bool adminmode - run this command as an admin, meaning you can query anything anywhere
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 DiskUsageResult
+
+=over 4
+
+
+
+=item Description
+
+DiskUsageResult: tuple containing disk usage information for a path
+
+       FullObjectPath - the path that was queried
+       int total_size - total size in bytes of all files at and below this path
+       int file_count - number of files counted
+       int directory_count - number of directories at and below this path
+       string error - set if there was an error computing usage for this path
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
 
 
 =end text
