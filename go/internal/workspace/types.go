@@ -216,3 +216,30 @@ func (d *DiskUsageResult) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
+
+// ExistsResult represents the result of an existence check
+type ExistsResult struct {
+	Path   string
+	Exists bool
+	Error  string
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for ExistsResult
+func (e *ExistsResult) UnmarshalJSON(data []byte) error {
+	var arr []json.RawMessage
+	if err := json.Unmarshal(data, &arr); err != nil {
+		return err
+	}
+
+	if len(arr) < 3 {
+		return nil
+	}
+
+	json.Unmarshal(arr[0], &e.Path)
+	var exists int
+	json.Unmarshal(arr[1], &exists)
+	e.Exists = exists != 0
+	json.Unmarshal(arr[2], &e.Error)
+
+	return nil
+}

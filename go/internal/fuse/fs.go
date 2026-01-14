@@ -13,6 +13,14 @@ import (
 	"github.com/BV-BRC/Workspace/go/internal/workspace"
 )
 
+// Access mode constants (from unistd.h)
+const (
+	R_OK = 4 // Test for read permission
+	W_OK = 2 // Test for write permission
+	X_OK = 1 // Test for execute permission
+	F_OK = 0 // Test for existence
+)
+
 // Options configures the WorkspaceFS
 type Options struct {
 	RootPath string
@@ -741,7 +749,7 @@ func (fs *WorkspaceFS) Access(path string, mask uint32) int {
 	}
 
 	// Check write access
-	if mask&fuse.W_OK != 0 {
+	if mask&W_OK != 0 {
 		if fs.readOnly {
 			return -fuse.EROFS
 		}
@@ -751,7 +759,7 @@ func (fs *WorkspaceFS) Access(path string, mask uint32) int {
 	}
 
 	// Check read access
-	if mask&fuse.R_OK != 0 {
+	if mask&R_OK != 0 {
 		if !meta.HasReadPermission() {
 			return -fuse.EACCES
 		}

@@ -2720,6 +2720,127 @@ sub get
 }
 
 
+=head2 exists
+
+  $output = $obj->exists($input)
+
+=over 4
+
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is an exists_params
+$output is a reference to a list where each element is an ExistsResult
+exists_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ExistsResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is an exists_params
+$output is a reference to a list where each element is an ExistsResult
+exists_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ExistsResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+=end text
+
+
+
+=item Description
+
+Check whether objects exist in the workspace without retrieving metadata or data.
+
+=back
+
+=cut
+
+sub exists
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+        my $msg = "Invalid arguments passed to exists:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+        die $msg;
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN exists
+    $output = [];
+    $input = $self->_validateargs($input, ["objects"], {
+        adminmode => 0,
+    });
+
+    for my $fullpath (@{$input->{objects}}) {
+        my $result = [$fullpath, 0, ""];
+
+        eval {
+            my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
+
+            if (!defined($ws) || length($ws) == 0) {
+                $self->_error("Path $fullpath does not include at least a top level directory!");
+            }
+
+            my $wsobj = $self->_wscache($user, $ws);
+            $self->_check_ws_permissions($wsobj, "r", 1);
+
+            if (length($path) == 0 && length($name) == 0) {
+                # Checking if workspace itself exists - if we got here, it does
+                $result->[1] = 1;
+            } else {
+                # Check if object exists in database
+                my $obj = $self->_get_db_object({
+                    workspace_uuid => $wsobj->{uuid},
+                    path => $path,
+                    name => $name
+                }, 0);  # 0 = don't throw error if not found
+
+                $result->[1] = defined($obj) ? 1 : 0;
+            }
+        };
+        if ($@) {
+            my $error = $@;
+            $error =~ s/_ERROR_(.*)_ERROR_.*/$1/s;
+            $result->[2] = $error;
+        }
+
+        push(@{$output}, $result);
+    }
+    #END exists
+
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+        my $msg = "Invalid returns passed to exists:\n" . join("", map { "\t$_\n" } @_bad_returns);
+        die $msg;
+    }
+    return($output);
+}
+
+
 =head2 update_auto_meta
 
   $output = $obj->update_auto_meta($input)

@@ -27,30 +27,36 @@ test:
 	go test -v ./...
 
 # Linux builds (amd64 and arm64)
+# CGO is required for cgofuse. Native builds work; cross-compilation needs target toolchain.
 linux: linux-amd64 linux-arm64
 
 linux-amd64:
 	@echo "Building for Linux amd64..."
 	@mkdir -p $(OUTDIR)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-linux-amd64 ./cmd/p3-mount-ws
+	CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-linux-amd64 ./cmd/p3-mount-ws
 
 linux-arm64:
 	@echo "Building for Linux arm64..."
+	@echo "Note: Cross-compiling requires aarch64-linux-gnu-gcc toolchain"
 	@mkdir -p $(OUTDIR)
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm64 ./cmd/p3-mount-ws
+	CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CC=aarch64-linux-gnu-gcc go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-linux-arm64 ./cmd/p3-mount-ws
 
 # macOS builds (amd64 and arm64)
+# Note: cgofuse requires CGO. Cross-compilation needs the target platform's
+# FUSE headers and toolchain. These targets work best when run on macOS.
 darwin: darwin-amd64 darwin-arm64
 
 darwin-amd64:
 	@echo "Building for macOS amd64..."
+	@echo "Note: Cross-compiling FUSE requires target platform. Build on macOS for best results."
 	@mkdir -p $(OUTDIR)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-darwin-amd64 ./cmd/p3-mount-ws
+	CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-darwin-amd64 ./cmd/p3-mount-ws
 
 darwin-arm64:
 	@echo "Building for macOS arm64 (Apple Silicon)..."
+	@echo "Note: Cross-compiling FUSE requires target platform. Build on macOS for best results."
 	@mkdir -p $(OUTDIR)
-	CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-darwin-arm64 ./cmd/p3-mount-ws
+	CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build $(GOFLAGS) -o $(OUTDIR)/$(BINARY)-darwin-arm64 ./cmd/p3-mount-ws
 
 # Windows build (requires CGO for WinFsp)
 # Note: Cross-compilation from Linux requires mingw-w64

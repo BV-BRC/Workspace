@@ -403,3 +403,29 @@ func (c *Client) Du(paths []string, recursive bool) ([]*DiskUsageResult, error) 
 
 	return response, nil
 }
+
+// existsParams matches the exists_params structure in Workspace.spec
+type existsParams struct {
+	Objects   []string `json:"objects"`
+	AdminMode bool     `json:"adminmode,omitempty"`
+}
+
+// Exists checks whether objects exist in the workspace
+func (c *Client) Exists(paths []string) ([]*ExistsResult, error) {
+	params := existsParams{
+		Objects:   paths,
+		AdminMode: c.AdminMode,
+	}
+
+	result, err := c.call("exists", params)
+	if err != nil {
+		return nil, err
+	}
+
+	var response []*ExistsResult
+	if err := json.Unmarshal(result, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse exists response: %w", err)
+	}
+
+	return response, nil
+}

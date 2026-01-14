@@ -38,16 +38,20 @@ Download and install WinFsp from: https://winfsp.dev/
 ```bash
 cd go
 make deps
-make build
+make build   # Build for current platform
 ```
 
-Or build for specific platforms:
+**Important**: The cgofuse library requires CGO, which means cross-compilation of FUSE drivers requires the target platform's FUSE headers and C toolchain. For best results:
+
+- **Build on the target platform** - e.g., build macOS binaries on a Mac
+- **Linux builds** can be done with CGO_ENABLED=0 for basic functionality
+- **Windows builds** require WinFsp SDK and mingw-w64 for cross-compilation
+
 ```bash
-make linux      # Linux (amd64 + arm64)
-make darwin     # macOS (amd64 + arm64)
-make windows    # Windows (requires mingw-w64 for cross-compilation)
-make cross      # Linux + macOS
-make cross-all  # All platforms
+make build      # Current platform (recommended)
+make linux      # Linux only (works from any platform)
+make darwin     # macOS (best built on macOS)
+make windows    # Windows (requires mingw-w64 + WinFsp SDK)
 ```
 
 ## Usage
