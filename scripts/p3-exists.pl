@@ -26,11 +26,12 @@ if (!$token->token())
 my($opt, $usage) = describe_options("%c %o path [path...]",
                                     ["quiet|q" => "Quiet mode - only set exit code, no output"],
                                     ["admin|A" => "Run in admin mode"],
+                                    ["url=s" => "Use this workspace URL instead of the default"],
                                     ["help|h" => "Show this help message"]);
 print($usage->text), exit 0 if $opt->help;
 die($usage->text) if @ARGV == 0;
 
-my $ws = Bio::P3::Workspace::WorkspaceClientExt->new();
+my $ws = Bio::P3::Workspace::WorkspaceClientExt->new($opt->url);
 
 # Normalize paths
 my @paths = map { s/^ws://r } @ARGV;

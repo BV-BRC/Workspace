@@ -2794,14 +2794,15 @@ sub exists
         adminmode => 0,
     });
 
-    for my $fullpath (@{$input->{objects}}) {
+    for (my $i=0; $i < @{$input->{objects}}; $i++) {
+        my $fullpath = $input->{objects}->[$i];
         my $result = [$fullpath, 0, ""];
 
         eval {
             my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
 
             if (!defined($ws) || length($ws) == 0) {
-                $self->_error("Path $fullpath does not include at least a top level directory!");
+                $self->_error("Path ".$fullpath." does not include at least a top level directory!");
             }
 
             my $wsobj = $self->_wscache($user, $ws);
