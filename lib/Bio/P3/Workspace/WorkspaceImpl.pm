@@ -2720,9 +2720,9 @@ sub get
 }
 
 
-=head2 exists
+=head2 objects_exist
 
-  $output = $obj->exists($input)
+  $output = $obj->objects_exist($input)
 
 =over 4
 
@@ -2732,32 +2732,31 @@ sub get
 =begin html
 
 <pre>
-$input is an exists_params
-$output is a reference to a list where each element is an ExistsResult
-exists_params is a reference to a hash where the following keys are defined:
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ExistsResult is a reference to a list containing 3 items:
+ObjectsExistResult is a reference to a list containing 3 items:
 	0: a FullObjectPath
 	1: (exists) a bool
 	2: (error) a string
-
 </pre>
 
 =end html
 
 =begin text
 
-$input is an exists_params
-$output is a reference to a list where each element is an ExistsResult
-exists_params is a reference to a hash where the following keys are defined:
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
 	objects has a value which is a reference to a list where each element is a FullObjectPath
 	adminmode has a value which is a bool
 FullObjectPath is a string
 bool is an int
-ExistsResult is a reference to a list containing 3 items:
+ObjectsExistResult is a reference to a list containing 3 items:
 	0: a FullObjectPath
 	1: (exists) a bool
 	2: (error) a string
@@ -2768,13 +2767,12 @@ ExistsResult is a reference to a list containing 3 items:
 
 =item Description
 
-Check whether objects exist in the workspace without retrieving metadata or data.
 
 =back
 
 =cut
 
-sub exists
+sub objects_exist
 {
     my $self = shift;
     my($input) = @_;
@@ -2782,13 +2780,13 @@ sub exists
     my @_bad_arguments;
     (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
     if (@_bad_arguments) {
-        my $msg = "Invalid arguments passed to exists:\n" . join("", map { "\t$_\n" } @_bad_arguments);
-        die $msg;
+	my $msg = "Invalid arguments passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	die $msg;
     }
 
     my $ctx = $Bio::P3::Workspace::Service::CallContext;
     my($output);
-    #BEGIN exists
+    #BEGIN objects_exist
     $output = [];
     $input = $self->_validateargs($input, ["objects"], {
         adminmode => 0,
@@ -2830,13 +2828,12 @@ sub exists
 
         push(@{$output}, $result);
     }
-    #END exists
-
+    #END objects_exist
     my @_bad_returns;
     (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
     if (@_bad_returns) {
-        my $msg = "Invalid returns passed to exists:\n" . join("", map { "\t$_\n" } @_bad_returns);
-        die $msg;
+	my $msg = "Invalid returns passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	die $msg;
     }
     return($output);
 }
@@ -4837,6 +4834,89 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 metadata_only has a value which is a bool
 adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 objects_exist_params
+
+=over 4
+
+
+=item Description
+
+"objects_exist" command
+        Description:
+        This function checks whether objects exist in the workspace without
+        retrieving metadata or data. Useful for lightweight existence checks.
+
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects to check
+        bool adminmode - run this command as an admin, meaning you can check anything anywhere
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 ObjectsExistResult
+
+=over 4
+
+
+=item Description
+
+ObjectsExistResult: tuple containing existence check result for a path
+
+       FullObjectPath - the path that was checked
+       bool exists - 1 if object exists, 0 if not
+       string error - set if there was an error checking this path (e.g., permission denied)
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
 
 
 =end text

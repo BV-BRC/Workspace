@@ -117,7 +117,7 @@ typedef structure {
 } get_params;
 funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output) authentication optional;
 
-/* "exists" command
+/* "objects_exist" command
 	Description:
 	This function checks whether objects exist in the workspace without
 	retrieving metadata or data. Useful for lightweight existence checks.
@@ -129,17 +129,17 @@ funcdef get(get_params input) returns (list<tuple<ObjectMeta,ObjectData>> output
 typedef structure {
 	list<FullObjectPath> objects;
 	bool adminmode;
-} exists_params;
+} objects_exist_params;
 
-/* ExistsResult: tuple containing existence check result for a path
+/* ObjectsExistResult: tuple containing existence check result for a path
 
 	FullObjectPath - the path that was checked
 	bool exists - 1 if object exists, 0 if not
 	string error - set if there was an error checking this path (e.g., permission denied)
 */
-typedef tuple<FullObjectPath, bool exists, string error> ExistsResult;
+typedef tuple<FullObjectPath, bool exists, string error> ObjectsExistResult;
 
-funcdef exists(exists_params input) returns (list<ExistsResult> output) authentication optional;
+funcdef objects_exist(objects_exist_params input) returns (list<ObjectsExistResult> output) authentication optional;
 
 /* "update_shock_meta" command
 	Description:

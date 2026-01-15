@@ -180,6 +180,11 @@ class Workspace(object):
                           [input])
         return resp[0]
 
+    def objects_exist(self, input):
+        resp = self._call('Workspace.objects_exist',
+                          [input])
+        return resp[0]
+
     def update_auto_meta(self, input):
         resp = self._call('Workspace.update_auto_meta',
                           [input])

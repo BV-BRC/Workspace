@@ -533,6 +533,98 @@ sub get
 
 
 
+=head2 objects_exist
+
+  $output = $obj->objects_exist($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+
+=end text
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub objects_exist
+{
+    my($self, @args) = @_;
+
+# Authentication: optional
+
+    if ((my $n = @args) != 1)
+    {
+        die "Invalid argument count for function objects_exist (received $n, expecting 1)";
+    }
+    {
+	my($input) = @args;
+
+	my @_bad_arguments;
+        (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
+        if (@_bad_arguments) {
+	    my $msg = "Invalid arguments passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	    die $msg;
+	}
+    }
+
+    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+	method => "Workspace.objects_exist",
+	params => \@args,
+    });
+    if ($result) {
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking objects_exist:\n$msg\n";
+	} else {
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
+	}
+    } else {
+	die "Error invoking method objects_exist: " .  $self->{client}->status_line;
+    }
+}
+
+
+
 =head2 update_auto_meta
 
   $output = $obj->update_auto_meta($input)
@@ -2137,6 +2229,93 @@ a reference to a hash where the following keys are defined:
 objects has a value which is a reference to a list where each element is a FullObjectPath
 metadata_only has a value which is a bool
 adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 objects_exist_params
+
+=over 4
+
+
+
+=item Description
+
+"objects_exist" command
+        Description:
+        This function checks whether objects exist in the workspace without
+        retrieving metadata or data. Useful for lightweight existence checks.
+
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects to check
+        bool adminmode - run this command as an admin, meaning you can check anything anywhere
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 ObjectsExistResult
+
+=over 4
+
+
+
+=item Description
+
+ObjectsExistResult: tuple containing existence check result for a path
+
+       FullObjectPath - the path that was checked
+       bool exists - 1 if object exists, 0 if not
+       string error - set if there was an error checking this path (e.g., permission denied)
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
 
 
 =end text
