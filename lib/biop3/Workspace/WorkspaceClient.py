@@ -180,6 +180,11 @@ class Workspace(object):
                           [input])
         return resp[0]
 
+    def objects_exist(self, input):
+        resp = self._call('Workspace.objects_exist',
+                          [input])
+        return resp[0]
+
     def update_auto_meta(self, input):
         resp = self._call('Workspace.update_auto_meta',
                           [input])
@@ -194,6 +199,11 @@ class Workspace(object):
         resp = self._call('Workspace.get_archive_url',
                           [input])
         return resp
+
+    def du(self, input):
+        resp = self._call('Workspace.du',
+                          [input])
+        return resp[0]
 
     def ls(self, input):
         resp = self._call('Workspace.ls',

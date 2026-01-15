@@ -523,6 +523,84 @@ sub _count_directory_contents {
 	},1);
 }
 
+#Compute disk usage for a path within a workspace
+sub _calculate_du {
+	my ($self, $wsobj, $path, $name, $recursive) = @_;
+
+	my $col = $self->_mongodb()->get_collection('objects');
+	my $total_size = 0;
+	my $file_count = 0;
+	my $dir_count = 0;
+
+	# Build the subpath
+	my $subpath = "";
+	if (length($path) > 0 && length($name) > 0) {
+		$subpath = "$path/$name";
+	} elsif (length($name) > 0) {
+		$subpath = $name;
+	} elsif (length($path) > 0) {
+		$subpath = $path;
+	}
+
+	# Check if the path itself is a file (not a directory)
+	if (length($subpath) > 0) {
+		my $obj = $self->_get_db_object({
+			workspace_uuid => $wsobj->{uuid},
+			path => $path,
+			name => $name
+		}, 0);  # Don't throw error if not found
+
+		# If it's a file, just return its size
+		if (defined($obj) && !$obj->{folder}) {
+			return ($obj->{size} || 0, 1, 0);
+		}
+	}
+
+	# Build query for aggregation
+	my $query = {
+		workspace_uuid => $wsobj->{uuid},
+	};
+
+	if ($recursive && length($subpath) > 0) {
+		$query->{path} = $self->_compute_mongo_regex_for_path($subpath);
+	} elsif (length($subpath) > 0) {
+		$query->{path} = $subpath;
+	}
+	# If subpath is empty and recursive, we want everything in the workspace
+
+	# Aggregate for files (non-folders)
+	my $file_query = { %$query, folder => 0 };
+	my $file_res = $col->aggregate([
+		{ '$match' => $file_query },
+		{ '$group' => {
+			_id => 0,
+			total_size => { '$sum' => '$size' },
+			file_count => { '$sum' => 1 },
+		}},
+	]);
+
+	if ($file_res && $file_res->[0]) {
+		$total_size = $file_res->[0]->{total_size} || 0;
+		$file_count = $file_res->[0]->{file_count} || 0;
+	}
+
+	# Count directories separately
+	my $dir_query = { %$query, folder => 1 };
+	my $dir_res = $col->aggregate([
+		{ '$match' => $dir_query },
+		{ '$group' => {
+			_id => 0,
+			dir_count => { '$sum' => 1 },
+		}},
+	]);
+
+	if ($dir_res && $dir_res->[0]) {
+		$dir_count = $dir_res->[0]->{dir_count} || 0;
+	}
+
+	return ($total_size, $file_count, $dir_count);
+}
+
 #Get all subobjects contained within directory**
 sub _get_directory_contents {
 	my ($self,$obj,$recursive) = @_;
@@ -2642,6 +2720,125 @@ sub get
 }
 
 
+=head2 objects_exist
+
+  $output = $obj->objects_exist($input)
+
+=over 4
+
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+</pre>
+
+=end html
+
+=begin text
+
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+=end text
+
+
+
+=item Description
+
+
+=back
+
+=cut
+
+sub objects_exist
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	die $msg;
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN objects_exist
+    $output = [];
+    $input = $self->_validateargs($input, ["objects"], {
+        adminmode => 0,
+    });
+
+    for (my $i=0; $i < @{$input->{objects}}; $i++) {
+        my $fullpath = $input->{objects}->[$i];
+        my $result = [$fullpath, 0, ""];
+
+        eval {
+            my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
+
+            if (!defined($ws) || length($ws) == 0) {
+                $self->_error("Path ".$fullpath." does not include at least a top level directory!");
+            }
+
+            my $wsobj = $self->_wscache($user, $ws);
+            $self->_check_ws_permissions($wsobj, "r", 1);
+
+            if (length($path) == 0 && length($name) == 0) {
+                # Checking if workspace itself exists - if we got here, it does
+                $result->[1] = 1;
+            } else {
+                # Check if object exists in database
+                my $obj = $self->_get_db_object({
+                    workspace_uuid => $wsobj->{uuid},
+                    path => $path,
+                    name => $name
+                }, 0);  # 0 = don't throw error if not found
+
+                $result->[1] = defined($obj) ? 1 : 0;
+            }
+        };
+        if ($@) {
+            my $error = $@;
+            $error =~ s/_ERROR_(.*)_ERROR_.*/$1/s;
+            $result->[2] = $error;
+        }
+
+        push(@{$output}, $result);
+    }
+    #END objects_exist
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	die $msg;
+    }
+    return($output);
+}
+
+
 =head2 update_auto_meta
 
   $output = $obj->update_auto_meta($input)
@@ -3190,6 +3387,154 @@ sub get_archive_url
 	die $msg;
     }
     return($url, $file_count, $total_size);
+}
+
+
+=head2 du
+
+  $output = $obj->du($input)
+
+=over 4
+
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+</pre>
+
+=end html
+
+=begin text
+
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+
+=end text
+
+
+
+=item Description
+
+
+=back
+
+=cut
+
+sub du
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to du:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	die $msg;
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN du
+    $output = [];
+    $input = $self->_validateargs($input, ["paths"], {
+        recursive => 1,
+        adminmode => 0,
+    });
+
+    for my $fullpath (@{$input->{paths}}) {
+        my $result = [$fullpath, 0, 0, 0, ""];
+
+        eval {
+            # Handle root path case
+            if ($fullpath eq "" || $fullpath eq "/") {
+                $self->_error("Cannot compute du for root path");
+            }
+
+            # Handle user-level path (e.g., /user@example.org) - same pattern as ls
+            if ($fullpath =~ m/^\/([^\/]+)\/*$/) {
+                my $user = $1;
+                # This is a user-level path - sum up all workspaces for this user
+                my $workspaces = $self->_list_workspaces($user, $self->_formatQuery({}, 1));
+                my $total_size = 0;
+                my $file_count = 0;
+                my $dir_count = 0;
+
+                for my $wsobj (@$workspaces) {
+                    eval {
+                        $self->_check_ws_permissions($wsobj, "r", 0);
+                        my ($ws_size, $ws_files, $ws_dirs) =
+                            $self->_calculate_du($wsobj, "", "", $input->{recursive});
+                        $total_size += $ws_size;
+                        $file_count += $ws_files;
+                        $dir_count += $ws_dirs;
+                        # Count the workspace itself as a directory
+                        $dir_count++;
+                    };
+                    # Skip workspaces we can't read
+                }
+
+                $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
+            } else {
+                # Standard workspace path - parse it
+                my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
+
+                if (!defined($ws) || length($ws) == 0) {
+                    $self->_error("Path $fullpath does not include at least a top level directory!");
+                }
+
+                my $wsobj = $self->_wscache($user, $ws);
+                $self->_check_ws_permissions($wsobj, "r", 1);
+
+                my ($total_size, $file_count, $dir_count) =
+                    $self->_calculate_du($wsobj, $path, $name, $input->{recursive});
+
+                $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
+            }
+        };
+        if ($@) {
+            my $error = $@;
+            $error =~ s/_ERROR_//g;
+            $result->[4] = $error;
+        }
+
+        push(@{$output}, $result);
+    }
+    #END du
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to du:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	die $msg;
+    }
+    return($output);
 }
 
 
@@ -4497,6 +4842,89 @@ adminmode has a value which is a bool
 
 
 
+=head2 objects_exist_params
+
+=over 4
+
+
+=item Description
+
+"objects_exist" command
+        Description:
+        This function checks whether objects exist in the workspace without
+        retrieving metadata or data. Useful for lightweight existence checks.
+
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects to check
+        bool adminmode - run this command as an admin, meaning you can check anything anywhere
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 ObjectsExistResult
+
+=over 4
+
+
+=item Description
+
+ObjectsExistResult: tuple containing existence check result for a path
+
+       FullObjectPath - the path that was checked
+       bool exists - 1 if object exists, 0 if not
+       string error - set if there was an error checking this path (e.g., permission denied)
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+
+=end text
+
+=back
+
+
+
 =head2 update_auto_meta_params
 
 =over 4
@@ -4619,6 +5047,98 @@ objects has a value which is a reference to a list where each element is a FullO
 recursive has a value which is a bool
 archive_name has a value which is a string
 archive_type has a value which is a string
+
+
+=end text
+
+=back
+
+
+
+=head2 du_params
+
+=over 4
+
+
+=item Description
+
+"du" command
+        Description:
+        This function computes the disk usage (storage used in bytes) for all files
+        at and below the specified paths. Similar to the Unix du command.
+
+        Parameters:
+        list<FullObjectPath> paths - list of full paths for which disk usage should be computed
+        bool recursive - if true, include all files in subdirectories (default: true)
+        bool adminmode - run this command as an admin, meaning you can query anything anywhere
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 DiskUsageResult
+
+=over 4
+
+
+=item Description
+
+DiskUsageResult: tuple containing disk usage information for a path
+
+       FullObjectPath - the path that was queried
+       int total_size - total size in bytes of all files at and below this path
+       int file_count - number of files counted
+       int directory_count - number of directories at and below this path
+       string error - set if there was an error computing usage for this path
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
 
 
 =end text

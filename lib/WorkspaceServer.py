@@ -276,6 +276,10 @@ class Application(object):
                              name='Workspace.get',
                              types=[dict])
         self.method_authentication['Workspace.get'] = 'optional'
+        self.rpc_service.add(impl_Workspace.objects_exist,
+                             name='Workspace.objects_exist',
+                             types=[dict])
+        self.method_authentication['Workspace.objects_exist'] = 'optional'
         self.rpc_service.add(impl_Workspace.update_auto_meta,
                              name='Workspace.update_auto_meta',
                              types=[dict])
@@ -288,6 +292,10 @@ class Application(object):
                              name='Workspace.get_archive_url',
                              types=[dict])
         self.method_authentication['Workspace.get_archive_url'] = 'optional'
+        self.rpc_service.add(impl_Workspace.du,
+                             name='Workspace.du',
+                             types=[dict])
+        self.method_authentication['Workspace.du'] = 'optional'
         self.rpc_service.add(impl_Workspace.ls,
                              name='Workspace.ls',
                              types=[dict])
