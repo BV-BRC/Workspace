@@ -2962,7 +2962,7 @@ sub update_auto_meta
 	    	});
 	    	if ($obj->{shock} == 0) {
 	    		$obj->{autometadata}->{inspection_started} = _format_datetime(DateTime->now());
-		    	$self->_compute_autometadata($obj,1);
+		    	$self->_compute_autometadata([$obj],1);
 	    		push(@{$output},$self->_generate_object_meta($obj)); 
 	    	} else {
 	    		$self->_update_shock_node($obj,1);
