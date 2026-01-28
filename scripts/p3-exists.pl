@@ -37,7 +37,7 @@ my $ws = Bio::P3::Workspace::WorkspaceClientExt->new($opt->url);
 my @paths = map { s/^ws://r } @ARGV;
 
 # Call the exists API
-my $results = $ws->exists({
+my $results = $ws->objects_exist({
     objects => \@paths,
     ($opt->admin ? (adminmode => 1) : ()),
 });
