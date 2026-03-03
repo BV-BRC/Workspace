@@ -1339,7 +1339,7 @@ sub _compute_mongo_regex_for_path
     }
 }
 
-#List all objects matching input query**
+#List all objects matching input query** accept the pre-processed $search_filters from ls
 sub _list_objects {
 	my ($self,$fullpath,$query,$excludeDirectories,$excludeObjects,$recursive) = @_;
 	my $hint;
@@ -1369,8 +1369,12 @@ sub _list_objects {
 	#
 	my %bad_ws = ('942D0C20-D8CF-11EA-A092-E9C4682E0674' => 1,
 		      '7E50286E-C07E-11EB-954E-D6FC682E0674' => 1);
+    my $perform_recursive_search = $recursive;
+    if ($recursive == 1 && $bad_ws{$wsobj->{uuid}} && !defined($query->{name}) && !defined($query->{type})) {
+        $perform_recursive_search = 0;
+    }
 
-	if ($recursive == 1 && !$bad_ws{$wsobj->{uuid}})
+	if ($perform_recursive_search == 1)
 	{
 
 	    if (length($path) > 0) {
@@ -3656,20 +3660,25 @@ sub ls
 
     $output = {};
     $input = $self->_validateargs($input,["paths"],{
-    	excludeDirectories => 0,
+        excludeDirectories => 0,
 		excludeObjects => 0,
 		recursive => 0,
 		fullHierachicalOutput => 0,
 		query => {}
     });
     foreach my $fullpath (@{$input->{paths}}) {
-    	my $objs = [];
+        my $objs = [];
+        my $query = $input->{query};
+        if (defined($query->{name_search})) {
+            $query->{name} = qr/$query->{name_search}/i;
+            delete $query->{name_search};
+        }
     	if ($fullpath eq "" || $fullpath eq "/") {
-    		$objs = $self->_list_workspaces(undef,$self->_formatQuery($input->{query},1));
+    		$objs = $self->_list_workspaces(undef,$self->_formatQuery($query,1));
     	} elsif ($fullpath =~ m/^\/([^\/]+)\/*$/) {
-    		$objs = $self->_list_workspaces($1,$self->_formatQuery($input->{query},1));
+    		$objs = $self->_list_workspaces($1,$self->_formatQuery($query,1));
     	} else {
-    		$objs = $self->_list_objects($fullpath,$self->_formatQuery($input->{query},0),$input->{excludeDirectories},$input->{excludeObjects},$input->{recursive});
+    		$objs = $self->_list_objects($fullpath,$self->_formatQuery($query,0),$input->{excludeDirectories},$input->{excludeObjects},$input->{recursive});
     	}
     	for (my $i=0; $i < @{$objs}; $i++) {
     		my $meta = $self->_generate_object_meta($objs->[$i]);
@@ -3691,7 +3700,6 @@ sub ls
     }
     return($output);
 }
-
 
 =head2 copy
 
