@@ -255,7 +255,14 @@ func (m *MongoDB) ListObjects(ctx context.Context, path string, recursive bool) 
 
 ### 3. Storage Interface
 
-Abstract storage backend to support multiple implementations:
+Abstract storage backend to support multiple implementations.
+
+**Implementation Order:**
+1. **Shock first** - Full read/write support via Shock API (matches current Perl behavior)
+2. **Direct filesystem** - Read existing Shock files directly from filesystem (bypass HTTP overhead)
+3. **S3** - New storage backend for future deployments
+
+This ordering ensures the Go service can be deployed as a drop-in replacement before any storage migration occurs.
 
 ```go
 package storage
@@ -997,12 +1004,13 @@ func TestCompatibility(t *testing.T) {
 
 ## Migration Strategy
 
-### Phase 1: Parallel Deployment (2-3 weeks)
+### Phase 1: Parallel Deployment with Shock (2-3 weeks)
 
 1. Deploy Go service on different port (e.g., 7126)
-2. Run both services against same MongoDB and storage
-3. Route test traffic to Go service
-4. Compare results between services
+2. Configure Go service to use Shock backend (same as Perl)
+3. Both services use same MongoDB and Shock instance
+4. Route test traffic to Go service
+5. Compare results between services
 
 ### Phase 2: Shadow Traffic (1-2 weeks)
 
@@ -1016,11 +1024,18 @@ func TestCompatibility(t *testing.T) {
 2. Monitor error rates and latency
 3. Increase percentage as confidence builds
 
-### Phase 4: Full Cutover
+### Phase 4: Full Cutover to Go + Shock
 
 1. Route all traffic to Go service
 2. Keep Perl service on standby
-3. Decommission after stability period
+3. Decommission Perl after stability period
+
+### Phase 5: Storage Migration (Post-Cutover)
+
+1. Enable direct filesystem reads in Go service (bypass Shock HTTP)
+2. Verify performance improvement
+3. Optionally migrate to S3 for new deployments
+4. Decommission Shock service once all reads are direct
 
 ## Dependencies
 
@@ -1069,7 +1084,7 @@ require (
 | Phase | Duration | Notes |
 |-------|----------|-------|
 | Core infrastructure | 1 week | Server, MongoDB, config |
-| Storage backends | 1 week | S3, filesystem, Shock |
+| Shock storage backend | 1 week | Full read/write via Shock API (priority) |
 | API methods (core) | 2 weeks | ls, get, create, delete, copy |
 | API methods (remaining) | 1 week | permissions, du, archive |
 | Upload/download endpoints | 1 week | Multipart, range requests |
@@ -1078,7 +1093,10 @@ require (
 | Documentation | 1 week | |
 | Parallel deployment | 2 weeks | |
 | Cutover | 2 weeks | |
-| **Total** | **~14 weeks** | |
+| **Subtotal (Go service live)** | **~14 weeks** | Using Shock backend |
+| Direct filesystem backend | 1 week | Read Shock files directly (post-cutover) |
+| S3 backend | 1 week | Optional, for new deployments |
+| **Total with all backends** | **~16 weeks** | |
 
 ## Appendix: API Method Mapping
 
