@@ -562,11 +562,15 @@ sub _calculate_du {
 	};
 
 	if ($recursive && length($subpath) > 0) {
-		$query->{path} = $self->_compute_mongo_regex_for_path($subpath);
+		my $path_query = $self->_compute_mongo_path_query($subpath);
+		$query = { %$query, %$path_query };
 	} elsif (length($subpath) > 0) {
 		$query->{path} = $subpath;
 	}
 	# If subpath is empty and recursive, we want everything in the workspace
+
+	# Index hint for aggregate queries - use workspace_uuid_1_path_1
+	my $agg_hint = 'workspace_uuid_1_path_1';
 
 	# Aggregate for files (non-folders)
 	my $file_query = { %$query, folder => 0 };
@@ -577,7 +581,7 @@ sub _calculate_du {
 			total_size => { '$sum' => '$size' },
 			file_count => { '$sum' => 1 },
 		}},
-	]);
+	], { hint => $agg_hint });
 
 	if ($file_res && $file_res->[0]) {
 		$total_size = $file_res->[0]->{total_size} || 0;
@@ -592,7 +596,7 @@ sub _calculate_du {
 			_id => 0,
 			dir_count => { '$sum' => 1 },
 		}},
-	]);
+	], { hint => $agg_hint });
 
 	if ($dir_res && $dir_res->[0]) {
 		$dir_count = $dir_res->[0]->{dir_count} || 0;
@@ -1315,20 +1319,45 @@ sub _list_workspaces {
 }
 
 #
-# Given a path string, return the regex suitable for
-# a mongo search to return all objects below that path.
+# Given a path string, return a query clause suitable for
+# a mongo search to return all objects at or below that path.
+# Returns a hashref with an $or clause for index-friendly matching.
+#
+sub _compute_mongo_path_query
+{
+    my($self, $path) = @_;
+    if (length($path) > 0) {
+	# Use $or with exact match and simple prefix regex
+	# The regex /^path\// is index-friendly (no alternation)
+	my $esc_path = quotemeta($path);
+	return {
+	    '$or' => [
+		{ path => $path },              # exact match (the path itself)
+		{ path => qr/^$esc_path\// }    # children (prefix + /)
+	    ]
+	};
+    }
+    else
+    {
+	return {};
+    }
+}
+
+#
+# Legacy function - returns a regex for path matching.
+# DEPRECATED: Use _compute_mongo_path_query instead for better index usage.
 #
 sub _compute_mongo_regex_for_path
 {
     my($self, $path) = @_;
     if (length($path) > 0) {
 	my $term = '(/|$)';
-	
+
 	# print STDERR "Before $path\n";
 	#$path =~ s/[.()]/\\$&/g;
 	$path = quotemeta($path);
 	# print STDERR "After $path\n";
-	
+
 	my $rc = qr/^$path$term/;
 	# print STDERR "RE $rc\n";
 	return $rc;
@@ -1365,26 +1394,16 @@ sub _list_objects {
 		$query->{folder} = 1;
 	    }
 	#
-	# HACK: Force query hint for huge workspace.
+	# Use index hint for path queries to ensure optimal index usage
 	#
-	my %bad_ws = ('942D0C20-D8CF-11EA-A092-E9C4682E0674' => 1,
-		      '7E50286E-C07E-11EB-954E-D6FC682E0674' => 1);
-
-	if ($recursive == 1 && !$bad_ws{$wsobj->{uuid}})
+	if ($recursive == 1)
 	{
-
 	    if (length($path) > 0) {
-		# print STDERR "INVOKE $path\n";
-		$query->{path} = $self->_compute_mongo_regex_for_path($path);
-
-		# print STDERR "GOT $path $query->{path}\n";
-		#$path = "^".quotemeta($path);
-		#$query->{path} = qr/$path/;
-
-		if ($bad_ws{$wsobj->{uuid}})
-		{
-		    $hint = "path_1_workspace_uuid_1";
-		}
+		# Use the new index-friendly path query
+		my $path_query = $self->_compute_mongo_path_query($path);
+		$query = { %$query, %$path_query };
+		# Always use hint for recursive path queries
+		$hint = 'workspace_uuid_1_path_1';
 	    }
 	} else {
 		$query->{path} = $path;
@@ -3272,7 +3291,9 @@ sub get_archive_url
 	    if ($path ne '' || $name ne '')
 	    {
 		my $subpath = ($path eq '' && $name eq '') ? "" : ($path ? "$path/$name" : $name);
-		@path_q = (path => $self->_compute_mongo_regex_for_path($subpath));
+		my $path_query = $self->_compute_mongo_path_query($subpath);
+		# Flatten the path query into @path_q list
+		@path_q = %$path_query;
 	    }
 	    my $path_spec = {
 		@path_q,
@@ -3280,6 +3301,7 @@ sub get_archive_url
 		folder => 0,
 	    };
 
+	    # Use index hint for optimal query performance
 	    my $res = $col->aggregate([
 				   { '$match' => $path_spec },
 				   { '$group' => {
@@ -3287,7 +3309,7 @@ sub get_archive_url
 				       total_size => { '$sum' => '$size' },
 				       file_count => { '$sum' => 1 },
 				   } },
-				       ]);
+				       ], { hint => 'workspace_uuid_1_path_1' });
 
 	    print Dumper($path_spec, $res);
 	    $total_size += $res->[0]->{total_size};
