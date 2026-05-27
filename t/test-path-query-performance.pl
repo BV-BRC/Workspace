@@ -111,22 +111,23 @@ if ($url) {
 # Unit test for _compute_mongo_path_query
 #
 subtest "_compute_mongo_path_query unit test" => sub {
-    plan tests => 6;
+    plan tests => 8;
 
     # We need to test the function directly, so we need the impl
     my $impl;
     if ($url) {
         # Skip unit tests when using remote service
         SKIP: {
-            skip "Unit tests require local implementation", 6;
+            skip "Unit tests require local implementation", 8;
         }
         return;
     }
 
     $impl = $ws;
 
-    # Test with a simple path
-    my $query = $impl->_compute_mongo_path_query("foo/bar");
+    # Test with a simple path and workspace_uuid
+    my $test_uuid = "TEST-UUID-1234";
+    my $query = $impl->_compute_mongo_path_query("foo/bar", $test_uuid);
     ok(ref($query) eq 'HASH', "Returns a hashref");
     ok(exists $query->{'$or'}, "Query contains \$or clause");
     ok(ref($query->{'$or'}) eq 'ARRAY', "\$or value is an array");
@@ -138,6 +139,10 @@ subtest "_compute_mongo_path_query unit test" => sub {
     # Check the second alternative is a regex
     my $regex = $query->{'$or'}->[1]->{path};
     ok(ref($regex) eq 'Regexp', "Second alternative is a regex");
+
+    # Check workspace_uuid is inside each $or branch (required for index usage)
+    is($query->{'$or'}->[0]->{workspace_uuid}, $test_uuid, "First branch has workspace_uuid");
+    is($query->{'$or'}->[1]->{workspace_uuid}, $test_uuid, "Second branch has workspace_uuid");
 
     if ($verbose) {
         print "Query structure:\n";
@@ -159,7 +164,7 @@ subtest "Path regex matching behavior" => sub {
     }
 
     my $impl = $ws;
-    my $query = $impl->_compute_mongo_path_query("test/path");
+    my $query = $impl->_compute_mongo_path_query("test/path", "TEST-UUID");
     my $regex = $query->{'$or'}->[1]->{path};
 
     # Test what the regex matches
@@ -187,9 +192,9 @@ subtest "Empty path handling" => sub {
     }
 
     my $impl = $ws;
-    my $query = $impl->_compute_mongo_path_query("");
+    my $query = $impl->_compute_mongo_path_query("", "TEST-UUID");
     ok(ref($query) eq 'HASH', "Empty path returns hashref");
-    is(scalar(keys %$query), 0, "Empty path returns empty hashref");
+    is($query->{workspace_uuid}, "TEST-UUID", "Empty path with uuid returns workspace_uuid scope");
 };
 
 #
@@ -208,7 +213,7 @@ subtest "Special character escaping" => sub {
     my $impl = $ws;
 
     # Test path with regex special characters
-    my $query = $impl->_compute_mongo_path_query("path.with" . '$special(chars)');
+    my $query = $impl->_compute_mongo_path_query("path.with" . '$special(chars)', "TEST-UUID");
     ok(ref($query) eq 'HASH', "Path with special chars returns hashref");
 
     my $regex = $query->{'$or'}->[1]->{path};
@@ -292,12 +297,20 @@ subtest "Integration test with workspace operations" => sub {
         my $list_time = tv_interval($t0);
         print "  Recursive listing time: ${list_time}s\n" if $verbose;
 
-        # Count items
+        # Count items across all keys in the result hash
         my $item_count = 0;
-        if ($list_result->{$test_path}) {
-            $item_count = scalar(@{$list_result->{$test_path}});
+        for my $key (keys %$list_result) {
+            my $count = scalar(@{$list_result->{$key}});
+            $item_count += $count;
+            if ($verbose) {
+                print "  Key '$key': $count items\n";
+                for my $item (@{$list_result->{$key}}) {
+                    # ObjectMeta: [name, type, path, creation_date, id, owner, size, ...]
+                    printf "    %-30s %-8s %s\n", $item->[0], $item->[1], $item->[2];
+                }
+            }
         }
-        print "  Items found: $item_count\n" if $verbose;
+        print "  Total items found: $item_count\n" if $verbose;
 
         # Expected: 3 dirs + 3*2 subdirs + 3*2*3 files = 3 + 6 + 18 = 27
         ok($item_count >= 20, "Found expected number of items ($item_count >= 20)");
