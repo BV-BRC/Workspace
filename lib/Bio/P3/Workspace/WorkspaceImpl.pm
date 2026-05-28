@@ -569,6 +569,8 @@ sub _calculate_du {
 	}
 	# If subpath is empty and recursive, we want everything in the workspace
 
+	my $agg_hint = 'workspace_uuid_1_path_1';
+
 	# Aggregate for files (non-folders)
 	my $file_query = { %$query, folder => 0 };
 	my $file_res = $col->aggregate([
@@ -578,7 +580,7 @@ sub _calculate_du {
 			total_size => { '$sum' => '$size' },
 			file_count => { '$sum' => 1 },
 		}},
-	]);
+	], { hint => $agg_hint });
 
 	if ($file_res && $file_res->[0]) {
 		$total_size = $file_res->[0]->{total_size} || 0;
@@ -593,7 +595,7 @@ sub _calculate_du {
 			_id => 0,
 			dir_count => { '$sum' => 1 },
 		}},
-	]);
+	], { hint => $agg_hint });
 
 	if ($dir_res && $dir_res->[0]) {
 		$dir_count = $dir_res->[0]->{dir_count} || 0;
@@ -1389,11 +1391,13 @@ sub _list_objects {
 	} elsif ($excludeObjects == 1) {
 		$query->{folder} = 1;
 	    }
+	my $hint;
 	if ($recursive == 1)
 	{
 	    if (length($path) > 0) {
 		my $path_query = $self->_compute_mongo_path_query($path, $wsobj->{uuid});
 		$query = { %$query, %$path_query };
+		$hint = 'workspace_uuid_1_path_1';
 	    } else {
 		$query->{workspace_uuid} = $wsobj->{uuid};
 	    }
@@ -1401,7 +1405,7 @@ sub _list_objects {
 		$query->{workspace_uuid} = $wsobj->{uuid};
 		$query->{path} = $path;
 	}
-	return $self->_query_database($query,0, 0);
+	return $self->_query_database($query,0, 0, $hint);
 }
 
 #Formating queries to support direct mongo queries - this will need to get far more sophisticated**
@@ -3300,7 +3304,7 @@ sub get_archive_url
 				       total_size => { '$sum' => '$size' },
 				       file_count => { '$sum' => 1 },
 				   } },
-				       ]);
+				       ], { hint => 'workspace_uuid_1_path_1' });
 
 	    print Dumper($path_spec, $res);
 	    $total_size += $res->[0]->{total_size};
