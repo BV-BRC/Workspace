@@ -557,16 +557,19 @@ sub _calculate_du {
 	}
 
 	# Build query for aggregation
-	my $query = {
-		workspace_uuid => $wsobj->{uuid},
-	};
+	my $query;
 
 	if ($recursive && length($subpath) > 0) {
-		$query->{path} = $self->_compute_mongo_regex_for_path($subpath);
-	} elsif (length($subpath) > 0) {
-		$query->{path} = $subpath;
+		$query = $self->_compute_mongo_path_query($subpath, $wsobj->{uuid});
+	} else {
+		$query = { workspace_uuid => $wsobj->{uuid} };
+		if (length($subpath) > 0) {
+			$query->{path} = $subpath;
+		}
 	}
 	# If subpath is empty and recursive, we want everything in the workspace
+
+	my $agg_hint = 'workspace_uuid_1_path_1';
 
 	# Aggregate for files (non-folders)
 	my $file_query = { %$query, folder => 0 };
@@ -577,7 +580,7 @@ sub _calculate_du {
 			total_size => { '$sum' => '$size' },
 			file_count => { '$sum' => 1 },
 		}},
-	]);
+	], { hint => $agg_hint });
 
 	if ($file_res && $file_res->[0]) {
 		$total_size = $file_res->[0]->{total_size} || 0;
@@ -592,7 +595,7 @@ sub _calculate_du {
 			_id => 0,
 			dir_count => { '$sum' => 1 },
 		}},
-	]);
+	], { hint => $agg_hint });
 
 	if ($dir_res && $dir_res->[0]) {
 		$dir_count = $dir_res->[0]->{dir_count} || 0;
@@ -1315,20 +1318,46 @@ sub _list_workspaces {
 }
 
 #
-# Given a path string, return the regex suitable for
-# a mongo search to return all objects below that path.
+# Given a path string, return a query clause suitable for
+# a mongo search to return all objects at or below that path.
+# Returns a hashref with an $or clause for index-friendly matching.
+#
+sub _compute_mongo_path_query
+{
+    my($self, $path, $workspace_uuid) = @_;
+    if (length($path) > 0) {
+	my $esc_path = quotemeta($path);
+	# workspace_uuid must be inside each $or branch so MongoDB can
+	# do a tight IXSCAN on {workspace_uuid, path} for each branch.
+	my %scope = $workspace_uuid ? (workspace_uuid => $workspace_uuid) : ();
+	return {
+	    '$or' => [
+		{ %scope, path => $path },
+		{ %scope, path => qr/^$esc_path\// },
+	    ]
+	};
+    }
+    else
+    {
+	return $workspace_uuid ? { workspace_uuid => $workspace_uuid } : {};
+    }
+}
+
+#
+# Legacy function - returns a regex for path matching.
+# DEPRECATED: Use _compute_mongo_path_query instead for better index usage.
 #
 sub _compute_mongo_regex_for_path
 {
     my($self, $path) = @_;
     if (length($path) > 0) {
 	my $term = '(/|$)';
-	
+
 	# print STDERR "Before $path\n";
 	#$path =~ s/[.()]/\\$&/g;
 	$path = quotemeta($path);
 	# print STDERR "After $path\n";
-	
+
 	my $rc = qr/^$path$term/;
 	# print STDERR "RE $rc\n";
 	return $rc;
@@ -1342,7 +1371,6 @@ sub _compute_mongo_regex_for_path
 #List all objects matching input query**
 sub _list_objects {
 	my ($self,$fullpath,$query,$excludeDirectories,$excludeObjects,$recursive) = @_;
-	my $hint;
 	my ($user,$ws,$path,$name) = $self->_parse_ws_path($fullpath);
 	if (length($name) > 0) {
 		if (length($path) > 0) {
@@ -1358,38 +1386,26 @@ sub _list_objects {
 	if (!defined($query)) {
 		$query = {};
 	}
-	$query->{workspace_uuid} = $wsobj->{uuid};
 	if ($excludeDirectories == 1) {
 		$query->{folder} = 0;
 	} elsif ($excludeObjects == 1) {
 		$query->{folder} = 1;
 	    }
-	#
-	# HACK: Force query hint for huge workspace.
-	#
-	my %bad_ws = ('942D0C20-D8CF-11EA-A092-E9C4682E0674' => 1,
-		      '7E50286E-C07E-11EB-954E-D6FC682E0674' => 1);
-
-	if ($recursive == 1 && !$bad_ws{$wsobj->{uuid}})
+	my $hint;
+	if ($recursive == 1)
 	{
-
 	    if (length($path) > 0) {
-		# print STDERR "INVOKE $path\n";
-		$query->{path} = $self->_compute_mongo_regex_for_path($path);
-
-		# print STDERR "GOT $path $query->{path}\n";
-		#$path = "^".quotemeta($path);
-		#$query->{path} = qr/$path/;
-
-		if ($bad_ws{$wsobj->{uuid}})
-		{
-		    $hint = "path_1_workspace_uuid_1";
-		}
+		my $path_query = $self->_compute_mongo_path_query($path, $wsobj->{uuid});
+		$query = { %$query, %$path_query };
+		$hint = 'workspace_uuid_1_path_1';
+	    } else {
+		$query->{workspace_uuid} = $wsobj->{uuid};
 	    }
 	} else {
+		$query->{workspace_uuid} = $wsobj->{uuid};
 		$query->{path} = $path;
 	}
-	return $self->_query_database($query,0, 1, $hint);
+	return $self->_query_database($query,0, 0, $hint);
 }
 
 #Formating queries to support direct mongo queries - this will need to get far more sophisticated**
@@ -3268,17 +3284,18 @@ sub get_archive_url
 		next;
 	    }
 
-	    my @path_q;
+	    my $path_spec;
 	    if ($path ne '' || $name ne '')
 	    {
 		my $subpath = ($path eq '' && $name eq '') ? "" : ($path ? "$path/$name" : $name);
-		@path_q = (path => $self->_compute_mongo_regex_for_path($subpath));
+		$path_spec = $self->_compute_mongo_path_query($subpath, $wsobj->{uuid});
+		$path_spec->{folder} = 0;
+	    } else {
+		$path_spec = {
+		    workspace_uuid => $wsobj->{uuid},
+		    folder => 0,
+		};
 	    }
-	    my $path_spec = {
-		@path_q,
-		workspace_uuid => $wsobj->{uuid},
-		folder => 0,
-	    };
 
 	    my $res = $col->aggregate([
 				   { '$match' => $path_spec },
@@ -3287,7 +3304,7 @@ sub get_archive_url
 				       total_size => { '$sum' => '$size' },
 				       file_count => { '$sum' => 1 },
 				   } },
-				       ]);
+				       ], { hint => 'workspace_uuid_1_path_1' });
 
 	    print Dumper($path_spec, $res);
 	    $total_size += $res->[0]->{total_size};
