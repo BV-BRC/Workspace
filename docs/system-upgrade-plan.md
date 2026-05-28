@@ -597,11 +597,10 @@ HDDs removed in Phases 1 and 2 (Phase 1: 10 small HDDs from DB servers; Phase 2:
 
 | Host | Role | Empty Slots | Enclosure |
 |------|------|-------------|-----------|
-| ash | slurm_compute | 8 | enc 252 |
-| cedar | slurm_compute | 8 | enc 252 |
 | cherry | slurm_compute | 3 | enc 32 |
-| fir | slurm_compute | 11 | enc 0 (3), enc 252 (8) |
+| fir | slurm_compute | 3 | enc 0 |
 | lemon | slurm_compute | 18 | enc 251 |
+| locust | other | 2 | enc 32 |
 | pear | slurm_compute | 3 | enc 32 |
 | willow | other | 18 | enc 0 |
 
