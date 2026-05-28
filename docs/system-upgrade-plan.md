@@ -342,33 +342,40 @@ The workstreams have dependencies and shared deployment windows. Here is the rec
 ```
 Immediate (any monthly window)
 ├── 1. Retry wrapper implementation
-├── 3. Drop unused MongoDB indexes (19.3 GB recovery)
-└── 3. Auth credential migration (SCRAM-SHA-1 conversion)
+├── 5. Drop unused MongoDB indexes (19.3 GB recovery)
+├── 5. Auth credential migration (SCRAM-SHA-1 conversion)
+└── 9. SSD Phase 2 easy (hot-add to Solr hosts with empty slots)
 
 Next quarterly master-tier window
 ├── 3. Shock removal (deploy with use-shock toggle)
-└── 6. OAuth2 Phase 1-2 (p3_oidc deploy, dual-token validation)
+├── 6. OAuth2 Phase 1-2 (p3_oidc deploy, dual-token validation)
+└── 9. SSD Phase 1 + Phase 2 special (DB server swaps, larch/hemlock/arborvitae)
 
 Following quarterly window
 ├── 2. Driver upgrade v0.708 → v2.2.2
 ├── 5. MongoDB server upgrade 3.4 → 5.0+ (Percona)
 └── 6. OAuth2 Phase 3-4 (website + CLI OIDC login)
 
+After MongoDB server upgrade
+├── 8. Schema redesign: backfill ancestors array (dual-field mode)
+├── 8. Schema redesign: cut over reads to ancestors
+└── 8. Schema redesign: drop path field and old indexes
+
 Ongoing (months)
-├── 4. Go port development
+├── 4. Go port development (build against ancestors schema)
 ├── S3 storage backend (in Go)
 └── 6. OAuth2 Phase 5-6 (service-to-service, legacy deprecation)
 ```
 
 ### Critical Path
 
-The critical path for the database upgrade is:
+The critical path for the database modernization is:
 
 ```
-Auth credential migration → Driver upgrade → MongoDB server upgrade
+Auth credential migration → Driver upgrade → MongoDB server upgrade → Schema redesign
 ```
 
-Each step is a prerequisite for the next. The auth migration is safe to do immediately. The driver upgrade and server upgrade should be done together in the same quarterly window to minimize the period running an untested combination.
+Each step is a prerequisite for the next. The auth migration is safe to do immediately. The driver upgrade and server upgrade should be done together in the same quarterly window. The schema redesign depends on MongoDB 4.2+ for the aggregation pipeline `$set` used in move operations — without it, moves fall back to a slower query-and-update approach.
 
 ### Parallel Work
 
@@ -379,6 +386,8 @@ These can proceed in parallel without blocking each other:
 - OAuth2 Phases 1-2 (independent of Workspace internals)
 - Go port development (can start anytime, runs alongside Perl service)
 - Index cleanup (immediate, independent)
+- SSD hot-adds to Solr hosts (independent of software changes)
+- Schema redesign development/testing (can be coded and tested before MongoDB upgrade, deployed after)
 
 ---
 
@@ -392,13 +401,107 @@ These can proceed in parallel without blocking each other:
 | Go port | High | Service outage | Route traffic back to Perl service |
 | MongoDB upgrade | Medium-High | Data access failure | Revert replica set members (requires planning) |
 | OAuth2 | High | Auth outage affecting all services | Dual-token period provides fallback |
+| Schema redesign | Medium | Query failures, incorrect results | Dual-field period — fall back to `path` queries |
+| SSD upgrades | Low-Medium | Drive failure during swap, RAID rebuild | Keep displaced drives; restore from backup |
 
 ---
 
-## Workstream 7: SSD Storage Upgrades
+## Workstream 8: MongoDB Schema Redesign (Ancestors Array)
+
+**Status**: Design complete
+**Risk**: Medium (schema migration on hundreds of millions of documents)
+**Effort**: ~2 weeks development + migration
+**Reference**: [schema-redesign-ancestors-array.md](schema-redesign-ancestors-array.md)
+
+### Problem
+
+The current schema stores hierarchical position as a `path` string (e.g., `"experiments/2024/genome-analysis"`). This causes three operational problems we've hit directly:
+
+1. **Recursive listing requires regex** — `path: /^experiments\/2024/` forces index scans or depends on fragile `hint()` directives. We spent significant effort fixing MongoDB 3.4 query planner bugs where it selected wrong indexes for `$or` queries on path, and even the fixed version requires `workspace_uuid` inside each `$or` branch plus explicit hints.
+
+2. **Renames are O(n)** — renaming a folder updates the `path` string of every descendant. A folder with 100,000 objects underneath requires 100,000 individual document updates.
+
+3. **Deletes walk the tree** — `_delete_object` queries children level by level, deleting one at a time.
+
+### Solution: Ancestors Array Pattern
+
+Replace the `path` string with:
+- `ancestors: [UUID_A, UUID_B, UUID_C]` — array of ancestor folder UUIDs, root to parent
+- `parent_uuid: UUID_C` — direct parent (last element of ancestors)
+- `depth: 3` — length of ancestors array
+
+```javascript
+// Current
+{ workspace_uuid: "WS", path: "exp/2024/analysis", name: "results.json" }
+
+// Proposed
+{ workspace_uuid: "WS", parent_uuid: "ANALYSIS-UUID",
+  ancestors: ["EXP-UUID", "2024-UUID", "ANALYSIS-UUID"],
+  depth: 3, name: "results.json" }
+```
+
+### Impact on Each Operation
+
+| Operation | Current | Proposed | Improvement |
+|-----------|---------|----------|-------------|
+| Recursive ls | Regex + hint + `$or` workaround | `{ancestors: UUID}` equality match | Eliminates regex, `$or`, hints entirely |
+| Non-recursive ls | `{path: "exact"}` | `{parent_uuid: UUID}` | Equivalent |
+| Rename (same location) | O(n) descendant updates | O(1) — update folder `name` only | Descendants reference by UUID, not path string |
+| Move (different parent) | O(n) query + re-insert each | Single `updateMany` array splice | Still O(n) but one atomic operation |
+| Recursive delete | Walk tree level by level | Single `deleteMany` | One query |
+| Disk usage (du) | Regex aggregate + hint | `{ancestors: UUID}` aggregate | Clean, no hint needed |
+| Path display | Free (stored in `path`) | O(depth) UUID→name lookup | 3-5 docs, cacheable |
+
+### Index Changes
+
+| Remove | Size | Reason |
+|--------|------|--------|
+| `workspace_uuid_1_path_1` | 2.5 GB | Replaced by ancestors |
+| `path_1_workspace_uuid_1` | 4.0 GB | Replaced by ancestors |
+
+| Add | Est. Size | Purpose |
+|-----|-----------|---------|
+| `{workspace_uuid: 1, ancestors: 1}` | ~7-10 GB | Multikey index for recursive queries |
+| `{workspace_uuid: 1, parent_uuid: 1}` | ~2 GB | Non-recursive listing |
+
+The multikey index is 3-4x the current path index size (one entry per array element at avg depth 3-4). This is offset by dropping the 19 GB of unused indexes identified in Workstream 5.
+
+### Migration Strategy
+
+Four-phase dual-field transition — both `path` and `ancestors` maintained simultaneously:
+
+1. **Add fields**: Backfill `parent_uuid`, `ancestors`, `depth` for all existing objects. Source: parse the existing `path` string, look up each component's folder UUID.
+2. **Dual-write**: New objects written with both `path` and `ancestors`. Reads use `ancestors` for recursive, `path` as fallback.
+3. **Cut over**: All reads use `ancestors`/`parent_uuid`. `path` no longer queried.
+4. **Remove**: Drop `path` field and old path indexes.
+
+The backfill processes workspace-by-workspace and can run online. Background index build for the new multikey index.
+
+### Sequencing with Other Workstreams
+
+The schema redesign intersects with:
+
+- **Go port (Workstream 4)**: The Go service can be built against the new schema from the start. If timed together, the schema migration validates during the Go port validation period — the Perl service reads `path`, the Go service reads `ancestors`, both work during dual-field mode.
+
+- **MongoDB server upgrade (Workstream 5)**: The aggregation pipeline `$set` used for move operations (array splice) works on MongoDB 4.2+. If the schema migration happens before the server upgrade, moves must use the slower query-and-update approach. **Recommendation**: do the server upgrade first, then the schema migration.
+
+- **Query performance fixes (current)**: The `$or` restructuring and hint work we've done is a stopgap. The ancestors array eliminates the need for `$or`, regex, and hints entirely — it's the definitive fix.
+
+### Risks
+
+| Risk | Mitigation |
+|------|------------|
+| Missing folder documents | Some path components may lack MongoDB documents. Backfill script creates them. |
+| Multikey index build time | Background build on hundreds of millions of docs. May take hours. |
+| Backfill duration | Process workspace-by-workspace. Can pause/resume. |
+| Rollback | Keep `path` field until fully validated. Revert reads to path-based queries instantly. |
+
+---
+
+## Workstream 9: SSD Storage Upgrades
 
 **Status**: Inventory complete, allocation planned
-**Risk**: Low (additive — all drives go into empty slots)
+**Risk**: Low for Phase 2 (additive); Medium for Phase 1 and special-handling hosts (disk swaps)
 **Effort**: ~1-2 days physical installation per phase
 
 ### Inventory
@@ -410,13 +513,33 @@ These can proceed in parallel without blocking each other:
 
 ### Infrastructure Survey Findings (2026-05-28)
 
-A full hardware survey of 45 hosts identified drive types, RAID controllers, enclosure slot counts, and empty bays. Key findings:
+A full hardware survey of 45 hosts was conducted using `survey-host.sh` with storcli/MegaCli RAID controller interrogation. The survey identified physical drive types behind RAID controllers (not just `lsblk` ROTA flags, which report the virtual disk type), enclosure slot counts, and empty bays.
 
-- Most Solr hosts already have SSDs installed (Micron 5300 1.7TB, Intel 960GB) via MegaRAID controllers, but have significant empty slots available.
-- All Solr hosts except chestnut and walnut have 24-slot enclosures with 8-18 empty slots.
-- Several MongoDB hosts (gum, spruce, maple) still have all-HDD storage.
+Key findings:
+
+- **Most Solr hosts already have SSDs** behind MegaRAID controllers (Micron 5300 1.7TB, Intel 960GB). The `lsblk` ROTA flag was misleading — it reported the RAID virtual disk, not the underlying physical media.
+- Solr hosts with 24-slot enclosures have 8-18 empty slots available for adding drives without swapping.
+- **Three hosts are all-HDD with no empty slots**: hemlock (12 HDD, enc 0 full), larch (12 HDD, enc 0 full), pecan (8 HDD, enc 32 full).
+- Several MongoDB hosts (gum, spruce, maple) have HDD but no RAID controller data (likely direct-attached or different controller type).
 - bio-gp (MongoDB primary, 94 GB RAM) is already all-SSD but needs a RAM upgrade.
-- pecan (MongoDB secondary) is deprioritized — all HDD, 8 slots full, would require swaps.
+- pecan (MongoDB secondary) is deprioritized — all HDD, 8 slots full.
+- Enclosure 252 on many hosts is an SGPIO virtual enclosure (drive LED controller), not a real drive bay — filtered from slot counts.
+
+### Actual Drive Types (from RAID physical drive data)
+
+| Host | DC | Role | RAID SSDs | RAID HDDs | Real Empty Slots |
+|------|-----|------|-----------|-----------|------------------|
+| arborvitae | B386 | Solr | 24 | 0 | 0 (enc 0 full) |
+| balsam | B386 | Solr | 16 | 0 | 8 (enc 0) |
+| bio-gp1 | B240 | Solr | 14 | 0 | 10 (enc 0) |
+| bio-gp2 | B240 | Solr | 14 | 0 | 10 (enc 0) |
+| bio-gp3 | B240 | Solr | 14 | 0 | 10 (enc 0) |
+| butternut | B386 | Solr | 8 | 0 | 16 (enc 0) |
+| cottonwood | B240 | Solr | 4 | 2 | 18 (enc 0) |
+| hemlock | B240 | Solr+compute | 0 | 12 | 0 (enc 0 full) |
+| larch | B386 | MongoDB+Solr | 0 | 12 | 0 (enc 0 full) |
+| magnolia | B240 | Solr | 4 | 2 | 18 (enc 0) |
+| walnut | B240 | Solr+web | 2 | 0 | 6 (enc 32) |
 
 ### Phase 1: Database Servers (10x 3.84TB)
 
@@ -432,21 +555,33 @@ All replacements — swap out existing small HDDs.
 
 ### Phase 2: Solr Servers (2x 3.84TB + 18x 7.68TB)
 
-All additions to empty slots — no disk swaps required. Each Solr host gets 2x 7.68TB (15.4 TB) for balanced capacity, except magnolia and walnut which get 1x 3.84TB each (smaller Solr footprint, already have SSD).
+Most Solr hosts already have SSD pools. The new drives **add capacity** to existing SSD arrays via empty slots. Each host gets 2x 7.68TB (15.4 TB additional) for balanced capacity growth, except magnolia and walnut which get 1x 3.84TB each.
 
-| Host | DC | Empty Slots | Drives | New SSD TB | Notes |
-|------|-----|------------|--------|-----------|-------|
-| arborvitae | B386 | 8 | 2x 7.68TB | 15.4 | Add to enc 252 |
-| balsam | B386 | 16 | 2x 7.68TB | 15.4 | Add to enc 0 or 252 |
-| bio-gp1 | B240 | 18 | 2x 7.68TB | 15.4 | Add to enc 0 |
-| bio-gp2 | B240 | 18 | 2x 7.68TB | 15.4 | Add to enc 0 |
-| bio-gp3 | B240 | 18 | 2x 7.68TB | 15.4 | Add to enc 0 |
-| butternut | B386 | 24 | 2x 7.68TB | 15.4 | Add to enc 0 |
-| cottonwood | B240 | 26 | 2x 7.68TB | 15.4 | Add to enc 0 |
-| hemlock | B240 | 8 | 2x 7.68TB | 15.4 | Add to enc 252 |
-| larch | B386 | 8 | 2x 7.68TB | 15.4 | Add to enc 252 (also MongoDB) |
-| magnolia | B240 | 26 | 1x 3.84TB | 3.8 | Mostly SSD already |
-| walnut | B240 | 6 | 1x 3.84TB | 3.8 | 6 empty slots |
+| Host | DC | Existing SSDs | Empty Slots | Drives | + TB | Notes |
+|------|-----|---------------|-------------|--------|------|-------|
+| arborvitae | B386 | 24 | 0 | 2x 7.68TB | 15.4 | Enc 0 full — see special handling below |
+| balsam | B386 | 16 | 8 | 2x 7.68TB | 15.4 | Add to enc 0 |
+| bio-gp1 | B240 | 14 | 10 | 2x 7.68TB | 15.4 | Add to enc 0 |
+| bio-gp2 | B240 | 14 | 10 | 2x 7.68TB | 15.4 | Add to enc 0 |
+| bio-gp3 | B240 | 14 | 10 | 2x 7.68TB | 15.4 | Add to enc 0 |
+| butternut | B386 | 8 | 16 | 2x 7.68TB | 15.4 | Add to enc 0 |
+| cottonwood | B240 | 4 | 18 | 2x 7.68TB | 15.4 | Add to enc 0 |
+| hemlock | B240 | 0 | 0 | 2x 7.68TB | 15.4 | All HDD — see special handling below |
+| larch | B386 | 0 | 0 | 2x 7.68TB | 15.4 | All HDD, also MongoDB — see special handling |
+| magnolia | B240 | 4 | 18 | 1x 3.84TB | 3.8 | Add to enc 0 |
+| walnut | B240 | 2 | 6 | 1x 3.84TB | 3.8 | Add to enc 32 |
+
+### Hosts Requiring Special Handling
+
+**arborvitae** (B386, Solr): Enc 0 is full at 24/24 (all SSD — 2x Intel 960GB + 22x Micron 1.7TB). No real empty slots. Options:
+- Remove 2x older 960GB Intel SSDs from enc 0, replace with 2x 7.68TB (net gain: ~14 TB).
+- The displaced 960GB drives can be reused in hosts with empty slots.
+
+**hemlock** (B240, Solr+compute): Enc 0 full with 12x 3TB Seagate HDD. No empty slots in the physical enclosure. Options:
+- Swap 2 HDDs out of enc 0, replace with 2x 7.68TB SSDs. Requires RAID rebuild.
+- Displaced HDDs can go to compute hosts with empty slots.
+
+**larch** (B386, MongoDB+Solr): Same situation as hemlock — enc 0 full with 12x 3TB Seagate HDD. Highest priority for SSD given MongoDB role (500G LV) alongside Solr (10.2TB LV). Same swap approach as hemlock.
 
 ### Allocation Summary
 
@@ -456,42 +591,25 @@ All additions to empty slots — no disk swaps required. Each Solr host gets 2x 
 | 7.68 TB | 20 | 18 | 2 (spares) |
 | **Total new capacity** | | | **184.3 TB** |
 
-### Post-Upgrade Solr SSD Balance
-
-After the upgrade, 10 of 12 Solr hosts will have ~15 TB of SSD capacity each. The remaining two (magnolia, walnut) have smaller Solr footprints and proportionally smaller allocations.
-
-| Host | Existing SSD TB | + New TB | = Total SSD TB | Solr Data GB |
-|------|----------------|----------|----------------|-------------|
-| arborvitae | 0.0 | 15.4 | 15.4 | 20,680 |
-| balsam | 0.0 | 15.4 | 15.4 | 17,880 |
-| bio-gp1 | 0.0 | 15.4 | 15.4 | 18,280 |
-| bio-gp2 | 0.0 | 15.4 | 15.4 | 18,080 |
-| bio-gp3 | 0.0 | 15.4 | 15.4 | 18,080 |
-| butternut | 0.0 | 15.4 | 15.4 | 8,800 |
-| chestnut | 10.5 | 7.7 | 18.2 | 50 |
-| cottonwood | 0.0 | 15.4 | 15.4 | 5,564 |
-| hemlock | 0.0 | 15.4 | 15.4 | 16,188 |
-| larch | 0.0 | 15.4 | 15.4 | 10,440 |
-| magnolia | 14.0 | 3.8 | 17.8 | 200 |
-| walnut | 0.0 | 3.8 | 3.8 | 300 |
-
 ### Displaced HDD Reuse
 
-HDDs removed in Phase 1 (10 drives: mix of 932G and 3.7T) can be installed in hosts with empty slots for additional scratch or backup capacity:
+HDDs removed in Phases 1 and 2 (Phase 1: 10 small HDDs from DB servers; Phase 2: 2 HDDs each from hemlock, larch, and 2 SSDs from arborvitae) can be installed in hosts with empty slots:
 
-| Host | Role | Empty Slots |
-|------|------|-------------|
-| ash | slurm_compute | 8 |
-| cedar | slurm_compute | 8 |
-| fir | slurm_compute | 11 |
-| lemon | slurm_compute | 18 |
-| willow | other | 26 |
+| Host | Role | Empty Slots | Enclosure |
+|------|------|-------------|-----------|
+| ash | slurm_compute | 8 | enc 252 |
+| cedar | slurm_compute | 8 | enc 252 |
+| cherry | slurm_compute | 3 | enc 32 |
+| fir | slurm_compute | 11 | enc 0 (3), enc 252 (8) |
+| lemon | slurm_compute | 18 | enc 251 |
+| pear | slurm_compute | 3 | enc 32 |
+| willow | other | 18 | enc 0 |
 
 ### Deployment
 
-- Phase 1 (DB servers) can be done during any monthly maintenance window, one host at a time.
-- Phase 2 (Solr) is additive — drives can be hot-added to empty slots on most MegaRAID controllers without downtime, though a VD rebuild/extend is required to use the new capacity.
-- Larch requires coordination since it hosts both MongoDB and Solr.
+- **Phase 1** (DB servers): Can be done during any monthly maintenance window, one host at a time. Each swap is: power down, replace drives, rebuild RAID VD, restore from backup or let RAID rebuild.
+- **Phase 2 easy** (balsam, bio-gp1/2/3, butternut, cottonwood, magnolia, walnut): Drives hot-add to empty slots on MegaRAID controllers. A new VD must be created or the existing VD expanded to use the new drives. Possible without downtime on most controllers.
+- **Phase 2 special** (arborvitae, hemlock, larch): Requires drive swaps and RAID rebuild. Schedule during quarterly master-tier window for larch (MongoDB). Hemlock and arborvitae can be done in any monthly window with Solr service coordination.
 
 ---
 
@@ -508,3 +626,9 @@ HDDs removed in Phase 1 (10 drives: mix of 932G and 3.7T) can be installed in ho
 5. **Go port timeline**: Is there a target date or event driving the Go port, or is it opportunistic?
 
 6. **S3 backend priority**: The NetApp S3 backend plan exists but its priority relative to the Go port is unclear. Should S3 support be implemented in Perl (faster, throwaway) or wait for the Go port (cleaner, one implementation)?
+
+7. **Schema redesign: implement in Perl or Go?** The ancestors array can be implemented in the current Perl service first (validates the schema before the Go port) or only in the Go service (less throwaway code, but delays the benefits). If the Go port is 6+ months out, implementing in Perl first gives immediate query performance improvements.
+
+8. **Schema redesign: missing folder documents**: The backfill script needs a folder document for every path component. Are there known cases where folder objects are missing from the database? (e.g., objects created by direct MongoDB inserts or migration scripts that skipped folder creation.) A pre-migration audit query can identify these.
+
+9. **Schema redesign: multikey index size vs cache budget**: The `{workspace_uuid, ancestors}` multikey index is estimated at 7-10 GB (3-4x the current 2.5 GB path index). After dropping unused indexes (19 GB freed) and with potential RAM upgrade for bio-gp, is this within budget?

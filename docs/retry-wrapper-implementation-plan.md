@@ -19,6 +19,41 @@ When the MongoDB primary goes down in a replica set:
 
 Since MongoDB 3.4 doesn't support server-side retryable writes, and the v0.708 Perl driver doesn't have built-in retry, we implement retry logic at the application level.
 
+### Driver Architecture (verified 2026-05-28)
+
+The v0.708 `MongoDB::Connection` class is a thin wrapper that delegates all methods
+to `MongoDB::MongoClient`. The MongoClient has full replica set support:
+
+- `rs_refresh()` — pings replica set members and re-discovers the primary
+- `find_master` — locates the current primary
+- `auto_reconnect => 1` — automatically reconnects on next operation after a failure
+
+**Production config** uses a 3-node replica set URI:
+```
+mongodb-host = "mongodb://bio-gp.cels.anl.gov,larch.cels.anl.gov,gum.cels.anl.gov?replica_set=p3-rs-1"
+```
+
+With all three seed nodes in the URI, the driver can discover the new primary after
+an election. The `auto_reconnect` flag (already enabled) handles reconnection
+automatically on the next operation. The retry wrapper's role is to catch the initial
+"not master" error, wait for the election to complete, and retry.
+
+**Dev/test environments** may use `mongodb-host = localhost` (single node). The retry
+wrapper is harmless in this case — retries will hit the same node, and if it's truly
+down, retries will exhaust and the error propagates normally.
+
+### Accessing the MongoClient for rs_refresh
+
+The Workspace stores a database handle in `$self->{_mongodb}`. To reach the
+MongoClient for triggering replica set refresh:
+
+```perl
+$self->{_mongodb}->_client->rs_refresh();
+```
+
+The `_client` accessor on `MongoDB::Database` returns the underlying `MongoClient`
+instance.
+
 ## Implementation Design
 
 ### New Helper Methods
@@ -97,8 +132,8 @@ sub _retry_write {
                 # Exponential backoff
                 $delay_ms *= MONGO_RETRY_BACKOFF;
                 
-                # Trigger reconnection
-                eval { $self->{_mongoclient}->rs_refresh(); };
+                # Trigger replica set refresh to discover new primary
+                eval { $self->{_mongodb}->_client->rs_refresh(); };
                 
                 next;
             }
@@ -304,11 +339,18 @@ if ($self->_is_duplicate_key_error($@)) {
 
 ## Testing Plan
 
+### Prerequisites
+
+- Failover retry only works with a replica set URI (`mongodb://host1,host2,host3?replica_set=name`)
+- With `mongodb-host = localhost` (dev/test), retries will hit the same node — useful for testing retry mechanics but not actual failover
+- The v0.708 driver's `auto_reconnect` handles reconnection; `rs_refresh()` accelerates primary discovery
+
 ### Unit Tests
 
 1. Test `_is_retryable_error()` with various error strings
 2. Test `_retry_write()` with mock operations that fail then succeed
 3. Test retry timing and backoff
+4. Test `_is_duplicate_key_error()` detection
 
 ### Integration Tests
 
@@ -320,6 +362,7 @@ if ($self->_is_duplicate_key_error($@)) {
    rs.stepDown()
    ```
 4. Verify write operations complete successfully after failover
+5. Verify `rs_refresh()` call works: `$self->{_mongodb}->_client->rs_refresh()`
 
 ### Failover Test Script
 

@@ -114,7 +114,13 @@ The maintainers noted: "As of August 13, 2020, the MongoDB Perl driver and relat
 - Authentication: SCRAM-SHA-1 supported in both
 - Wire protocol: Compatible
 - Retryable writes: Not available (server doesn't support it)
-- Note: May need to recreate users with SCRAM-SHA-1 mechanism if they were created with MONGODB-CR
+
+**Auth migration status (verified 2026-05-28):**
+- `authSchemaVersion` is already 5 (SCRAM-SHA-1 schema)
+- However, existing user records were never converted — they lack `mechanisms` field and still have MONGODB-CR credentials only
+- Before switching to v2.2.2 driver, run `db.adminCommand({authSchemaUpgrade: 1})` on the primary to convert user credentials to SCRAM-SHA-1
+- After conversion, verify with: `db.getSiblingDB("admin").system.users.find({}, {user: 1, mechanisms: 1, db: 1})` — each user should show `"mechanisms": ["SCRAM-SHA-1"]`
+- The current v0.708 driver will continue to work after the auth upgrade (3.4 accepts both mechanisms)
 
 ### v2.2.2 + MongoDB 5.0 (Percona)
 
@@ -130,11 +136,16 @@ The maintainers noted: "As of August 13, 2020, the MongoDB Perl driver and relat
 
 ### Short-term (Immediate fix for failover)
 
-Add application-level retry wrapper to v0.708 code:
-- Fixes "not master and slaveOK=false" errors during failover
-- Minimal code changes
-- No authentication risk
-- Works with current MongoDB 3.4
+1. Add application-level retry wrapper to v0.708 code:
+   - Fixes "not master and slaveOK=false" errors during failover
+   - Minimal code changes
+   - No authentication risk
+   - Works with current MongoDB 3.4
+
+2. Upgrade user credentials to SCRAM-SHA-1 (prerequisite for driver upgrade):
+   - Run `db.adminCommand({authSchemaUpgrade: 1})` on primary
+   - Safe to do now — v0.708 driver continues to work after this
+   - Must be done before upgrading to v2.2.2 driver
 
 ### Medium-term Options
 
