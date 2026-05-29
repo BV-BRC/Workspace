@@ -1,6 +1,33 @@
 # BV-BRC Workspace System Upgrade Plan
 
-Date: 2026-05-28
+Date: 2026-05-28 (updated 2026-05-29)
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Operational Environment](#operational-environment)
+- [Workstream 1: MongoDB Retry Wrapper](#workstream-1-mongodb-retry-wrapper)
+- [Workstream 2: Perl MongoDB Driver Upgrade](#workstream-2-perl-mongodb-driver-upgrade-v0708--v222)
+- [Workstream 3: Remove Shock Storage Layer](#workstream-3-remove-shock-storage-layer)
+- [Workstream 4: Workspace Go Port](#workstream-4-workspace-go-port)
+- [Workstream 5: MongoDB Cluster Consolidation & Upgrade](#workstream-5-mongodb-cluster-consolidation--upgrade)
+- [Workstream 6: OAuth2 / OIDC Migration](#workstream-6-oauth2--oidc-migration)
+- [Recommended Sequencing](#recommended-sequencing)
+- [Risk Summary](#risk-summary)
+- [Workstream 8: MongoDB Schema Redesign](#workstream-8-mongodb-schema-redesign-ancestors-array)
+- [Workstream 9: SSD Storage Upgrades](#workstream-9-ssd-storage-upgrades)
+- [Open Questions](#open-questions)
+
+### Related Documents
+
+- [Schema Redesign Detail](schema-redesign-ancestors-array.md)
+- [MongoDB Driver Status](mongodb-perl-driver-status.md)
+- [Retry Wrapper Plan](retry-wrapper-implementation-plan.md)
+- [Shock Removal Plan](plan-remove-shock-layer.md)
+- [S3 Storage Backend Plan](plan-s3-storage-backend.md)
+- [Go Port Plan](plan-workspace-go-port.md)
+- [Test Replica Set Setup](test-replica-set-setup.md)
+- [Replication Testing Checklist](checklist-replication-testing.md)
 
 ## Overview
 

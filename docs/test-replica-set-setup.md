@@ -488,6 +488,152 @@ $PERCONA50/mongod --dbpath /tmp/rs-test/new2 --shutdown
 rm -rf /tmp/rs-test
 ```
 
+## Test Shock Service
+
+Sets up a local Shock instance using the production binary, pointed at a test database on the existing MongoDB server. No replication needed — this is for testing the Workspace→Shock integration and the Shock removal (Workstream 3).
+
+### Setup
+
+```bash
+# Create local directories
+mkdir -p /tmp/shock-test/{data,logs,site}
+
+# Write test config
+cat > /tmp/shock-test/shock.cfg <<'EOF'
+[Address]
+api-ip=0.0.0.0
+api-port=17078
+
+[Admin]
+email=test@test.com
+users=olson
+
+[Anonymous]
+read=true
+write=false
+create-user=false
+
+[Auth]
+globus_token_url=https://p3.theseed.org/goauth/token?grant_type=client_credentials
+globus_profile_url=https://p3.theseed.org/users
+
+[External]
+api-url=
+
+[Log]
+perf_log=false
+
+[Mongodb]
+hosts=localhost:27017
+database=ShockTest
+user=
+password=
+attribute_indexes=
+
+[Mongodb-Node-Indices]
+id=unique:true
+
+[Paths]
+site=/tmp/shock-test/site
+data=/tmp/shock-test/data
+logs=/tmp/shock-test/logs
+local_paths=
+pidfile=/tmp/shock-test/shock.pid
+
+[Runtime]
+GOMAXPROCS=
+EOF
+```
+
+If the test MongoDB requires auth, set `user` and `password` in the `[Mongodb]` section and create the user first:
+
+```javascript
+// On the test MongoDB
+db.getSiblingDB("ShockTest").createUser({
+    user: "shock", pwd: "shocktest",
+    roles: [{role: "readWrite", db: "ShockTest"}]
+})
+```
+
+### Start Shock
+
+```bash
+# Use the production binary
+/vol/patric3/production/shock/bin/shock-server \
+    -conf /tmp/shock-test/shock.cfg &
+
+# Or daemonize it like production:
+daemonize -e /tmp/shock-test/logs/shock.stderr \
+          -o /tmp/shock-test/logs/shock.stdout \
+          -p /tmp/shock-test/shock.pid \
+          /vol/patric3/production/shock/bin/shock-server \
+          -conf /tmp/shock-test/shock.cfg
+
+# Verify it's running
+curl http://localhost:17078/
+```
+
+### Test Shock Operations
+
+```bash
+# Create a node
+curl -X POST http://localhost:17078/node
+
+# Upload a file
+echo "test content" > /tmp/shock-test/testfile.txt
+curl -X POST -F "upload=@/tmp/shock-test/testfile.txt" http://localhost:17078/node
+
+# List nodes
+curl http://localhost:17078/node?limit=10
+
+# Download (replace NODE_ID with actual ID from create response)
+curl http://localhost:17078/node/NODE_ID?download
+```
+
+### Test Workspace with Shock
+
+Point a test Workspace at the local Shock and a test MongoDB:
+
+```ini
+# test-deploy.cfg
+[Workspace]
+mongodb-host = localhost:27017
+mongodb-database = WorkspaceTest
+shock-url = http://localhost:17078
+```
+
+This lets you test:
+- File upload through Workspace → Shock
+- File download through Workspace → Shock
+- The direct filesystem access path (Workstream 3) by pointing `file-store-path` at `/tmp/shock-test/data` and setting `use-shock = 0`
+
+### Test Shock Removal (Workstream 3)
+
+The key test for Shock removal is verifying that the Workspace can read existing Shock files directly from the filesystem:
+
+```bash
+# 1. Upload a file through Shock via Workspace (use-shock = 1)
+# 2. Note the shocknode URL in MongoDB
+# 3. Switch to use-shock = 0, set file-store-path = /tmp/shock-test/data
+# 4. Download the same file through Workspace
+# 5. Verify content matches
+
+# Check the data directory structure matches expectations:
+find /tmp/shock-test/data -name '*.data' | head -5
+# Should show: data/XX/YY/ZZ/UUID/UUID.data
+```
+
+### Cleanup
+
+```bash
+kill $(cat /tmp/shock-test/shock.pid 2>/dev/null) 2>/dev/null
+
+# Drop the test database
+mongo --port 27017 --eval 'db.getSiblingDB("ShockTest").dropDatabase()'
+
+rm -rf /tmp/shock-test
+```
+
 ## Notes
 
 - `--smallfiles` reduces preallocated journal size (good for test, not for production)
@@ -495,3 +641,4 @@ rm -rf /tmp/rs-test
 - The keyfile enables SCRAM-SHA authentication, which is the same mechanism production will use after the auth migration
 - Use 3.4's `mongodump` for dumping from 3.4 and 5.0's `mongorestore` for restoring to 5.0 — this handles any BSON format differences
 - The test data is small; production migration of 1.2 TB will take hours but follows the same procedure
+- Shock listens on port 17078 in test to avoid conflicting with any production instance on 7078
