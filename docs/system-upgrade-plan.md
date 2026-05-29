@@ -28,6 +28,7 @@ Date: 2026-05-28 (updated 2026-05-29)
 - [Go Port Plan](plan-workspace-go-port.md)
 - [Test Replica Set Setup](test-replica-set-setup.md)
 - [Replication Testing Checklist](checklist-replication-testing.md)
+- [Test Workspace Instance](test-workspace-instance.md)
 
 ## Overview
 
