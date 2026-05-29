@@ -11,6 +11,80 @@ Brings up a complete Workspace service against the test MongoDB cluster for test
 
 ```bash
 mkdir -p /ws-test/workspace/{db-path,logs}
+mkdir -p /ws-test/shock-test/{data,logs,site}
+```
+
+## Start Shock
+
+The Workspace service needs a running Shock instance for file storage (`use-shock = 1`, the current production mode).
+
+```bash
+# Create Shock user in the test MongoDB (if auth is enabled)
+$MONGO34/mongo --port 27117 -u admin -p testpassword --authenticationDatabase admin --eval '
+db.getSiblingDB("ShockTest").createUser({
+    user: "shock", pwd: "shocktest",
+    roles: [{role: "readWrite", db: "ShockTest"}]
+})'
+
+# Write Shock config
+cat > /ws-test/shock-test/shock.cfg <<'EOF'
+[Address]
+api-ip=0.0.0.0
+api-port=17078
+
+[Admin]
+email=test@test.com
+users=olson
+
+[Anonymous]
+read=true
+write=false
+create-user=false
+
+[Auth]
+globus_token_url=https://p3.theseed.org/goauth/token?grant_type=client_credentials
+globus_profile_url=https://p3.theseed.org/users
+
+[External]
+api-url=
+
+[Log]
+perf_log=false
+
+[Mongodb]
+hosts=hemlock.cels.anl.gov:27117
+database=ShockTest
+user=shock
+password=shocktest
+attribute_indexes=
+
+[Mongodb-Node-Indices]
+id=unique:true
+
+[Paths]
+site=/ws-test/shock-test/site
+data=/ws-test/shock-test/data
+logs=/ws-test/shock-test/logs
+local_paths=
+pidfile=/ws-test/shock-test/shock.pid
+
+[Runtime]
+GOMAXPROCS=
+EOF
+
+# Start Shock
+/vol/patric3/production/shock/bin/shock-server \
+    -conf /ws-test/shock-test/shock.cfg &
+
+# Or daemonize:
+daemonize -e /ws-test/shock-test/logs/shock.stderr \
+          -o /ws-test/shock-test/logs/shock.stdout \
+          -p /ws-test/shock-test/shock.pid \
+          /vol/patric3/production/shock/bin/shock-server \
+          -conf /ws-test/shock-test/shock.cfg
+
+# Verify Shock is running
+curl http://hemlock.cels.anl.gov:17078/
 ```
 
 ## Configuration
@@ -254,11 +328,11 @@ Modify WorkspaceImpl.pm to use v2.2.2 API (see [mongodb-perl-driver-status.md](m
 ## Stop the Test Instance
 
 ```bash
-# Find and kill the starman process
+# Stop Workspace
 kill $(pgrep -f 'starman.*17125')
 
-# Or if using the PID file:
-# kill $(cat /ws-test/workspace/workspace.pid)
+# Stop Shock
+kill $(cat /ws-test/shock-test/shock.pid 2>/dev/null) 2>/dev/null
 ```
 
 ## Quick Reference
