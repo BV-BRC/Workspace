@@ -190,23 +190,151 @@ The Go port is the long-term play. The recommended order is:
 
 ---
 
-## Workstream 5: MongoDB Server Upgrade
+## Workstream 5: MongoDB Cluster Consolidation & Upgrade
 
-**Status**: Planning
+**Status**: Planning, target cluster operational
 **Risk**: Medium-High
-**Effort**: ~1-2 weeks including testing
-**Target**: MongoDB 5.0+ (Percona Server for MongoDB)
+**Effort**: ~2-3 weeks including testing and migration
+**Target**: Consolidate onto p3-rs-2 (Percona Server for MongoDB 5.0.17-14)
 
 ### What
 
-Upgrade the MongoDB server from 3.4.24 to Percona Server for MongoDB 5.0+ (or later). A Percona 5.0.17-14 cluster already exists as an alternate cluster.
+Consolidate both MongoDB replica sets (p3-rs-1 running 3.4.24, p3-rs-2 running Percona 5.0.17-14) into a single cluster. Migrate Workspace metadata and auth databases from p3-rs-1 into p3-rs-2, then decommission p3-rs-1. This eliminates a 3.4→5.0 in-place upgrade — the target platform already exists.
 
 ### Why
 
 - MongoDB 3.4 has been EOL since January 2020 — no security patches.
-- The query planner in 3.4 has known issues (we've hit plan cache problems directly — it cached a plan using `workspace_uuid_1_type_1` for an `$or` query that should have used `workspace_uuid_1_path_1`).
+- The query planner in 3.4 has known issues (plan cache selects wrong indexes for `$or` queries).
 - Server-side retryable writes (available in 3.6+) complement the application-level retry wrapper.
-- WiredTiger improvements in newer versions provide better cache efficiency.
+- Running two clusters doubles operational overhead. One cluster is simpler.
+- p3-rs-2 is already running Percona 5.0 with modern features (retryable writes, better WiredTiger, improved query planner).
+
+### Current Clusters
+
+**p3-rs-1 (MongoDB 3.4.24)** — Workspace metadata + auth databases:
+
+| Member | Ring | DC | RAM | Role |
+|--------|------|-----|-----|------|
+| bio-gp (PRIMARY) | Ring 3 | B240 | 94 GB | Primary, priority 50 |
+| larch | Ring 3 | B386 | 252 GB | Secondary |
+| gum | Ring 3 | B240 | 252 GB | Secondary |
+| pear | Ring 2 | B240 | 756 GB | Secondary (new, syncing) |
+
+Problem: All voting members in Ring 3. Ring 3 patch = total outage.
+
+**p3-rs-2 (Percona 5.0.17-14)** — Shock databases:
+
+| Member | Ring | DC | RAM | Role |
+|--------|------|-----|-----|------|
+| spruce (PRIMARY) | Ring 3 | B240 | 252 GB | Primary, priority 3 |
+| pecan | Ring 3 | B240 | 755 GB | Secondary |
+| chestnut | Ring 3 | B386 | 1,512 GB | Secondary |
+
+Problem: All members in Ring 3. Same vulnerability.
+
+### Target Configuration: Consolidated p3-rs-2
+
+Reconfigure p3-rs-2 with members spanning all three rings, B386-heavy for resilience:
+
+| Member | Ring | DC | RAM | Votes | Role |
+|--------|------|-----|-----|-------|------|
+| arborvitae (PRIMARY) | Ring 3 | B386 | 754 GB | 1 | Primary (high priority) |
+| chestnut | Ring 3 | B386 | 1,512 GB | 0 | Non-voting secondary (read offload, backup) |
+| pear | Ring 2 | B240 | 756 GB | 1 | Voting secondary |
+| lemon | Ring 1 | B240 | 1,133 GB | 1 | Voting secondary |
+| arbiter VM | Outside rings | B386 | minimal | 1 | Arbiter |
+
+**4 voting members + 1 non-voting. Majority = 3.**
+
+| Outage | Down | Surviving Votes | Majority? |
+|--------|------|-----------------|-----------|
+| Ring 3 patched | arborvitae, chestnut | pear + lemon + arbiter = 3 | **Yes** |
+| Ring 2 patched | pear | arborvitae + lemon + arbiter = 3 | **Yes** |
+| Ring 1 patched | lemon | arborvitae + pear + arbiter = 3 | **Yes** |
+| B240 power out | pear, lemon | arborvitae + arbiter = 2 | No — but auth available read-only from chestnut (B386) |
+| B386 power out | arborvitae, chestnut, arbiter | pear + lemon = 2 | No — but B386 power is stable |
+
+The only unrecoverable scenario is B240 power loss, which also takes down NetApp filers and the Workspace backing store — the database being unavailable for writes is moot since the file storage is gone too. Auth remains read-available from chestnut in B386.
+
+### Workspace Data Migration Procedure
+
+The Workspace database (WorkspaceBuild) is 1.2 TB with 69 GB of indexes. Migration approach:
+
+**Method: mongodump/mongorestore with --oplog**
+
+This is the safest approach for a cross-version migration (3.4 → 5.0). The alternative (filesystem snapshot + replica set add) doesn't work across major versions since the WiredTiger storage format and replica set protocol differ.
+
+**Step 1: Pre-migration (days before cutover)**
+
+Run an initial mongodump from p3-rs-1 to a staging area. This takes hours but doesn't affect the running service:
+
+```bash
+mongodump --host p3-rs-1/bio-gp,larch,gum \
+          --db WorkspaceBuild \
+          --oplog \
+          --out /staging/workspace-dump \
+          --readPreference secondaryPreferred
+```
+
+Use `--readPreference secondaryPreferred` to read from a secondary (pear or larch) and avoid loading the primary.
+
+For the auth database, dump separately:
+
+```bash
+mongodump --host p3-rs-1/bio-gp,larch,gum \
+          --db <auth-db-name> \
+          --oplog \
+          --out /staging/auth-dump \
+          --readPreference secondaryPreferred
+```
+
+**Step 2: Restore to p3-rs-2**
+
+```bash
+mongorestore --host p3-rs-2/arborvitae,chestnut,pear,lemon \
+             --oplogReplay \
+             /staging/workspace-dump
+```
+
+This creates the WorkspaceBuild database on p3-rs-2 with all collections and indexes.
+
+**Step 3: Cutover (during maintenance window)**
+
+1. Stop the Workspace service
+2. Run a final incremental sync to capture writes since the initial dump:
+   ```bash
+   # Get the timestamp from the initial dump's oplog
+   mongodump --host p3-rs-1/bio-gp,larch,gum \
+             --db WorkspaceBuild \
+             --query '{"ts": {"$gt": Timestamp(LAST_OPLOG_TS, 0)}}' \
+             --out /staging/workspace-incremental
+   mongorestore --host p3-rs-2/arborvitae \
+                /staging/workspace-incremental
+   ```
+   Or more simply: stop writes, do a final mongodump/mongorestore of just the delta.
+3. Update Workspace `deploy.cfg` to point at p3-rs-2:
+   ```
+   mongodb-host = "mongodb://arborvitae.cels.anl.gov,pear.cels.anl.gov,lemon.cels.anl.gov?replicaSet=p3-rs-2"
+   ```
+4. Update auth service config similarly
+5. Restart services
+6. Verify
+
+**Step 4: Validation**
+
+- Compare document counts: `db.objects.count()` on both clusters
+- Spot-check a few workspaces: list objects, verify sizes
+- Monitor p3-rs-2 for query performance, cache stats
+- Keep p3-rs-1 running read-only for a week as fallback
+
+**Alternative: mongosync (if available)**
+
+Percona 5.0 may support `mongosync` for live continuous replication between clusters. This would allow a zero-downtime cutover: sync runs continuously, flip the connection string, done. Check if the Percona distribution includes this tool.
+
+**Estimated timeline:**
+- Initial dump: 4-8 hours for 1.2 TB (depends on disk speed and network to staging)
+- Restore: 4-8 hours (index rebuilds are the bottleneck)
+- Cutover window: 30-60 minutes (final delta + config change + restart)
 
 ### Current Database Profile (verified 2026-05-28)
 
@@ -214,33 +342,37 @@ Upgrade the MongoDB server from 3.4.24 to Percona Server for MongoDB 5.0+ (or la
 |--------|-------|
 | Data size | 1,168 GB |
 | Total index size | 69 GB |
-| WiredTiger cache configured | 46.5 GB |
-| WiredTiger cache used | 37.2 GB |
+| WiredTiger cache configured | 46.5 GB (bio-gp, 94 GB RAM) |
 | Cache hit rate | ~95.7% |
 | Pages evicted by app threads | 0 (background eviction keeping up) |
-| Server RAM | ~94 GB |
 
-**Index pressure**: 69 GB of indexes vs 46.5 GB cache means indexes are continuously evicted and re-read from disk. Four unused or nearly-unused indexes total ~19.3 GB:
+**Index pressure**: 69 GB of indexes vs 46.5 GB cache on bio-gp. On arborvitae (754 GB RAM), WiredTiger cache would be ~375 GB — indexes fit entirely with room for hot data. This alone eliminates the cache pressure problem.
 
-| Index | Size | Ops (9 days) | Status |
-|-------|------|-------------|--------|
-| `name_1` | 4.3 GB | 0 | Drop candidate |
-| `owner_1_name_1_creation_date_-1` | 11.4 GB | 0 | Drop candidate |
-| `type_1` | 1.8 GB | 0 | Drop candidate |
-| `workspace_uuid_1_type_1` | 1.8 GB | 35K | Drop candidate (causes bad query plans, covered by 4-field index) |
+**Unused indexes** (identified via `$indexStats`, 9-day sample):
 
-Dropping these four recovers 19.3 GB, bringing indexes from 69 GB to ~50 GB — at the cache limit. Adding RAM (96 GB → 128-160 GB) would definitively solve the cache pressure.
+| Index | Size | Ops | Status |
+|-------|------|-----|--------|
+| `name_1` | 4.3 GB | 0 | Drop after migration |
+| `owner_1_name_1_creation_date_-1` | 11.4 GB | 0 | Drop after migration |
+| `type_1` | 1.8 GB | 0 | Drop after migration |
+| `workspace_uuid_1_type_1` | 1.8 GB | 35K | Drop after migration |
+
+These can be dropped on p3-rs-2 after migration. Dropping them on p3-rs-1 first (before the dump) would speed up the restore since mongorestore rebuilds indexes.
 
 ### Prerequisites
 
-- Perl driver upgrade to v2.2.2 (Workstream 2) — v0.708 cannot authenticate with MongoDB 5.0.
-- Auth credential migration to SCRAM-SHA-1 (part of Workstream 2 prerequisites).
+- Perl driver upgrade to v2.2.2 (Workstream 2) — v0.708 cannot authenticate with MongoDB 5.0
+- Auth credential migration to SCRAM-SHA-1 (Workstream 2 prerequisite)
+- Install Percona 5.0 on arborvitae, pear, lemon
+- Provision arbiter VM in B386 outside maintenance rings
 
 ### Deployment
 
-- Target the quarterly master-tier window.
-- Procedure: upgrade secondaries first, step down primary, upgrade former primary, verify.
-- The existing Percona 5.0 alternate cluster can serve as a validation target.
+- Install Percona 5.0 on new members, add to p3-rs-2, let them sync
+- Remove spruce and pecan from p3-rs-2 after new members are stable
+- Driver upgrade + auth credential migration (can overlap with member provisioning)
+- Data migration during quarterly master-tier window (Workspace downtime for final cutover)
+- Decommission p3-rs-1 after validation period
 
 ### MongoDB Alternatives: Should We Leave MongoDB?
 
@@ -294,7 +426,7 @@ With hundreds of millions of objects in the store, the question of whether Mongo
 **Stay with MongoDB (Percona) for now.** The reasons:
 
 1. The Workspace schema is a natural fit for document storage.
-2. A server upgrade (3.4 → 5.0+) resolves the immediate issues (EOL, plan cache, retryable writes).
+2. Consolidating onto Percona 5.0 resolves the immediate issues (EOL, plan cache, retryable writes) without a risky in-place upgrade.
 3. The Go port will use the actively maintained Go MongoDB driver.
 4. The data volume (1.2 TB, hundreds of millions of objects) is well within MongoDB's capacity on a single replica set with adequate RAM.
 5. Switching databases would be a multi-month effort that competes with higher-priority work (Go port, Shock removal, OAuth2).
@@ -342,21 +474,25 @@ The workstreams have dependencies and shared deployment windows. Here is the rec
 ```
 Immediate (any monthly window)
 ├── 1. Retry wrapper implementation
-├── 5. Drop unused MongoDB indexes (19.3 GB recovery)
-├── 5. Auth credential migration (SCRAM-SHA-1 conversion)
+├── 5. Auth credential migration (SCRAM-SHA-1 conversion on p3-rs-1)
+├── 5. Install Percona 5.0 on arborvitae, pear, lemon
+├── 5. Provision arbiter VM in B386
 └── 9. SSD Phase 2 easy (hot-add to Solr hosts with empty slots)
 
 Next quarterly master-tier window
 ├── 3. Shock removal (deploy with use-shock toggle)
+├── 5. Add new members to p3-rs-2, reconfigure topology
 ├── 6. OAuth2 Phase 1-2 (p3_oidc deploy, dual-token validation)
 └── 9. SSD Phase 1 + Phase 2 special (DB server swaps, larch/hemlock/arborvitae)
 
-Following quarterly window
+Following quarterly window (requires Workspace downtime for cutover)
 ├── 2. Driver upgrade v0.708 → v2.2.2
-├── 5. MongoDB server upgrade 3.4 → 5.0+ (Percona)
+├── 5. Migrate Workspace + auth data from p3-rs-1 → p3-rs-2
+├── 5. Decommission p3-rs-1
+├── 5. Drop unused indexes on p3-rs-2 (19.3 GB recovery)
 └── 6. OAuth2 Phase 3-4 (website + CLI OIDC login)
 
-After MongoDB server upgrade
+After cluster consolidation
 ├── 8. Schema redesign: backfill ancestors array (dual-field mode)
 ├── 8. Schema redesign: cut over reads to ancestors
 └── 8. Schema redesign: drop path field and old indexes
@@ -372,10 +508,12 @@ Ongoing (months)
 The critical path for the database modernization is:
 
 ```
-Auth credential migration → Driver upgrade → MongoDB server upgrade → Schema redesign
+Auth credential migration → Driver upgrade → Workspace migration to p3-rs-2 → Schema redesign
 ```
 
-Each step is a prerequisite for the next. The auth migration is safe to do immediately. The driver upgrade and server upgrade should be done together in the same quarterly window. The schema redesign depends on MongoDB 4.2+ for the aggregation pipeline `$set` used in move operations — without it, moves fall back to a slower query-and-update approach.
+The auth migration is safe to do immediately. The driver upgrade must happen before migration since v0.708 can't authenticate against Percona 5.0. Meanwhile, new p3-rs-2 members (arborvitae, pear, lemon, arbiter) can be provisioned in parallel — they sync from the existing p3-rs-2 members and don't depend on the driver upgrade.
+
+The schema redesign depends on being on MongoDB 4.2+ (now guaranteed by p3-rs-2 running 5.0) for aggregation pipeline `$set` in move operations.
 
 ### Parallel Work
 
@@ -385,9 +523,9 @@ These can proceed in parallel without blocking each other:
 - Shock removal (independent of database changes)
 - OAuth2 Phases 1-2 (independent of Workspace internals)
 - Go port development (can start anytime, runs alongside Perl service)
-- Index cleanup (immediate, independent)
+- p3-rs-2 member provisioning (independent of driver upgrade)
 - SSD hot-adds to Solr hosts (independent of software changes)
-- Schema redesign development/testing (can be coded and tested before MongoDB upgrade, deployed after)
+- Schema redesign development/testing (can be coded and tested before migration, deployed after)
 
 ---
 
@@ -399,7 +537,7 @@ These can proceed in parallel without blocking each other:
 | Driver upgrade | Medium | Auth failure, API incompatibility | Revert to v0.708 (keep both installed) |
 | Shock removal | Low | File access failure | Set `use-shock = 1` in config |
 | Go port | High | Service outage | Route traffic back to Perl service |
-| MongoDB upgrade | Medium-High | Data access failure | Revert replica set members (requires planning) |
+| Cluster consolidation | Medium-High | Data access failure | Keep p3-rs-1 running as fallback, revert connection string |
 | OAuth2 | High | Auth outage affecting all services | Dual-token period provides fallback |
 | Schema redesign | Medium | Query failures, incorrect results | Dual-field period — fall back to `path` queries |
 | SSD upgrades | Low-Medium | Drive failure during swap, RAID rebuild | Keep displaced drives; restore from backup |
