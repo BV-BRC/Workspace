@@ -573,14 +573,14 @@ sub _calculate_du {
 
 	# Aggregate for files (non-folders)
 	my $file_query = { %$query, folder => 0 };
-	my $file_res = $col->aggregate([
+	my $file_res = $self->_aggregate_hint($col, [
 		{ '$match' => $file_query },
 		{ '$group' => {
 			_id => 0,
 			total_size => { '$sum' => '$size' },
 			file_count => { '$sum' => 1 },
 		}},
-	], { hint => $agg_hint });
+	], $agg_hint);
 
 	if ($file_res && $file_res->[0]) {
 		$total_size = $file_res->[0]->{total_size} || 0;
@@ -589,13 +589,13 @@ sub _calculate_du {
 
 	# Count directories separately
 	my $dir_query = { %$query, folder => 1 };
-	my $dir_res = $col->aggregate([
+	my $dir_res = $self->_aggregate_hint($col, [
 		{ '$match' => $dir_query },
 		{ '$group' => {
 			_id => 0,
 			dir_count => { '$sum' => 1 },
 		}},
-	], { hint => $agg_hint });
+	], $agg_hint);
 
 	if ($dir_res && $dir_res->[0]) {
 		$dir_count = $dir_res->[0]->{dir_count} || 0;
@@ -632,6 +632,23 @@ sub _get_directory_contents {
 	}
 	my $objects = $self->_query_database($query,0);
 	return $objects;
+}
+
+#
+# Run an aggregate pipeline, forcing the given index hint when the server
+# supports it. MongoDB only accepts the aggregate command's "hint" option as
+# of 3.6; the production server runs 3.4, which rejects it with
+# "unrecognized field 'hint'". Retry without the hint in that case so the
+# query still succeeds. (Find-cursor hints, used by _query_database, are fine
+# on 3.4 and do not need this.)
+#
+sub _aggregate_hint {
+	my ($self, $col, $pipeline, $hint) = @_;
+	my $res = eval { $col->aggregate($pipeline, { hint => $hint }) };
+	if ($@) {
+		$res = $col->aggregate($pipeline);
+	}
+	return $res;
 }
 
 #Retrive objects from mongodb based on input query**
@@ -3270,8 +3287,8 @@ sub get_archive_url
 	    name => $name
 	    });
 
-	print "$wsobj->{uuid} obj $obj->{path} $obj->{name} $obj->{folder}\n";
-	print Dumper($obj);
+	# print STDERR "$wsobj->{uuid} obj $obj->{path} $obj->{name} $obj->{folder}\n";
+	# print STDERR Dumper($obj);
 
 	#
 	# Check recursive if a folder or an entire workspace.
@@ -3297,16 +3314,16 @@ sub get_archive_url
 		};
 	    }
 
-	    my $res = $col->aggregate([
+	    my $res = $self->_aggregate_hint($col, [
 				   { '$match' => $path_spec },
 				   { '$group' => {
 				       _id => 0,
 				       total_size => { '$sum' => '$size' },
 				       file_count => { '$sum' => 1 },
 				   } },
-				       ], { hint => 'workspace_uuid_1_path_1' });
+				       ], 'workspace_uuid_1_path_1');
 
-	    print Dumper($path_spec, $res);
+	    # print STDERR Dumper($path_spec, $res);
 	    $total_size += $res->[0]->{total_size};
 	    $file_count += $res->[0]->{file_count};
 
@@ -3329,7 +3346,7 @@ sub get_archive_url
 	}
 	else
 	{
-	    print "add $obj->{size}\n";
+	    # print STDERR "add $obj->{size}\n";
 	    $total_size += $obj->{size};
 	    $file_count++;
 	}
@@ -3388,7 +3405,7 @@ sub get_archive_url
 	total_size => $total_size,
 	file_count => $file_count,
     };
-    print STDERR Dumper($doc);
+    # print STDERR Dumper($doc);
 
     my $coll = $self->_mongodb()->get_collection('downloads');
 
