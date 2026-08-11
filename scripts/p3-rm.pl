@@ -23,6 +23,7 @@ my($opt, $usage) =
 		     ["Remove one or more files in the workspace"],
 		     [],
  		     ["recursive|r", "Recursively remove the given path"],
+		     ["administrator|A", "Run as administrator (if user has those privileges)"],
 		     ["url=s", "Use this workspace URL instead of the default"],
 		     ["help|h", "Show this help message"],
 		    );
@@ -33,9 +34,11 @@ my $ws = Bio::P3::Workspace::WorkspaceClientExt->new($opt->url);
 
 my @paths = @ARGV;
 
+my @admin = $opt->administrator ? (adminmode => 1) : ();
+
 for my $path (@paths)
 {
-    my $cur = eval { $ws->get( { objects => [$path], metadata_only => 1 } ); };
+    my $cur = eval { $ws->get( { objects => [$path], metadata_only => 1, @admin } ); };
     if (!$cur || @$cur == 0)
     {
 	print STDERR "Not removing $path: file does not exist\n";
@@ -53,7 +56,7 @@ for my $path (@paths)
 	# Recursively remove folder.
 	#
 
-	my $files = $ws->ls({paths => [$path], recursive => 1});
+	my $files = $ws->ls({paths => [$path], recursive => 1, @admin});
 	$files = $files->{$path};
 	my @to_del;
 	for my $file (@$files)
@@ -63,7 +66,7 @@ for my $path (@paths)
 	    push(@to_del, $objpath);
 	}
 	push(@to_del, $path);
-	my $res = eval { $ws->delete({ objects => \@to_del, deleteDirectories => 1, force => 1}) };
+	my $res = eval { $ws->delete({ objects => \@to_del, deleteDirectories => 1, force => 1, @admin}) };
 	if (my $err = $@)
 	{
 	    if ($err =~ /_ERROR_(.*?)!?_ERROR_/)
@@ -83,7 +86,7 @@ for my $path (@paths)
 	#
 	
 	eval {
-	    my $res = $ws->delete({ objects => [$path], deleteDirectories => 0 });
+	    my $res = $ws->delete({ objects => [$path], deleteDirectories => 0, @admin });
 	};
 	if (my $err = $@)
 	{
