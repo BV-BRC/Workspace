@@ -89,42 +89,52 @@ downstream dependency. Note the probe used (`/download/BOGUS/x`) returns 404
 after *only* the indexed `find_one` — it does no Shock or LWP work at all, yet it
 stalled. That makes the probe a **victim** of a blocked event loop, not the cause.
 
-**Leading hypothesis: load-induced saturation of the single event loop.**
+**No confirmed trigger yet.** Two hypotheses were raised and both are now dead:
 
-The service was **not** restarted — the `start_server` supervisor has been up
-since Aug 13. So the stall cleared on its own, and the variable that changed
-between the two measurements is **offered load**:
+*Wedged process, cleared by a restart* — ruled out. The `start_server` supervisor
+has been up since Aug 13. (Caveat: that PID is the supervisor, not the Twiggy
+worker, and `start_server` supports graceful worker restarts, so checking the
+child's start time would make this airtight.)
 
-- 2026-09-24: a room of workshop attendees actively downloading. The Workspace
-  server was taking 100-1500 hits/min.
-- 2026-09-25: quiet.
+*Load-induced saturation* — **ruled out by the access logs.** During five
+consecutive ~10s stalls at 15:54:39-15:55:35, real user traffic on the download
+service was **four requests**:
 
-Every blocking call in the request path is individually fast, but they are
-*serialized* on one event loop. `_lookup_ws_file_details` does a synchronous
-`LWP` PUT to Shock at **~100ms** (`:1823`) on every `/view`. At ~8 requests/sec
-that alone is ~80% of the loop's capacity — close to the 91-93% measured. Add
-the local-file path, which drives `AnyEvent::Handle` over a regular file with
-**no backpressure** (`:2003`), and a few large downloads to slow clients can hold
-the loop indefinitely.
+```
+15:54:59  POST /set-cookie-auth
+15:54:59  GET /view/.../sankey.html
+15:55:22  POST /set-cookie-auth
+15:55:23  GET /view/.../sankey.html
+```
 
-This explains every observation the "wedged process" theory had to hand-wave:
+Two page loads. Peak real traffic for the whole day was 424 req/hour (~0.12/s),
+nowhere near enough to saturate a loop even with a serialized 100ms call. A
+genuine 62-request burst did occur at 15:38-15:39, but no probes were running
+then, so there is no stall data for the one moment load was actually high.
 
-- **Why n=1 stalled as long as n=60**: my probe was not the load. It queued
-  behind *other people's* traffic already saturating the loop.
-- **Why 60 requests released within 70ms**: they were all parked behind the same
-  in-progress blocking operation and freed together when the loop turned.
-- **Why it cleared with no restart**: the load went away.
-- **Why the RPC service stayed at 0%**: 25 worker processes absorb the same
-  pattern invisibly.
+> Note on log hygiene: 1,530 of the 4,630 lines in `dl.access` are the
+> investigation's own probes. The `curl/8.7.1` and `Python-urllib/3.14` user
+> agents are both mine, including a run of `core_SNPs.tsv` 206s that initially
+> looked like user traffic. Filter both out before drawing conclusions.
 
-**Prediction: it returns at the next workshop.** This is not a one-off wedge —
-it is what this architecture does under concurrent load, which makes the port
-the actual fix rather than a nice-to-have.
+**What still fits.** The two busiest real routes are exactly the two that make
+blocking external calls on the shared loop:
 
-Worth noting for diagnosis: the PID in `download.pid` is the `start_server`
-**supervisor**, not the Twiggy worker. The supervisor surviving since Aug 13 does
-not by itself prove the worker never restarted (`start_server` supports graceful
-worker restarts); check the child process's start time to be certain.
+| Route | Day total | Blocking call |
+|---|---|---|
+| `POST /set-cookie-auth` | 1,319 | `P3TokenValidator->new` **per request**, so the 86400s pubkey cache never hits — a live HTTPS GET to the signer every time |
+| `GET /view` | 1,035 | synchronous, **unbounded** `LWP` PUT to Shock (`:1823`) |
+| `GET /download` | 652 | local: `AnyEvent::Handle` over a regular file, no backpressure (`:2003`) |
+| `GET /archive` | 86 | |
+
+A handful of those calls going slow — not a flood of them — is enough to hold the
+loop for seconds. That matches the observed shape (9s blocks, ~1s gaps,
+independent of concurrency) better than volume does.
+
+**Next diagnostic:** `download.error.log` for 2026-09-24 15:30-16:30. Several of
+these paths `warn` on failure, and the Shock response headers are `Dumper`ed on
+every request (`:1942`), so a hanging Shock PUT or signer fetch should be visible
+there.
 
 ### 1.2 Cheap hedges worth doing regardless
 
