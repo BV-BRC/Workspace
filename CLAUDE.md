@@ -81,26 +81,21 @@ Client IP comes from `_client_address`: X-Forwarded-For first hop → X-Real-IP 
 socket peer, mirroring `Service.pm:187`. **Diagnostic only** — the header is
 client-supplied and nginx appends rather than replaces, so it is spoofable.
 
-> **Known limitation as of 2026-09-25: the forwarding headers do not currently
-> carry the real client address.** A tshark capture on the RPC service showed
+> **If the log shows an internal address, check whether the request went through
+> nginx at all.** The download service listens on port 7129 and is reachable
+> *directly* as `http://spruce.cels.anl.gov:7129/...`, bypassing the proxy. A
+> direct request carries no `X-Forwarded-For` and no `X-Real-IP`, so
+> `_client_address` correctly falls through to the socket peer. Confirmed by
+> tshark: probes sent to `:7129` arrive with `Host: spruce.cels.anl.gov:7129`
+> and no forwarding headers whatsoever. Test through the public URL
+> (`https://p3.theseed.org/services/WorkspaceDownload/...`) if you want to
+> exercise the proxy path.
 >
-> ```
-> X-Real-IP: 140.221.78.20
-> X-Forwarded-For: 140.221.78.20, 140.221.78.20
-> ```
->
-> — an internal ANL host (no PTR; `.40` is `plum.mcs.anl.gov`, `.42` is
-> `p3.theseed.org`), not the originating client. The duplicated value is the
-> signature of `proxy_add_x_forwarded_for` running at two hops where the *first*
-> one already could not see the true peer, or of an inner proxy overwriting
-> `X-Real-IP $remote_addr` instead of passing `$http_x_real_ip` through.
->
-> This is an **nginx configuration issue, not a code issue** — the Perl side
-> extracts the first hop correctly, there is simply nothing useful in it. The
-> nginx config is not in this repo. To confirm the plumbing works, send
-> `curl -H 'X-Forwarded-For: 1.2.3.4'` from outside: if the log shows `1.2.3.4`
-> the extraction is fine and only the front end needs fixing; if it still shows
-> the internal address, something downstream is overwriting the header.
+> Separately, a capture of the **RPC** service through nginx showed
+> `X-Forwarded-For: 140.221.78.20, 140.221.78.20` — an internal host duplicated
+> rather than an originating client. That is a different request path from the
+> download service and may indicate a proxy-chain issue worth investigating on
+> its own, but it is not evidence about the download path.
 
 ## The 2026-09-24 download stall (resolved)
 
