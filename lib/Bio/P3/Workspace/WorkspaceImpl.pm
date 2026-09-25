@@ -1954,6 +1954,7 @@ sub _send_ws_file
 	    my $t_hdr;
 	    my $n_bytes = 0;
 	    my $status  = '?';
+	    my $client_gone = 0;
 
 	    http_request(GET => $url,
 			 @headers,
@@ -1968,13 +1969,44 @@ sub _send_ws_file
 			     my($data, $hdr) = @_;
 			     if ($data)
 			     {
-				 $writer->write($data);
+				 #
+				 # $writer->write is Twiggy::Writer::write, which is
+				 # push_write on the client's AnyEvent::Handle. If the
+				 # client has gone away that handle's _drain_wbuf hits
+				 # a write error and croaks "AnyEvent::Handle uncaught
+				 # error: Broken pipe" -- there is no on_error on the
+				 # Twiggy writer handle. The exception propagates out
+				 # of on_body into AnyEvent::HTTP's on_read callback
+				 # (HTTP.pm:1084), where EV catches and IGNORES it.
+				 #
+				 # Ignoring it is the problem: on_body never returns,
+				 # so it never returns 0, so $finish is never called
+				 # and the Shock fetch is never cancelled. The upstream
+				 # read callback stays installed and keeps firing for
+				 # every remaining byte of the response -- each one
+				 # throwing again. With a 253 MB body that is a very
+				 # large number of throw/catch cycles at full CPU,
+				 # which is the 100% spin seen during the 200-client
+				 # test. It ends only when the upstream body is
+				 # exhausted, which is why it "cleared itself".
+				 #
+				 # Catching the write error and returning 0 cancels the
+				 # fetch immediately: AnyEvent::HTTP finishes with 598
+				 # and tears the connection down.
+				 #
+				 my $ok = eval { $writer->write($data); 1 };
+				 if (!$ok)
+				 {
+				     # Client hung up mid-transfer. Normal, not an error.
+				     $client_gone = 1;
+				     return 0;
+				 }
 				 $n_bytes += length($data);
 				 return 1;
 			     }
 			     else
 			     {
-				 $writer->close();
+				 eval { $writer->close() };
 				 return 0;
 			     }
 			 },
@@ -1987,11 +2019,12 @@ sub _send_ws_file
 			     # body transfer (slow client, no backpressure),
 			     # while a large ttfb points upstream.
 			     #
-			     printf STDERR "shock-fetch status=%s ttfb=%.3f total=%.3f bytes=%d%s url=%s\n",
+			     printf STDERR "shock-fetch status=%s ttfb=%.3f total=%.3f bytes=%d%s%s url=%s\n",
 				    $status,
 				    (defined $t_hdr ? $t_hdr - $t_start : -1),
 				    $now - $t_start,
 				    $n_bytes,
+				    ($client_gone ? " client_gone=1" : ""),
 				    ($have_range ? " range=$range_beg-$range_end" : ""),
 				    $url;
 			 });
@@ -2040,7 +2073,18 @@ sub _send_ws_file
 	    print STDERR "retrieve $ws_obj->{file_path}\n";
 	    my $ah;
 	    $ah = new AnyEvent::Handle(fh => $fh,
-				       on_error => sub { print STDERR "Error\n"; },
+				       #
+				       # Must tear the handle down, exactly as on_eof
+				       # does. The previous version only printed, so the
+				       # handle stayed alive with a dead descriptor and
+				       # the loop could re-poll it indefinitely.
+				       #
+				       on_error => sub {
+					   my($h, $fatal, $message) = @_;
+					   print STDERR "local-file stream error: $message\n";
+					   eval { $writer->close() };
+					   undef $ah;
+				       },
 				       on_eof => sub {
 					   $writer->close();
 					   undef $ah;

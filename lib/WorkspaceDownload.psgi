@@ -48,14 +48,29 @@ Bio::P3::Workspace::StampedStderr->install();
 # The module warns against raising this, but that advice is aimed at
 # well-behaved web crawlers hitting third-party sites. This is a server
 # talking to its own backend on the same machine; the politeness argument
-# does not apply. Set it well above the expected number of concurrent
-# downloads.
+# does not apply.
+#
+# Set to 16 rather than something larger, deliberately. The old default of
+# 4 was inadvertently capping memory exposure: the Shock streaming path has
+# NO BACKPRESSURE (on_body calls $writer->write and returns 1 regardless),
+# and Twiggy::Writer::write is push_write into an unbounded buffer. The
+# service pulls from Shock at ~46 MB/s while a slow client may drain at
+# tens of KB/s, so each in-flight transfer can buffer most of its response
+# in memory. With 253 MB objects the worst case scales directly:
+#
+#   MAX_PER_HOST=4  ->  ~1 GB       (the old, accidental, bound)
+#   MAX_PER_HOST=16 ->  ~4 GB
+#   MAX_PER_HOST=64 -> ~16 GB
+#
+# 16 is 4x the old concurrency, which is comfortably past the stall
+# reproduced at 20 clients, while keeping the unbounded-buffer exposure
+# to something survivable until backpressure is implemented properly.
 #
 # Note this limit is per-HOSTNAME, which is why it bites so hard here: the
 # stored shocknode URLs all point at the public p3.theseed.org name rather
 # than the local address, so every fetch shares one budget.
 #
-$AnyEvent::HTTP::MAX_PER_HOST = 64;
+$AnyEvent::HTTP::MAX_PER_HOST = 16;
 
 my $impl = Bio::P3::Workspace::WorkspaceImpl->new();
 
