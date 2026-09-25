@@ -20,10 +20,11 @@ Port of the Perl `WorkspaceDownload` service (`lib/WorkspaceDownload.psgi` +
 > 26/40/60 is flat at **0.10-0.22s** where it was 7-10s in lockstep. The service
 > is currently healthy.
 >
-> Everything below describes the incident as measured on 2026-09-24. The
-> architectural defect it exposed is unchanged and still latent, but this is now
-> fragility work rather than a live outage. See §1.1 for what was ruled out and
-> what the likely trigger was.
+> Everything below describes the incident as measured on 2026-09-24. **The cause
+> is now confirmed** (§1.2): individual Shock fetches were taking ~10-12s, and
+> because that fetch runs on the single shared event loop, every other request
+> queued behind it. The upstream slowness has since cleared; the architecture
+> that turns one slow fetch into a service-wide outage has not.
 
 On 2026-09-24, `/services/WorkspaceDownload` was stalled **~91-93% of wall-clock
 time**, in ~9s blocks separated by ~1s clear windows. Measured from two separate
@@ -89,7 +90,12 @@ downstream dependency. Note the probe used (`/download/BOGUS/x`) returns 404
 after *only* the indexed `find_one` — it does no Shock or LWP work at all, yet it
 stalled. That makes the probe a **victim** of a blocked event loop, not the cause.
 
-**No confirmed trigger yet.** Two hypotheses were raised and both are now dead:
+**Confirmed from `download.error.log`: the Shock fetches themselves stall for
+~10-12s, and because that fetch runs on the shared event loop, every other
+request waits behind it.** See §1.2. The hypotheses below were the route there
+and are kept because each elimination is load-bearing.
+
+**Two dead hypotheses:**
 
 *Wedged process, cleared by a restart* — ruled out. The `start_server` supervisor
 has been up since Aug 13. (Caveat: that PID is the supervisor, not the Twiggy
@@ -131,19 +137,109 @@ A handful of those calls going slow — not a flood of them — is enough to hol
 loop for seconds. That matches the observed shape (9s blocks, ~1s gaps,
 independent of concurrency) better than volume does.
 
-**Next diagnostic:** `download.error.log` for 2026-09-24 15:30-16:30. Several of
-these paths `warn` on failure, and the Shock response headers are `Dumper`ed on
-every request (`:1942`), so a hanging Shock PUT or signer fetch should be visible
-there.
+### 1.2 Confirmed cause: Shock fetches stalling on the shared event loop
 
-### 1.2 Cheap hedges worth doing regardless
+`download.error.log` settles it. The debug line at `:1942`
+(`on_header => sub { print STDERR Dumper(@_) }`) dumps every Shock response's
+headers, **including its `date`**, which turns the log into a timeline of when
+each upstream fetch actually completed — 2,655 of them for 2026-09-24.
 
-Independent of this port:
+During the exact window where external probes measured total stalls
+(20:54-20:55 UTC = 15:54-15:55 CDT):
 
-- Add the two genuinely missing indexes — `downloads.download_signature` and
-  `expiration_time` on both collections. Free, correct, and `downloads` will grow.
-- **Put a timeout on the `LWP::UserAgent` call at `:1823`** — it is currently
-  unbounded, and is the best candidate for a wedge that stalls the whole loop.
+```
+20:54:04  gap=35s
+20:54:16  gap=12s
+20:54:27  gap=11s   20:54:27  gap=0s   20:54:27  gap=0s
+20:54:49  gap=21s   20:54:49  gap=0s   20:54:49  gap=0s
+20:54:59  gap= 9s   20:54:59  gap=0s
+20:55:10  gap=11s   20:55:10  gap=0s
+20:55:22  gap=11s   20:55:23  gap=1s
+20:55:34  gap=11s   20:55:35  gap=0s
+```
+
+A ~10-12s pause, then a burst of responses landing in the same second, repeating.
+That is exactly the shape measured from the client side (~9s dead air, then
+everything releases at once) — the same phenomenon seen from inside the process.
+
+Across the whole day, **13% of all inter-response gaps fall in a 9-13s band**,
+with a sharp spike at 10/11/12s well above neighbouring values. A clean spike at
+a fixed duration is a timeout/retry signature, not a load curve.
+
+**Why one slow fetch stalls everything.** `http_request` to Shock (`:1939`) is
+the operation that occupies the loop for the whole duration of a download. While
+it hangs, the single Twiggy process serves nothing else — including the
+`/download/BOGUS/x` probe, which touches neither Shock nor any slow resource.
+That resolves the contradiction that killed the load hypothesis: no traffic
+volume is needed, because one hung upstream fetch is sufficient. The 25-worker
+RPC service is unaffected for the same reason: there, one hung fetch blocks one
+worker out of 25.
+
+This is the `/view` and Shock-backed `/download` path. The `/set-cookie-auth`
+signer fetches, suspected earlier, do not appear in the log at all.
+
+**What was tested and does NOT explain it:**
+
+- **Not file size.** Stalled fetches have a *smaller* median payload (0.45 MB)
+  than quick ones (0.70 MB), so this is not NFS read latency on large files.
+- **Not wall-clock periodicity.** Stall-ending responses are spread evenly across
+  all 60 second-of-minute positions — nothing cron-like.
+- **Not Shock returning errors.** 2,652 of 2,654 responses are `200 OK`.
+
+**Open question — the network path.** Shock runs on the *same machine* as the
+Workspace service and is backed by a NetApp NFS volume (no NFS stalls reported).
+But the stored `shocknode` URLs all point at `https://p3.theseed.org`:
+
+```
+2655  'URL' => 'https://p3.theseed.org/services/shock_api/node/...'
+```
+
+So every fetch leaves the box, traverses nginx/TLS (and whatever sits in front),
+and comes back — rather than using the `shock-url = 10.1.16.5` that `deploy.cfg`
+configures. Those URLs are baked into `objects.shocknode` at object-creation time
+(`:1175`), so changing the config now would only affect new objects.
+
+Probing that same public path today gives ~100ms consistently, so it is not
+*inherently* slow — but it is a far longer and more failure-prone path than a
+loopback call, and it is the obvious place for an intermittent ~10s hang
+(connection-pool exhaustion, TLS renegotiation, an upstream keepalive timeout).
+Correlating Shock's own access log against these timestamps would settle whether
+Shock was slow to *respond* or the path to it was slow to *deliver*.
+
+### 1.3 Other defects visible in the error log
+
+- **118 × `AnyEvent::Handle uncaught error: Broken pipe`** — clients disconnecting
+  mid-download. The `on_error` handler (`:2004`) prints `"Error\n"` and neither
+  closes the writer nor drops the handle, so these likely leak.
+- **75 × `Child died with status -1`** with `exitcode  0 -1` — archive
+  (`p3x-create-archive`) failures. The `exitcode  0` confirms the `child_pid` bug:
+  `$self->{child_pid}` is never assigned anywhere, so `:1752` calls
+  `waitpid(undef, WNOHANG)`.
+- **4 × `Cannot find file details for /public/maage@bvbrc/MAAGE Workshop/...`** —
+  the `/public` UI-only prefix reaching the download service as a real path, which
+  it then cannot resolve. Documented in MAAGE-Web's CLAUDE.md.
+
+### 1.4 Cheap hedges worth doing regardless
+
+Independent of this port, in rough order of value:
+
+1. **Bound the Shock fetch.** `http_request` at `:1939` has **no timeout**. It
+   cannot stop Shock being slow, but it caps how long one hung fetch holds the
+   loop. Same for the unbounded `LWP::UserAgent` PUT at `:1823`.
+2. **Investigate the `p3.theseed.org` round trip for a same-host service** (§1.2).
+   If Shock can be reached directly, new objects stop taking the long path —
+   though existing `shocknode` values are already baked in.
+3. Fix the `on_error` handler at `:2004` to close the writer and drop the handle.
+4. Add the two genuinely missing indexes — `downloads.download_signature` and
+   `expiration_time` on both collections. Not implicated in the stall (the
+   collections hold 16 and 23 documents), but free and `downloads` will grow.
+
+**This also constrains the Go port.** A timeout alone is not the fix: with one
+event loop, even a bounded 10s hang still blocks everyone for 10s. Per-request
+goroutines are what make a slow upstream cost only its own request. Phase 2 must
+therefore add `context.Context` to the Shock path — `ShockDownloadToWriter` has
+none today, so a client disconnect would not cancel the upstream fetch and the
+service would leak exactly the way the Perl one does.
 
 ---
 
