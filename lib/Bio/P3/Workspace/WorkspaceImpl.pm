@@ -1464,6 +1464,52 @@ sub _formatQuery {
 #
 
 #
+# Determine the originating client address for a download request.
+#
+# The download service sits behind nginx, so $req->address is always the
+# proxy. The real client is in the forwarding headers.
+#
+# This deliberately mirrors Bio::P3::Workspace::Service::getIPAddress
+# (Service.pm:187) so the download log and the RPC service agree on what
+# "the client" means: X-Forwarded-For first hop, then X-Real-IP, then the
+# socket peer.
+#
+# X-Forwarded-For is a comma-separated chain, "client, proxy1, proxy2",
+# appended to by each hop. The FIRST entry is the originating client.
+#
+# Caveat: X-Forwarded-For is client-supplied and trivially spoofable. If a
+# client sends its own header, nginx's proxy_add_x_forwarded_for appends
+# to it rather than replacing it, so the first entry is whatever the
+# client claimed. This is fine for diagnostics -- correlating a stall with
+# who was downloading -- but must not be used for authentication or
+# access control. Service.pm has the same exposure and the same caveat.
+#
+sub _client_address
+{
+    my($self, $req) = @_;
+
+    my $xff = $req->header("X-Forwarded-For");
+    if (defined($xff))
+    {
+	my($first) = split(/,/, $xff);
+	if (defined($first))
+	{
+	    $first =~ s/^\s+|\s+$//g;
+	    return $first if length($first);
+	}
+    }
+
+    my $real = $req->header("X-Real-IP");
+    if (defined($real))
+    {
+	$real =~ s/^\s+|\s+$//g;
+	return $real if length($real);
+    }
+
+    return $req->address // '-';
+}
+
+#
 # Start the download service. This will create a timer to garbage-collect
 # download records from the mongodb.
 #
@@ -1955,6 +2001,7 @@ sub _send_ws_file
 	    my $n_bytes = 0;
 	    my $status  = '?';
 	    my $client_gone = 0;
+	    my $client_ip = $self->_client_address($req);
 
 	    http_request(GET => $url,
 			 @headers,
@@ -2019,7 +2066,8 @@ sub _send_ws_file
 			     # body transfer (slow client, no backpressure),
 			     # while a large ttfb points upstream.
 			     #
-			     printf STDERR "shock-fetch status=%s ttfb=%.3f total=%.3f bytes=%d%s%s url=%s\n",
+			     printf STDERR "shock-fetch client=%s status=%s ttfb=%.3f total=%.3f bytes=%d%s%s url=%s\n",
+				    $client_ip,
 				    $status,
 				    (defined $t_hdr ? $t_hdr - $t_start : -1),
 				    $now - $t_start,
@@ -2050,7 +2098,10 @@ sub _send_ws_file
 	    seek($fh, $range_beg, SEEK_SET);
 	}
 
-	print STDERR "Opened $ws_obj->{file_path} fh=$fh\n";
+	my $client_ip = $self->_client_address($req);
+	my $t_start = gettimeofday();
+	my $n_bytes = 0;
+	my $client_gone = 0;
 
 	return sub {
 	    my($responder) = @_;
@@ -2070,7 +2121,20 @@ sub _send_ws_file
 		$writer = $responder->([200, \@resp_headers]);
 	    }
 
-	    print STDERR "retrieve $ws_obj->{file_path}\n";
+	    #
+	    # Emitted once per transfer at completion, mirroring the shock-fetch
+	    # line so both backends are greppable the same way.
+	    #
+	    my $log_done = sub {
+		printf STDERR "file-fetch client=%s total=%.3f bytes=%d%s%s path=%s\n",
+		       $client_ip,
+		       gettimeofday() - $t_start,
+		       $n_bytes,
+		       ($client_gone ? " client_gone=1" : ""),
+		       ($have_range ? " range=$range_beg-$range_end" : ""),
+		       $ws_obj->{file_path};
+	    };
+
 	    my $ah;
 	    $ah = new AnyEvent::Handle(fh => $fh,
 				       #
@@ -2081,13 +2145,16 @@ sub _send_ws_file
 				       #
 				       on_error => sub {
 					   my($h, $fatal, $message) = @_;
-					   print STDERR "local-file stream error: $message\n";
+					   # Almost always the client hanging up mid-transfer.
+					   $client_gone = 1;
 					   eval { $writer->close() };
 					   undef $ah;
+					   $log_done->();
 				       },
 				       on_eof => sub {
 					   $writer->close();
 					   undef $ah;
+					   $log_done->();
 				       },
 				       on_read => sub {
 					   my($h) = @_;
@@ -2098,14 +2165,18 @@ sub _send_ws_file
 
 					       if ($have_range && ($len > $range_len))
 					       {
-						   $writer->write(substr($h->{rbuf}, 0, $range_len));
+						   my $chunk = substr($h->{rbuf}, 0, $range_len);
+						   $n_bytes += length($chunk);
+						   $writer->write($chunk);
 						   $h->rbuf = '';
 						   $writer->close();
 						   undef $ah;
+						   $log_done->();
 					       }
 					       else
 					       {
 						   $range_len -= $len if $have_range;
+						   $n_bytes += $len;
 						   $writer->write($h->{rbuf});
 						   $h->rbuf = '';
 					       }
@@ -2114,6 +2185,7 @@ sub _send_ws_file
 					   {
 					       $writer->close();
 					       undef $ah;
+					       $log_done->();
 					   }
 				       });
 	};
