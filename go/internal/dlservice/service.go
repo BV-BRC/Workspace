@@ -118,7 +118,10 @@ func (s *Server) Handler() http.Handler {
 		s.routeDownload(w, r, r.URL.Path)
 	})
 
-	return corsMiddleware(mux)
+	// accessLog is innermost so its timings cover only request handling, and
+	// CORS preflights (answered by the middleware without calling the app) are
+	// not logged as requests.
+	return corsMiddleware(accessLog(s.Log, mux))
 }
 
 // routeDownload implements _download_request / _download_request_orig, which
