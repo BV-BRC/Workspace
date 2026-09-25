@@ -14,10 +14,21 @@ Port of the Perl `WorkspaceDownload` service (`lib/WorkspaceDownload.psgi` +
 
 ## 1. Why this exists
 
-`/services/WorkspaceDownload` is stalled **~91-93% of wall-clock time**, in ~9s
-blocks separated by ~1s clear windows. Measured from two separate networks
-(onsite and external, ~24ms RTT); throughput when *not* stalled is ~200 Mbps, so
-the network is not the problem.
+> **UPDATE 2026-09-25: the stall has cleared.** Re-measuring production the day
+> after the original readings gives **1% of wall-clock stalled** (one 1.12s stall
+> in 723 back-to-back probes over 90s), and the concurrency sweep at n=1/5/10/25/
+> 26/40/60 is flat at **0.10-0.22s** where it was 7-10s in lockstep. The service
+> is currently healthy.
+>
+> Everything below describes the incident as measured on 2026-09-24. The
+> architectural defect it exposed is unchanged and still latent, but this is now
+> fragility work rather than a live outage. See §1.1 for what was ruled out and
+> what the likely trigger was.
+
+On 2026-09-24, `/services/WorkspaceDownload` was stalled **~91-93% of wall-clock
+time**, in ~9s blocks separated by ~1s clear windows. Measured from two separate
+networks (onsite and external, ~24ms RTT); throughput when *not* stalled was
+~200 Mbps, so the network was not the problem.
 
 ### Root cause
 
@@ -57,13 +68,72 @@ this code uses the pre-1.0 `MongoDB::Connection` API removed in 2015, and every
 async Perl Mongo driver is abandoned. Goroutines make the blocking calls cost
 only their own request.
 
-> **Still open, checked separately:** whether `downloads.download_key` and
-> `auth_cookie.session_token` are indexed. `grep -r "ensure_index|create_index"`
-> over the Perl repo returns **nothing**, so these lookups may be full collection
-> scans — a prime suspect for the ~9s query time. A `createIndex` could relieve
-> the stall *today*. It does not change this port: the blocking single-threaded
-> architecture is a defect regardless, and the Go service creates the indexes at
-> startup.
+### 1.1 What was ruled out
+
+Every hypothesis raised during the investigation was tested and eliminated:
+
+| Hypothesis | Verdict |
+|---|---|
+| Local network / venue | Reproduced identically from two networks |
+| Cloudflare | Direct-to-origin `p3.theseed.org` stalls the same way |
+| Transfer throughput | ~200 Mbps once past the stall; 8s of dead air first |
+| Worker-pool exhaustion | n=1 stalls as long as n=60; no staircase at 25 |
+| **Missing Mongo indexes** | `download_key` and `session_token` **are** indexed; the hot query is an IXSCAN at **3ms** |
+| **Collection size** | `downloads` has **16** docs, `auth_cookie` **23**. Nothing to scan even unindexed |
+| **Replica set health** | All four members `health: 1`, `pingMs: 0`, no unreachable node |
+| Shock backend | ~100ms |
+| Token signer endpoints | ~0.3s, all four reachable |
+
+So the ~9s was spent neither in Mongo query execution nor in any reachable
+downstream dependency. Note the probe used (`/download/BOGUS/x`) returns 404
+after *only* the indexed `find_one` — it does no Shock or LWP work at all, yet it
+stalled. That makes the probe a **victim** of a blocked event loop, not the cause.
+
+**Leading hypothesis: load-induced saturation of the single event loop.**
+
+The service was **not** restarted — the `start_server` supervisor has been up
+since Aug 13. So the stall cleared on its own, and the variable that changed
+between the two measurements is **offered load**:
+
+- 2026-09-24: a room of workshop attendees actively downloading. The Workspace
+  server was taking 100-1500 hits/min.
+- 2026-09-25: quiet.
+
+Every blocking call in the request path is individually fast, but they are
+*serialized* on one event loop. `_lookup_ws_file_details` does a synchronous
+`LWP` PUT to Shock at **~100ms** (`:1823`) on every `/view`. At ~8 requests/sec
+that alone is ~80% of the loop's capacity — close to the 91-93% measured. Add
+the local-file path, which drives `AnyEvent::Handle` over a regular file with
+**no backpressure** (`:2003`), and a few large downloads to slow clients can hold
+the loop indefinitely.
+
+This explains every observation the "wedged process" theory had to hand-wave:
+
+- **Why n=1 stalled as long as n=60**: my probe was not the load. It queued
+  behind *other people's* traffic already saturating the loop.
+- **Why 60 requests released within 70ms**: they were all parked behind the same
+  in-progress blocking operation and freed together when the loop turned.
+- **Why it cleared with no restart**: the load went away.
+- **Why the RPC service stayed at 0%**: 25 worker processes absorb the same
+  pattern invisibly.
+
+**Prediction: it returns at the next workshop.** This is not a one-off wedge —
+it is what this architecture does under concurrent load, which makes the port
+the actual fix rather than a nice-to-have.
+
+Worth noting for diagnosis: the PID in `download.pid` is the `start_server`
+**supervisor**, not the Twiggy worker. The supervisor surviving since Aug 13 does
+not by itself prove the worker never restarted (`start_server` supports graceful
+worker restarts); check the child process's start time to be certain.
+
+### 1.2 Cheap hedges worth doing regardless
+
+Independent of this port:
+
+- Add the two genuinely missing indexes — `downloads.download_signature` and
+  `expiration_time` on both collections. Free, correct, and `downloads` will grow.
+- **Put a timeout on the `LWP::UserAgent` call at `:1823`** — it is currently
+  unbounded, and is the best candidate for a wedge that stalls the whole loop.
 
 ---
 
@@ -169,7 +239,7 @@ assumed.
 | `--strict-range-errors` → **416** | Perl emits a 206 with a **negative `Content-Length`** for a start past EOF. That is a bug, not a contract. |
 | `--enforce-download-expiry` | `/download` and `/archive` never check `expiration_time`; only the 120s sweep does, so a key stays live in the gap. |
 | Filenames **quoted** in `Content-Disposition` | Perl interpolates raw, so an object name with `"` or CRLF injects headers. |
-| **Indexes created at startup** | The Perl repo creates none. Idempotent, so safe on every boot. |
+| **Indexes created at startup** | The Perl repo creates none in code. Two of the four exist in production (added out of band); `download_signature` and `expiration_time` do not. Idempotent, so safe on every boot. |
 | Mongo timeout **10s**, not 120s | `:2189` uses 120s; a slow query there blocks every download for two minutes. |
 | Header casing normalized | Perl mixes `Content-Type` (inline) and `Content-type` (attachment). Go canonicalizes; observable on HTTP/1.1 only, and no client cares. |
 
