@@ -1,4 +1,5 @@
 use Data::Dumper;
+use Bio::P3::Workspace::StampedStderr;
 use Bio::P3::Workspace::WorkspaceImpl;
 use Bio::P3::Workspace::Service;
 use Plack::Middleware::CrossOrigin;
@@ -8,6 +9,9 @@ use P3TokenValidator;
 use Time::HiRes 'gettimeofday';
 
 use strict;
+
+# Timestamp everything this service writes to completion.error.log.
+Bio::P3::Workspace::StampedStderr->install();
 
 my $fields = { name => 1, owner=> 1, path => 1, size => 1, type => 1, uuid => 1, workspace_uuid => 1 };
 
