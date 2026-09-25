@@ -78,24 +78,41 @@ log file with its own ISO-8601 stamp. Only `warn` from inside handlers reaches
 real STDERR.
 
 Client IP comes from `_client_address`: X-Forwarded-For first hop → X-Real-IP →
-socket peer, mirroring `Service.pm:187`. **Diagnostic only** — the header is
-client-supplied and nginx appends rather than replaces, so it is spoofable.
+socket peer, mirroring `Service.pm:187`. **Treat as diagnostic, not
+authorization** — the value is only as trustworthy as the proxy that set it, and
+the code cannot tell a proxy-set header from a client-supplied one.
 
-> **If the log shows an internal address, check whether the request went through
-> nginx at all.** The download service listens on port 7129 and is reachable
-> *directly* as `http://spruce.cels.anl.gov:7129/...`, bypassing the proxy. A
-> direct request carries no `X-Forwarded-For` and no `X-Real-IP`, so
-> `_client_address` correctly falls through to the socket peer. Confirmed by
-> tshark: probes sent to `:7129` arrive with `Host: spruce.cels.anl.gov:7129`
-> and no forwarding headers whatsoever. Test through the public URL
-> (`https://p3.theseed.org/services/WorkspaceDownload/...`) if you want to
-> exercise the proxy path.
+> **Fixed 2026-09-25 in the nginx config.** The `/services/WorkspaceDownload/`
+> location now sets the forwarding header, and the real client address is
+> logging correctly:
 >
-> Separately, a capture of the **RPC** service through nginx showed
-> `X-Forwarded-For: 140.221.78.20, 140.221.78.20` — an internal host duplicated
-> rather than an originating client. That is a different request path from the
-> download service and may indicate a proxy-chain issue worth investigating on
-> its own, but it is not evidence about the download path.
+> ```nginx
+> location /services/WorkspaceDownload/ {
+>     proxy_set_header X-Forwarded-For $remote_addr;
+>     proxy_pass http://spruce.cels.anl.gov:7129/;
+> }
+> ```
+>
+> Note this uses `$remote_addr` rather than `$proxy_add_x_forwarded_for`. That
+> is deliberate here and arguably safer: `$proxy_add_x_forwarded_for` *appends*
+> to any client-supplied `X-Forwarded-For`, so a client can inject a bogus first
+> hop, and `_client_address` takes the first hop. With `$remote_addr` the header
+> is overwritten with the address nginx actually observed, which cannot be
+> spoofed. The trade-off is that a genuine upstream proxy's chain is discarded —
+> fine for this deployment.
+>
+> **Two ways to get an internal address in the log, both expected:**
+>
+> 1. **The request bypassed nginx.** The service also listens directly on
+>    `http://spruce.cels.anl.gov:7129/`, which carries no forwarding headers at
+>    all, so `_client_address` falls through to the socket peer. Confirmed by
+>    tshark. Test through the public `https://p3.theseed.org/...` URL to
+>    exercise the proxy path.
+> 2. A `location` block without the `proxy_set_header` line. Each one needs it
+>    individually — an RPC-service capture showed
+>    `X-Forwarded-For: 140.221.78.20, 140.221.78.20`, an internal host
+>    duplicated rather than an originating client, which is what a differently
+>    configured location produces.
 
 ## The 2026-09-24 download stall (resolved)
 
