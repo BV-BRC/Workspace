@@ -21,10 +21,12 @@ Port of the Perl `WorkspaceDownload` service (`lib/WorkspaceDownload.psgi` +
 > is currently healthy.
 >
 > Everything below describes the incident as measured on 2026-09-24. **The cause
-> is now confirmed** (§1.2): individual Shock fetches were taking ~10-12s, and
-> because that fetch runs on the single shared event loop, every other request
-> queued behind it. The upstream slowness has since cleared; the architecture
-> that turns one slow fetch into a service-wide outage has not.
+> is localized** (§1.2): the single event loop goes silent for ~10-12s at a time
+> between Shock fetches. Shock's own log proves it is not the upstream — Shock
+> answers in <1s at p99 and was serving other clients throughout — so the time is
+> spent inside the Twiggy process, in per-chunk work on the shared loop. The
+> architecture that lets one transfer block every other request is the defect,
+> and it is unchanged.
 
 On 2026-09-24, `/services/WorkspaceDownload` was stalled **~91-93% of wall-clock
 time**, in ~9s blocks separated by ~1s clear windows. Measured from two separate
@@ -82,7 +84,8 @@ Every hypothesis raised during the investigation was tested and eliminated:
 | **Missing Mongo indexes** | `download_key` and `session_token` **are** indexed; the hot query is an IXSCAN at **3ms** |
 | **Collection size** | `downloads` has **16** docs, `auth_cookie` **23**. Nothing to scan even unindexed |
 | **Replica set health** | All four members `health: 1`, `pingMs: 0`, no unreachable node |
-| Shock backend | ~100ms |
+| **Shock backend** | Exonerated by its own log: 368,752 requests, median 0s, p99 1s, and it was serving other clients during the stalls |
+| **The network / Shock URL hairpin** | No request was in flight during the gap — the service never sent one |
 | Token signer endpoints | ~0.3s, all four reachable |
 
 So the ~9s was spent neither in Mongo query execution nor in any reachable
@@ -186,36 +189,72 @@ signer fetches, suspected earlier, do not appear in the log at all.
   all 60 second-of-minute positions — nothing cron-like.
 - **Not Shock returning errors.** 2,652 of 2,654 responses are `200 OK`.
 
-**Open question — the network path.** Shock runs on the *same machine* as the
-Workspace service and is backed by a NetApp NFS volume (no NFS stalls reported).
-But the stored `shocknode` URLs all point at `https://p3.theseed.org`:
+**Shock is exonerated, and the delay is inside the download service.** Shock's
+own access log for 2026-09-24 (`access.log.114`, 737k lines, paired
+`REQ RECEIVED`/`RESPONDED TO`) gives its service time directly:
 
 ```
-2655  'URL' => 'https://p3.theseed.org/services/shock_api/node/...'
+368,752 paired requests
+median 0s   p95 0s   p99 1s
+>=5s: 466 requests (0.13%)
 ```
 
-So every fetch resolves the public hostname, opens a TLS connection, and goes
-back in through the front-end nginx — rather than using the
-`shock-url = 10.1.16.5` that `deploy.cfg` configures. Those URLs are baked into
-`objects.shocknode` at object-creation time (`:1175`), so changing the config now
-would only affect new objects.
+Shock answers essentially everything within the same second.
 
-**`p3.theseed.org` is NOT behind Cloudflare** — it is a direct A record to
-`140.221.78.42` with no CNAME, answering `Server: nginx` with no `cf-ray`.
-(Contrast `www.maage-brc.org`, which is `172.65.90.x` / `server: cloudflare`.) So
-the hairpin is host → local nginx → Shock, not a trip to an external CDN. That
-makes the path shorter than it first appears, and correspondingly weakens this as
-an explanation — but it is still a TLS + nginx round trip and a shared connection
-pool where a loopback call would do, and the fetch is issued from a single-
-threaded loop that cannot absorb any hang.
+Tracing a single stall settles it. On the client side, consecutive Shock
+responses arrived at 20:54:16 and 20:54:27 UTC — an 11s gap. In Shock's log for
+that same node over 15:54:16-15:54:27 CDT:
 
-Probing that same path today gives ~100ms consistently, so it is not *inherently*
-slow. Candidate mechanisms that survive: nginx worker/connection-pool exhaustion
-on the front end, TLS handshake stalls, or keepalive expiry between the service
-and nginx. Correlating **Shock's own access log** against these timestamps is
-what settles whether Shock was slow to *respond* or the path was slow to
-*deliver* — if Shock logs sub-second service times for the fetches that took 11s
-on the client side, the delay is in nginx or the connection layer, not Shock.
+```
+15:54:16  REQ RECEIVED / RESPONDED TO   (several, all same-second)
+             <-- 11 seconds with NO request from the download service at all
+15:54:27  REQ RECEIVED / RESPONDED TO   (burst, all same-second)
+```
+
+**The download service never issued a request during the gap.** Shock did not
+take 11s to answer; it was never asked. And Shock was not idle — it logged 11-18
+lines/second at 15:54:20 through 15:54:26 serving *other* clients while this
+download sat blocked. Request rate was trivial throughout (~1-14/s).
+
+So the missing ~11s is spent inside the Twiggy process, between finishing one
+response body and issuing the next fetch. That also rules out the network path
+and the `p3.theseed.org` hairpin as the *cause* — no packet was in flight to
+blame.
+
+**Where the loop goes.** The relevant code is the Shock streaming callback
+(`:1939-1958`). Two things run per chunk on the single loop:
+
+- `on_header => sub { print STDERR Dumper(@_) }` (`:1942`) — a full
+  `Data::Dumper` serialization of every response's headers, written to STDERR,
+  for **every** fetch. Synchronous blocking writes to a log file on every
+  request.
+- `on_body` calls `$writer->write($data)` (`:1948`) with **no backpressure and no
+  return-value check**. Twiggy buffers whatever it cannot flush to a slow client,
+  and the loop keeps pulling from Shock regardless.
+
+The local-file path has the same shape via `AnyEvent::Handle` (`:2003`), likewise
+with no backpressure.
+
+That is consistent with the fixed ~10-12s quantum and with stalls arriving in
+back-to-back chains: the loop is occupied doing per-chunk work for one transfer
+(and blocking on STDERR) and cannot service anything else until that transfer's
+current phase completes. It is *not* consistent with a slow upstream, which the
+logs now positively exclude.
+
+> Remaining uncertainty: the logs prove where the time is *not* spent (Shock, the
+> network) but only localize it to "inside the process". Distinguishing the
+> `Dumper`/STDERR cost from writer backpressure from something else needs a
+> profile or `strace` of the live process. All three are fixed by the same
+> architectural change, so this does not block the port.
+
+**Config note.** Every stored `shocknode` points at `https://p3.theseed.org` even
+though Shock runs on the same machine, rather than the `shock-url = 10.1.16.5` in
+`deploy.cfg`. `p3.theseed.org` is a direct A record to `140.221.78.42`
+(`Server: nginx`, no `cf-ray`) — **not** behind Cloudflare, unlike the MAAGE-Web
+front end. The URLs are baked into `objects.shocknode` at creation time
+(`:1175`), so a config change affects only new objects. This is a needless TLS +
+nginx round trip for a same-host service and worth fixing on its own merits, but
+it is **not** the cause of the stall.
 
 ### 1.3 Other defects visible in the error log
 
@@ -234,16 +273,21 @@ on the client side, the delay is in nginx or the connection layer, not Shock.
 
 Independent of this port, in rough order of value:
 
-1. **Bound the Shock fetch.** `http_request` at `:1939` has **no timeout**. It
-   cannot stop Shock being slow, but it caps how long one hung fetch holds the
-   loop. Same for the unbounded `LWP::UserAgent` PUT at `:1823`.
-2. **Investigate the `p3.theseed.org` round trip for a same-host service** (§1.2).
-   If Shock can be reached directly, new objects stop taking the long path —
-   though existing `shocknode` values are already baked in.
-3. Fix the `on_error` handler at `:2004` to close the writer and drop the handle.
-4. Add the two genuinely missing indexes — `downloads.download_signature` and
-   `expiration_time` on both collections. Not implicated in the stall (the
-   collections hold 16 and 23 documents), but free and `downloads` will grow.
+1. **Delete the `Dumper` debug line at `:1942`.** It serializes every Shock
+   response's headers to STDERR on every request — synchronous blocking writes on
+   the event loop, 2,655 of them on the 24th alone. This is leftover debugging
+   with no production value and is a one-line change. Best
+   effort-to-plausible-benefit ratio of anything here.
+2. Fix the `on_error` handler at `:2004` to close the writer and drop the handle
+   (118 broken-pipe events on the 24th, each likely leaking).
+3. **Bound the external calls.** `http_request` at `:1939` and the
+   `LWP::UserAgent` PUT at `:1823` both have **no timeout**. Not implicated in
+   this incident, but unbounded calls on a shared loop are a latent outage.
+4. Point `shock-url` at the local address so new objects skip the needless TLS +
+   nginx round trip (§1.2). Not the cause; still worth doing.
+5. Add the two genuinely missing indexes — `downloads.download_signature` and
+   `expiration_time` on both collections. Not implicated (the collections hold 16
+   and 23 documents), but free and `downloads` will grow.
 
 **This also constrains the Go port.** A timeout alone is not the fix: with one
 event loop, even a bounded 10s hang still blocks everyone for 10s. Per-request
