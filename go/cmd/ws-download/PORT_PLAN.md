@@ -7,6 +7,20 @@
 > Where the two disagree, `PORT_STATUS.md` wins: implementation turned up
 > details this plan got wrong (notably that a multi-range header does not match
 > the Perl regex at all, rather than taking the last pair).
+>
+> ### Superseded: the Context section below
+>
+> This plan attributes the stall to "synchronous blocking I/O on a single event
+> loop." That is true of the architecture but was **not** the trigger. The actual
+> cause, found 2026-09-25, is `AnyEvent::HTTP::$MAX_PER_HOST = 4` capping the
+> whole service at four concurrent Shock downloads — see `PORT_STATUS.md` §1.
+> It has been mitigated in the Perl service (PRs #101-#103).
+>
+> The port is still worth doing, for the reason the plan gives: a single-threaded
+> loop turns any one blockage into a service-wide outage, and the investigation
+> found several such blockages. But the **urgency argument in this plan is spent**
+> — this is now planned work, not incident response. `PORT_STATUS.md` §1.5 lists
+> the six specific defects the port must not reproduce.
 
 ## Context
 

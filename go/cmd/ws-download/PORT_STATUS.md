@@ -14,19 +14,30 @@ Port of the Perl `WorkspaceDownload` service (`lib/WorkspaceDownload.psgi` +
 
 ## 1. Why this exists
 
-> **UPDATE 2026-09-25: the stall has cleared.** Re-measuring production the day
-> after the original readings gives **1% of wall-clock stalled** (one 1.12s stall
-> in 723 back-to-back probes over 90s), and the concurrency sweep at n=1/5/10/25/
-> 26/40/60 is flat at **0.10-0.22s** where it was 7-10s in lockstep. The service
-> is currently healthy.
+> ## RESOLVED 2026-09-25 — root cause found and mitigated in the Perl service
 >
-> Everything below describes the incident as measured on 2026-09-24. **The cause
-> is localized** (§1.2): the single event loop goes silent for ~10-12s at a time
-> between Shock fetches. Shock's own log proves it is not the upstream — Shock
-> answers in <1s at p99 and was serving other clients throughout — so the time is
-> spent inside the Twiggy process, in per-chunk work on the shared loop. The
-> architecture that lets one transfer block every other request is the defect,
-> and it is unchanged.
+> **`AnyEvent::HTTP::$MAX_PER_HOST` defaults to 4** (`HTTP.pm:59`). Requests past
+> that are not sent; they queue in `_slot_schedule` until a connection closes.
+> Every Shock fetch targets the same hostname, so **the whole service was capped
+> at four concurrent Shock downloads**, and on a single-threaded Twiggy process
+> everything else queued behind them.
+>
+> Shipped to production in PRs #101-#103:
+>
+> | PR | Change |
+> |---|---|
+> | #101 | `StampedStderr` + the `shock-fetch` timing line — **the instrumentation that found it** |
+> | #102 | Raise `MAX_PER_HOST` (the stall fix) |
+> | #103 | Cancel the Shock fetch on client disconnect; lower `MAX_PER_HOST` 64 → 16 |
+> | #104 | Log the originating client IP (open) |
+>
+> The user considers the Perl service **mitigated**. The port continues on its
+> own merits: the architecture that turns any single blockage into a service-wide
+> outage is unchanged, and §1.5 records what the port must not repeat.
+>
+> §1.1–§1.4 below are kept deliberately — they are a record of four wrong
+> hypotheses and how each was killed, which is the most useful part of this
+> document for the next person.
 
 On 2026-09-24, `/services/WorkspaceDownload` was stalled **~91-93% of wall-clock
 time**, in ~9s blocks separated by ~1s clear windows. Measured from two separate
@@ -297,6 +308,52 @@ none today, so a client disconnect would not cancel the upstream fetch and the
 service would leak exactly the way the Perl one does.
 
 ---
+
+### 1.5 What the port must get right (learned the hard way)
+
+Every item here is a defect found in the Perl service during this investigation.
+The Go implementation must not reproduce any of them.
+
+**1. No global concurrency cap on the upstream fetch.**
+This was the root cause. Go's `http.Transport` defaults `MaxConnsPerHost` to 0
+(unlimited), but `MaxIdleConnsPerHost` is **2**, which throttles connection reuse
+rather than concurrency — still worth setting explicitly. The port must never
+introduce a shared semaphore across requests.
+
+**2. Real backpressure on the body copy.**
+Perl's `on_body` calls `$writer->write` and returns 1 regardless of whether the
+client can keep up; `Twiggy::Writer::write` is `push_write` into an unbounded
+buffer. The service pulls from Shock at ~46 MB/s while a slow client drains at
+tens of KB/s. `io.Copy` to an `http.ResponseWriter` blocks the goroutine when the
+client is slow, which is correct and free — **do not** buffer the body to make
+something else easier.
+
+**3. Cancel the upstream fetch on client disconnect.**
+The Perl bug: when the client went away, `push_write` croaked, the exception
+escaped `on_body` into `AnyEvent::HTTP`'s read callback, and **EV caught and
+ignored it**. `on_body` therefore never returned 0, the fetch was never
+cancelled, and the read callback kept firing and throwing for every remaining
+byte of a 253 MB body — 100% CPU, flat memory, self-clearing when the body ran
+out. In Go this is `context.Context`: `dlservice` must pass `r.Context()` into
+the Shock fetch so a disconnect cancels it. `ShockDownloadToWriter` has no ctx
+parameter today — **this is a phase-2 blocker, not a nicety.**
+
+**4. Per-request logging with a ttfb/total split.**
+Two hypotheses died purely because the Perl logs recorded *that* a response
+arrived, not how long it took. Already implemented in `internal/dlservice/accesslog.go`;
+keep it. `ttfb` large means a slow dependency; small `ttfb` with large `total`
+means a slow client. That single distinction ended the investigation.
+
+**5. Timestamps and client identity in the log.**
+The Perl error log had no clock; the stall was only locatable because a stray
+debug `Dumper` happened to include an upstream HTTP `date` header. `slog` gives
+timestamps by default. Client IP comes from X-Forwarded-For's first hop → X-Real-IP
+→ socket peer (`RemoteAddr`), matching `Service.pm:187`; treat it as diagnostic
+only, never for authorization.
+
+**6. Distinguish "no record" from "backend down".**
+Perl returns 404 for both. Already handled — the Go store returns `ErrNotFound`
+separately and a Mongo failure surfaces as 500.
 
 ## 2. What is built
 
