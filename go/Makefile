@@ -15,7 +15,7 @@ SERVER_FLAGS := -ldflags="-s -w -X main.version=$(VERSION)"
 SERVER_PKGS := ./cmd/ws-download/... ./internal/dlservice/... ./internal/dlstore/... ./internal/wsconfig/...
 
 .PHONY: all build clean linux darwin windows test deps help \
-        server server-linux-amd64 server-linux-arm64 test-server
+        server server-linux-amd64 server-linux-arm64 test-server slowclient
 
 # Default target - build for current platform
 all: build
@@ -43,6 +43,14 @@ server-linux-arm64:
 	@echo "Building $(SERVER_BINARY) for Linux arm64..."
 	@mkdir -p $(OUTDIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build $(SERVER_FLAGS) -o $(OUTDIR)/$(SERVER_BINARY)-linux-arm64 $(SERVER_PKG)
+
+# Diagnostic tool: hold slow downloads open against a live service while
+# probing it, to test whether slow clients stall unrelated requests.
+# See cmd/slowclient/main.go for the safety notes before pointing it at prod.
+slowclient:
+	@echo "Building slowclient..."
+	@mkdir -p $(OUTDIR)
+	CGO_ENABLED=0 go build $(SERVER_FLAGS) -o $(OUTDIR)/slowclient ./cmd/slowclient
 
 # Test only the server packages. Plain `make test` runs ./... which pulls in
 # internal/fuse and therefore needs FUSE headers and a C toolchain; this target
@@ -144,6 +152,7 @@ help:
 	@echo "  server-linux-amd64  Build ws-download for Linux amd64"
 	@echo "  server-linux-arm64  Build ws-download for Linux arm64"
 	@echo "  test-server         Test only the ws-download packages"
+	@echo "  slowclient          Build the slow-client stall reproducer"
 	@echo ""
 	@echo "  linux         Build for Linux (amd64 + arm64)"
 	@echo "  linux-amd64   Build for Linux amd64"
