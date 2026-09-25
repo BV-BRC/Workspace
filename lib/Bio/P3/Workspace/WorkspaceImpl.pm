@@ -1935,18 +1935,41 @@ sub _send_ws_file
 	    {
 		@headers = (headers => {Authorization => "OAuth $token" });
 	    }
-	    # print STDERR "retrieve $url\n" . Dumper(@headers);
+	    #
+	    # Per-fetch instrumentation.
+	    #
+	    # This replaces a Data::Dumper of every response's headers. That
+	    # debug statement was accidentally load-bearing: during the
+	    # 2026-09-24 stall it was the only clock in the error log (via
+	    # Shock's HTTP 'date' header) and was how the stall was located.
+	    # It is also far too verbose -- ~20 lines per request -- and
+	    # serializing it costs the event loop on every fetch.
+	    #
+	    # What is kept is the timing, which is what the diagnosis actually
+	    # needed: how long the headers took to come back (ttfb), how long
+	    # the whole body took, how many bytes moved, and the status. One
+	    # line per fetch, emitted at completion.
+	    #
+	    my $t_start = gettimeofday();
+	    my $t_hdr;
+	    my $n_bytes = 0;
+	    my $status  = '?';
+
 	    http_request(GET => $url,
 			 @headers,
 			 # handle_params => { max_read_size => 32768 },
-			 on_header => sub { print STDERR Dumper(@_); },
+			 on_header => sub {
+			     my($hdr) = @_;
+			     $t_hdr  = gettimeofday();
+			     $status = $hdr->{Status} // '?';
+			     return 1;
+			 },
 			 on_body => sub {
 			     my($data, $hdr) = @_;
-			     # print STDERR Dumper($hdr);
 			     if ($data)
 			     {
 				 $writer->write($data);
-				 my $len = length($data);
+				 $n_bytes += length($data);
 				 return 1;
 			     }
 			     else
@@ -1955,7 +1978,23 @@ sub _send_ws_file
 				 return 0;
 			     }
 			 },
-			 sub {});
+			 sub {
+			     my $now = gettimeofday();
+			     #
+			     # ttfb is the number to watch. During the stall the
+			     # gap was BETWEEN fetches rather than inside them,
+			     # so a large total with a small ttfb points at the
+			     # body transfer (slow client, no backpressure),
+			     # while a large ttfb points upstream.
+			     #
+			     printf STDERR "shock-fetch status=%s ttfb=%.3f total=%.3f bytes=%d%s url=%s\n",
+				    $status,
+				    (defined $t_hdr ? $t_hdr - $t_start : -1),
+				    $now - $t_start,
+				    $n_bytes,
+				    ($have_range ? " range=$range_beg-$range_end" : ""),
+				    $url;
+			 });
 	};
 		     
     }
