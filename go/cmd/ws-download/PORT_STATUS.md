@@ -76,7 +76,7 @@ Every hypothesis raised during the investigation was tested and eliminated:
 | Hypothesis | Verdict |
 |---|---|
 | Local network / venue | Reproduced identically from two networks |
-| Cloudflare | Direct-to-origin `p3.theseed.org` stalls the same way |
+| Cloudflare | Not in this path at all — `p3.theseed.org` is a direct A record to `140.221.78.42`, `Server: nginx`, no `cf-ray`. (The MAAGE-Web front end *is* behind Cloudflare; the download service is not.) |
 | Transfer throughput | ~200 Mbps once past the stall; 8s of dead air first |
 | Worker-pool exhaustion | n=1 stalls as long as n=60; no staircase at 25 |
 | **Missing Mongo indexes** | `download_key` and `session_token` **are** indexed; the hot query is an IXSCAN at **3ms** |
@@ -194,17 +194,28 @@ But the stored `shocknode` URLs all point at `https://p3.theseed.org`:
 2655  'URL' => 'https://p3.theseed.org/services/shock_api/node/...'
 ```
 
-So every fetch leaves the box, traverses nginx/TLS (and whatever sits in front),
-and comes back — rather than using the `shock-url = 10.1.16.5` that `deploy.cfg`
-configures. Those URLs are baked into `objects.shocknode` at object-creation time
-(`:1175`), so changing the config now would only affect new objects.
+So every fetch resolves the public hostname, opens a TLS connection, and goes
+back in through the front-end nginx — rather than using the
+`shock-url = 10.1.16.5` that `deploy.cfg` configures. Those URLs are baked into
+`objects.shocknode` at object-creation time (`:1175`), so changing the config now
+would only affect new objects.
 
-Probing that same public path today gives ~100ms consistently, so it is not
-*inherently* slow — but it is a far longer and more failure-prone path than a
-loopback call, and it is the obvious place for an intermittent ~10s hang
-(connection-pool exhaustion, TLS renegotiation, an upstream keepalive timeout).
-Correlating Shock's own access log against these timestamps would settle whether
-Shock was slow to *respond* or the path to it was slow to *deliver*.
+**`p3.theseed.org` is NOT behind Cloudflare** — it is a direct A record to
+`140.221.78.42` with no CNAME, answering `Server: nginx` with no `cf-ray`.
+(Contrast `www.maage-brc.org`, which is `172.65.90.x` / `server: cloudflare`.) So
+the hairpin is host → local nginx → Shock, not a trip to an external CDN. That
+makes the path shorter than it first appears, and correspondingly weakens this as
+an explanation — but it is still a TLS + nginx round trip and a shared connection
+pool where a loopback call would do, and the fetch is issued from a single-
+threaded loop that cannot absorb any hang.
+
+Probing that same path today gives ~100ms consistently, so it is not *inherently*
+slow. Candidate mechanisms that survive: nginx worker/connection-pool exhaustion
+on the front end, TLS handshake stalls, or keepalive expiry between the service
+and nginx. Correlating **Shock's own access log** against these timestamps is
+what settles whether Shock was slow to *respond* or the path was slow to
+*deliver* — if Shock logs sub-second service times for the fetches that took 11s
+on the client side, the delay is in nginx or the connection layer, not Shock.
 
 ### 1.3 Other defects visible in the error log
 
