@@ -4,6 +4,7 @@ use Data::Dumper;
 use strict;
 use base 'Bio::P3::Workspace::WorkspaceClient';
 use LWP::UserAgent;
+use P3ClientUA;
 use File::stat ();
 use File::Basename;
 use File::Slurp;
@@ -105,7 +106,7 @@ sub shock_read_bytes
 {
     my($self, $url, $offset, $length) = @_;
 
-    my $ua = LWP::UserAgent->new();
+    my $ua = P3ClientUA::new_ua();
     my @auth = (Authorization => "OAuth " . $self->{token});
 
     my $get_url = "$url?download&seek=$offset&length=$length";
@@ -290,7 +291,7 @@ sub copy_files_to_handles
     my $ua;
     if ($use_shock)
     {
-	$ua = LWP::UserAgent->new();
+	$ua = P3ClientUA::new_ua();
 	$token = $token->token if ref($token);
     }
     my @get_opts;
@@ -368,7 +369,7 @@ sub save_data_to_file
 	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
 
 	$token = $token->token if ref($token);
-	my $ua = LWP::UserAgent->new();
+	my $ua = P3ClientUA::new_ua();
 
 	my $res = $self->create({ objects => [[$path, $type, $metadata ]],
 				overwrite => ($overwrite ? 1 : 0),
@@ -436,7 +437,7 @@ sub save_file_to_file
 	local $HTTP::Request::Common::DYNAMIC_FILE_UPLOAD = 1;
 
 	$token = $token->token if ref($token);
-	my $ua = LWP::UserAgent->new();
+	my $ua = P3ClientUA::new_ua();
 	$ua->timeout(86400);
 
 	# print STDERR "Create $path\n";
