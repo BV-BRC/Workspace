@@ -29,7 +29,7 @@ sub show_pretty_ls
 	{
 	    die "$path not found\n";
 	}
-	
+
 	$res = $res->[0]->[0];
 	$type = $res->[1];
 	my $id = $path;
@@ -41,15 +41,21 @@ sub show_pretty_ls
 	$type = 'folder';
 	$res = ['/', 'folder', '', 0, 0, 0, 0, {}, {}, 0, 0, 0];
     }
+    elsif ($path =~ m/^\/([^\/]+)\/*$/)
+    {
+	# User-level path (e.g., /user@example.org) - treat as folder
+	$type = 'folder';
+	$res = [$path, 'folder', '', 0, 0, 0, 0, {}, {}, 0, 0, 0];
+    }
     else
     {
 	$res = $ws->get({ objects => [$path], metadata_only => 1, @admin});
-	
+
 	if (!$res || @$res == 0)
 	{
 	    die "$path not found\n";
 	}
-	
+
 	$res = $res->[0]->[0];
 	$type = $res->[1];
     }

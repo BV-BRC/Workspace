@@ -1,6 +1,11 @@
+use Bio::P3::Workspace::StampedStderr;
 use Bio::P3::Workspace::WorkspaceImpl;
 
 use Bio::P3::Workspace::Service;
+
+# Timestamp everything this service writes to error.log. With 25 starman
+# workers the pid in each stamp also tells you which worker logged it.
+Bio::P3::Workspace::StampedStderr->install();
 use Plack::Middleware::CrossOrigin;
 use Plack::Builder;
 

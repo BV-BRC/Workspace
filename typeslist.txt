@@ -4,6 +4,7 @@ bam
 bai
 bigwig
 biochemistry
+cif
 contigs
 csi
 csv
@@ -39,11 +40,13 @@ jpg
 json
 mapping
 media
+mmcif
 model
 modelfolder
 model_edit
 modeltemplate
 nwk
+pdb
 pdf
 phyloxml
 png

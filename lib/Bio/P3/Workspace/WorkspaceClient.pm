@@ -4,12 +4,9 @@ use POSIX;
 use strict;
 use Data::Dumper;
 use URI;
+use P3ClientUA;
 
-my $get_time = sub { time, 0 };
-eval {
-    require Time::HiRes;
-    $get_time = sub { Time::HiRes::gettimeofday() };
-};
+use Time::HiRes qw(gettimeofday);
 
 use P3AuthToken;
 
@@ -56,7 +53,7 @@ sub new
     }
     else
     {
-	my ($t, $us) = &$get_time();
+	my ($t, $us) = gettimeofday;
 	$us = sprintf("%06d", $us);
 	my $ts = strftime("%Y-%m-%dT%H:%M:%S.${us}Z", gmtime $t);
 	$self->{kbrpc_tag} = "C:$0:$self->{hostname}:$$:$ts";
@@ -93,7 +90,7 @@ sub new
     my $ua = $self->{client}->ua;	 
     my $timeout = $ENV{CDMI_TIMEOUT} || (30 * 60);	 
     $ua->timeout($timeout);
-    $ua->agent("Bio::P3::Workspace::WorkspaceClient UserAgent");
+    $ua->agent(P3ClientUA::user_agent_string());
     bless $self, $class;
     return $self;
 }
@@ -537,6 +534,98 @@ sub get
 
 
 
+=head2 objects_exist
+
+  $output = $obj->objects_exist($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+
+=end text
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub objects_exist
+{
+    my($self, @args) = @_;
+
+# Authentication: optional
+
+    if ((my $n = @args) != 1)
+    {
+        die "Invalid argument count for function objects_exist (received $n, expecting 1)";
+    }
+    {
+	my($input) = @args;
+
+	my @_bad_arguments;
+        (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
+        if (@_bad_arguments) {
+	    my $msg = "Invalid arguments passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	    die $msg;
+	}
+    }
+
+    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+	method => "Workspace.objects_exist",
+	params => \@args,
+    });
+    if ($result) {
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking objects_exist:\n$msg\n";
+	} else {
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
+	}
+    } else {
+	die "Error invoking method objects_exist: " .  $self->{client}->status_line;
+    }
+}
+
+
+
 =head2 update_auto_meta
 
   $output = $obj->update_auto_meta($input)
@@ -834,6 +923,104 @@ sub get_archive_url
 	}
     } else {
 	die "Error invoking method get_archive_url: " .  $self->{client}->status_line;
+    }
+}
+
+
+
+=head2 du
+
+  $output = $obj->du($input)
+
+=over 4
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+
+
+=end text
+
+=item Description
+
+
+
+=back
+
+=cut
+
+sub du
+{
+    my($self, @args) = @_;
+
+# Authentication: optional
+
+    if ((my $n = @args) != 1)
+    {
+        die "Invalid argument count for function du (received $n, expecting 1)";
+    }
+    {
+	my($input) = @args;
+
+	my @_bad_arguments;
+        (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument 1 \"input\" (value was \"$input\")");
+        if (@_bad_arguments) {
+	    my $msg = "Invalid arguments passed to du:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	    die $msg;
+	}
+    }
+
+    my $result = $self->{client}->call($self->{url}, $self->{headers}, {
+	method => "Workspace.du",
+	params => \@args,
+    });
+    if ($result) {
+	if ($result->{error}) {
+	    my $msg = $result->{error}->{error} || $result->{error}->{message};
+	    $msg =  $self->{client}->json->encode($msg) if ref($msg);
+	    die "Error $result->{error}->{code} invoking du:\n$msg\n";
+	} else {
+	    return wantarray ? @{$result->{result}} : $result->{result}->[0];
+	}
+    } else {
+	die "Error invoking method du: " .  $self->{client}->status_line;
     }
 }
 
@@ -2051,6 +2238,93 @@ adminmode has a value which is a bool
 
 
 
+=head2 objects_exist_params
+
+=over 4
+
+
+
+=item Description
+
+"objects_exist" command
+        Description:
+        This function checks whether objects exist in the workspace without
+        retrieving metadata or data. Useful for lightweight existence checks.
+
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects to check
+        bool adminmode - run this command as an admin, meaning you can check anything anywhere
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 ObjectsExistResult
+
+=over 4
+
+
+
+=item Description
+
+ObjectsExistResult: tuple containing existence check result for a path
+
+       FullObjectPath - the path that was checked
+       bool exists - 1 if object exists, 0 if not
+       string error - set if there was an error checking this path (e.g., permission denied)
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+
+=end text
+
+=back
+
+
+
 =head2 update_auto_meta_params
 
 =over 4
@@ -2179,6 +2453,102 @@ objects has a value which is a reference to a list where each element is a FullO
 recursive has a value which is a bool
 archive_name has a value which is a string
 archive_type has a value which is a string
+
+
+=end text
+
+=back
+
+
+
+=head2 du_params
+
+=over 4
+
+
+
+=item Description
+
+"du" command
+        Description:
+        This function computes the disk usage (storage used in bytes) for all files
+        at and below the specified paths. Similar to the Unix du command.
+
+        Parameters:
+        list<FullObjectPath> paths - list of full paths for which disk usage should be computed
+        bool recursive - if true, include all files in subdirectories (default: true)
+        bool adminmode - run this command as an admin, meaning you can query anything anywhere
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 DiskUsageResult
+
+=over 4
+
+
+
+=item Description
+
+DiskUsageResult: tuple containing disk usage information for a path
+
+       FullObjectPath - the path that was queried
+       int total_size - total size in bytes of all files at and below this path
+       int file_count - number of files counted
+       int directory_count - number of directories at and below this path
+       string error - set if there was an error computing usage for this path
+
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
 
 
 =end text
@@ -2431,6 +2801,7 @@ package Bio::P3::Workspace::WorkspaceClient::RpcClient;
 use POSIX;
 use strict;
 use LWP::UserAgent;
+use P3ClientUA;
 use JSON::XS;
 
 BEGIN {
@@ -2448,7 +2819,7 @@ sub new
 {
     my($class) = @_;
 
-    my $ua = LWP::UserAgent->new();
+    my $ua = P3ClientUA::new_ua();
     my $json = JSON::XS->new->allow_nonref->utf8;
     
     my $self = {

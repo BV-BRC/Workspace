@@ -37,13 +37,32 @@ use AnyEvent::HTTP;
 use AnyEvent::Run;
 use Config::Simple;
 use Plack::Request;
+use Plack::Response;
 use Fcntl ':seek';
 use DateTime;
 use DateTime::Format::ISO8601;
 use P3AuthLogin;
+use P3AuthToken;
+use P3TokenValidator;
 use IO::File;
 use Time::HiRes 'gettimeofday';
 use Digest::HMAC_SHA1 qw(hmac_sha1 hmac_sha1_hex);
+use Scalar::Util qw (blessed);
+use Bio::P3::Workspace::Service;
+use MIME::Types;
+
+our $mime_types = MIME::Types->new;
+{
+    my $faType = MIME::Type->new(extensions => [".fa", ".fasta", ".fna", ".faa"],
+				 type => "text/plain");
+    $mime_types->addType($faType);
+}
+our %mime_overrides = (pdb => "text/plain",
+		       sdf => "text/plain",
+		       gb => "text/plain",
+		       sh => "text/plain",
+		      );
+
 
 our $date_parser = DateTime::Format::ISO8601->new();
 
@@ -504,6 +523,87 @@ sub _count_directory_contents {
 	},1);
 }
 
+#Compute disk usage for a path within a workspace
+sub _calculate_du {
+	my ($self, $wsobj, $path, $name, $recursive) = @_;
+
+	my $col = $self->_mongodb()->get_collection('objects');
+	my $total_size = 0;
+	my $file_count = 0;
+	my $dir_count = 0;
+
+	# Build the subpath
+	my $subpath = "";
+	if (length($path) > 0 && length($name) > 0) {
+		$subpath = "$path/$name";
+	} elsif (length($name) > 0) {
+		$subpath = $name;
+	} elsif (length($path) > 0) {
+		$subpath = $path;
+	}
+
+	# Check if the path itself is a file (not a directory)
+	if (length($subpath) > 0) {
+		my $obj = $self->_get_db_object({
+			workspace_uuid => $wsobj->{uuid},
+			path => $path,
+			name => $name
+		}, 0);  # Don't throw error if not found
+
+		# If it's a file, just return its size
+		if (defined($obj) && !$obj->{folder}) {
+			return ($obj->{size} || 0, 1, 0);
+		}
+	}
+
+	# Build query for aggregation
+	my $query;
+
+	if ($recursive && length($subpath) > 0) {
+		$query = $self->_compute_mongo_path_query($subpath, $wsobj->{uuid});
+	} else {
+		$query = { workspace_uuid => $wsobj->{uuid} };
+		if (length($subpath) > 0) {
+			$query->{path} = $subpath;
+		}
+	}
+	# If subpath is empty and recursive, we want everything in the workspace
+
+	my $agg_hint = 'workspace_uuid_1_path_1';
+
+	# Aggregate for files (non-folders)
+	my $file_query = { %$query, folder => 0 };
+	my $file_res = $self->_aggregate_hint($col, [
+		{ '$match' => $file_query },
+		{ '$group' => {
+			_id => 0,
+			total_size => { '$sum' => '$size' },
+			file_count => { '$sum' => 1 },
+		}},
+	], $agg_hint);
+
+	if ($file_res && $file_res->[0]) {
+		$total_size = $file_res->[0]->{total_size} || 0;
+		$file_count = $file_res->[0]->{file_count} || 0;
+	}
+
+	# Count directories separately
+	my $dir_query = { %$query, folder => 1 };
+	my $dir_res = $self->_aggregate_hint($col, [
+		{ '$match' => $dir_query },
+		{ '$group' => {
+			_id => 0,
+			dir_count => { '$sum' => 1 },
+		}},
+	], $agg_hint);
+
+	if ($dir_res && $dir_res->[0]) {
+		$dir_count = $dir_res->[0]->{dir_count} || 0;
+	}
+
+	return ($total_size, $file_count, $dir_count);
+}
+
 #Get all subobjects contained within directory**
 sub _get_directory_contents {
 	my ($self,$obj,$recursive) = @_;
@@ -532,6 +632,23 @@ sub _get_directory_contents {
 	}
 	my $objects = $self->_query_database($query,0);
 	return $objects;
+}
+
+#
+# Run an aggregate pipeline, forcing the given index hint when the server
+# supports it. MongoDB only accepts the aggregate command's "hint" option as
+# of 3.6; the production server runs 3.4, which rejects it with
+# "unrecognized field 'hint'". Retry without the hint in that case so the
+# query still succeeds. (Find-cursor hints, used by _query_database, are fine
+# on 3.4 and do not need this.)
+#
+sub _aggregate_hint {
+	my ($self, $col, $pipeline, $hint) = @_;
+	my $res = eval { $col->aggregate($pipeline, { hint => $hint }) };
+	if ($@) {
+		$res = $col->aggregate($pipeline);
+	}
+	return $res;
 }
 
 #Retrive objects from mongodb based on input query**
@@ -1120,6 +1237,16 @@ sub _wscache {
 #List all workspaces matching input query**
 sub _list_workspaces {
     my ($self,$user,$query) = @_;
+
+    #
+    # Security fix. An unauthorized user cannot list all public workspaces.
+    #
+
+    if (!$CallContext->user_id && !$user)
+    {
+	return [];
+    }
+
     if (defined($user)) {
 	$query->{owner} = $user;
     }
@@ -1208,20 +1335,46 @@ sub _list_workspaces {
 }
 
 #
-# Given a path string, return the regex suitable for
-# a mongo search to return all objects below that path.
+# Given a path string, return a query clause suitable for
+# a mongo search to return all objects at or below that path.
+# Returns a hashref with an $or clause for index-friendly matching.
+#
+sub _compute_mongo_path_query
+{
+    my($self, $path, $workspace_uuid) = @_;
+    if (length($path) > 0) {
+	my $esc_path = quotemeta($path);
+	# workspace_uuid must be inside each $or branch so MongoDB can
+	# do a tight IXSCAN on {workspace_uuid, path} for each branch.
+	my %scope = $workspace_uuid ? (workspace_uuid => $workspace_uuid) : ();
+	return {
+	    '$or' => [
+		{ %scope, path => $path },
+		{ %scope, path => qr/^$esc_path\// },
+	    ]
+	};
+    }
+    else
+    {
+	return $workspace_uuid ? { workspace_uuid => $workspace_uuid } : {};
+    }
+}
+
+#
+# Legacy function - returns a regex for path matching.
+# DEPRECATED: Use _compute_mongo_path_query instead for better index usage.
 #
 sub _compute_mongo_regex_for_path
 {
     my($self, $path) = @_;
     if (length($path) > 0) {
 	my $term = '(/|$)';
-	
+
 	# print STDERR "Before $path\n";
 	#$path =~ s/[.()]/\\$&/g;
 	$path = quotemeta($path);
 	# print STDERR "After $path\n";
-	
+
 	my $rc = qr/^$path$term/;
 	# print STDERR "RE $rc\n";
 	return $rc;
@@ -1235,7 +1388,6 @@ sub _compute_mongo_regex_for_path
 #List all objects matching input query**
 sub _list_objects {
 	my ($self,$fullpath,$query,$excludeDirectories,$excludeObjects,$recursive) = @_;
-	my $hint;
 	my ($user,$ws,$path,$name) = $self->_parse_ws_path($fullpath);
 	if (length($name) > 0) {
 		if (length($path) > 0) {
@@ -1251,38 +1403,26 @@ sub _list_objects {
 	if (!defined($query)) {
 		$query = {};
 	}
-	$query->{workspace_uuid} = $wsobj->{uuid};
 	if ($excludeDirectories == 1) {
 		$query->{folder} = 0;
 	} elsif ($excludeObjects == 1) {
 		$query->{folder} = 1;
 	    }
-	#
-	# HACK: Force query hint for huge workspace.
-	#
-	my %bad_ws = ('942D0C20-D8CF-11EA-A092-E9C4682E0674' => 1,
-		      '7E50286E-C07E-11EB-954E-D6FC682E0674' => 1);
-
-	if ($recursive == 1 && !$bad_ws{$wsobj->{uuid}})
+	my $hint;
+	if ($recursive == 1)
 	{
-
 	    if (length($path) > 0) {
-		# print STDERR "INVOKE $path\n";
-		$query->{path} = $self->_compute_mongo_regex_for_path($path);
-
-		# print STDERR "GOT $path $query->{path}\n";
-		#$path = "^".quotemeta($path);
-		#$query->{path} = qr/$path/;
-
-		if ($bad_ws{$wsobj->{uuid}})
-		{
-		    $hint = "path_1_workspace_uuid_1";
-		}
+		my $path_query = $self->_compute_mongo_path_query($path, $wsobj->{uuid});
+		$query = { %$query, %$path_query };
+		$hint = 'workspace_uuid_1_path_1';
+	    } else {
+		$query->{workspace_uuid} = $wsobj->{uuid};
 	    }
 	} else {
+		$query->{workspace_uuid} = $wsobj->{uuid};
 		$query->{path} = $path;
 	}
-	return $self->_query_database($query,0, 1, $hint);
+	return $self->_query_database($query,0, 0, $hint);
 }
 
 #Formating queries to support direct mongo queries - this will need to get far more sophisticated**
@@ -1324,6 +1464,52 @@ sub _formatQuery {
 #
 
 #
+# Determine the originating client address for a download request.
+#
+# The download service sits behind nginx, so $req->address is always the
+# proxy. The real client is in the forwarding headers.
+#
+# This deliberately mirrors Bio::P3::Workspace::Service::getIPAddress
+# (Service.pm:187) so the download log and the RPC service agree on what
+# "the client" means: X-Forwarded-For first hop, then X-Real-IP, then the
+# socket peer.
+#
+# X-Forwarded-For is a comma-separated chain, "client, proxy1, proxy2",
+# appended to by each hop. The FIRST entry is the originating client.
+#
+# Caveat: X-Forwarded-For is client-supplied and trivially spoofable. If a
+# client sends its own header, nginx's proxy_add_x_forwarded_for appends
+# to it rather than replacing it, so the first entry is whatever the
+# client claimed. This is fine for diagnostics -- correlating a stall with
+# who was downloading -- but must not be used for authentication or
+# access control. Service.pm has the same exposure and the same caveat.
+#
+sub _client_address
+{
+    my($self, $req) = @_;
+
+    my $xff = $req->header("X-Forwarded-For");
+    if (defined($xff))
+    {
+	my($first) = split(/,/, $xff);
+	if (defined($first))
+	{
+	    $first =~ s/^\s+|\s+$//g;
+	    return $first if length($first);
+	}
+    }
+
+    my $real = $req->header("X-Real-IP");
+    if (defined($real))
+    {
+	$real =~ s/^\s+|\s+$//g;
+	return $real if length($real);
+    }
+
+    return $req->address // '-';
+}
+
+#
 # Start the download service. This will create a timer to garbage-collect
 # download records from the mongodb.
 #
@@ -1347,21 +1533,80 @@ sub _download_service_start
 sub _download_cleanup
 {
     my($self, $db) = @_;
-    my $coll = $db->get_collection("downloads");
-    my $now = time;
-    $coll->remove({expiration_time => {'$lt', $now}});
-    my $res = $db->last_error();
-    if ($res->{ok})
+    for my $coll_name (qw(downloads auth_cookie))
     {
-	if ($res->{n} > 0)
+	my $coll = $db->get_collection($coll_name);
+	my $now = time;
+	$coll->remove({expiration_time => {'$lt', $now}});
+	my $res = $db->last_error();
+	if ($res->{ok})
 	{
-	    print STDERR "Removed $res->{n} expired download records\n";
+	    if ($res->{n} > 0)
+	    {
+		print STDERR "Removed $res->{n} expired records from $coll_name\n";
+	    }
+	}
+	else
+	{
+	    print STDERR "Error expiring records from $coll_name: " . Dumper($res);
 	}
     }
-    else
+}
+
+#
+# Handle the request to create a session token in a cookie
+# that is bound to the user's auth token
+#
+
+sub _set_auth_request
+{
+    my($self, $env) = @_;
+    my $req = Plack::Request->new($env);
+    my $path = $req->path_info;
+
+    my $token = $req->header("Authorization");
+    if (!$token)
     {
-	print STDERR "Error expiring download records: " . Dumper($res);
+	return [401, [], ["Authentication required"]];
     }
+
+    my $auth_token = P3AuthToken->new(token => $token, ignore_authrc => 1);
+    my($valid, $validate_err) = P3TokenValidator->new->validate($auth_token);
+
+    if (!$valid)
+    {
+        warn "Token validation error $validate_err\n";
+	return [403, [], "Authentication failed"];
+    }
+
+
+    my $coll = $self->_mongodb()->get_collection('auth_cookie');
+
+    my $download_lifetime = $self->{_params}->{'download-lifetime'};
+    if (!$download_lifetime)
+    {
+	$download_lifetime = 60 * 60;
+	warn "default dl lifetime to $download_lifetime\n";
+    }
+    my $expires = time + $download_lifetime;
+
+    my $gen = Data::UUID->new;
+    my $session_token = $gen->create_b64();
+    $session_token =~ s/=*$//;
+    $session_token =~ s/\+/-/g;
+    $session_token =~ s,/,_,g;
+
+    my $doc = {
+	session_token => $session_token,
+	expiration_time => $expires,
+	auth_token => $token,
+    };
+    $coll->insert($doc);
+    my $res = Plack::Response->new(200);
+#    $res->header('Set-Cookie' => "session=$session_token; HttpOnly; SameSite=Lax; Path=/; Max-Age=$download_lifetime");
+    $res->header('Set-Cookie' => "bvbrc_ws_view_session=$session_token; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=$download_lifetime");
+    $res->body("Cookie set\n");
+    return $res->finalize;
 }
 
 sub _download_request
@@ -1384,6 +1629,82 @@ sub _download_request
 	}
 	$self->_handle_dl_file_request($req, $name, $dlid);
     }
+}
+
+#
+# This handler is mounted at / and should only be hit when
+# /download or /view not included.
+#
+sub _download_request_orig
+{
+    my($self, $env) = @_;
+    my $req = Plack::Request->new($env);
+    my $path = $req->path_info;
+
+    if ($path =~ m,^/archive/([a-z0-9]{40})$,)
+    {
+	my $key = $1;
+	$self->_handle_archive_request($req, $key);
+    }
+    else
+    {
+	my($dlid, $name) = $path =~ m,^/([^/]+)/([^/]+)$,;
+	if (!($name && $dlid))
+	{
+	    return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+	}
+	$self->_handle_dl_file_request($req, $name, $dlid);
+    }
+}
+
+sub _view_request
+{
+    my($self, $env) = @_;
+    my $req = Plack::Request->new($env);
+    my $path = $req->path_info;
+
+    my $session = $req->cookies->{bvbrc_ws_view_session};
+    if (!$session)
+    {
+	return [503, ['Content-Type' => 'text/plain' ], ["Invalid session\n"]];
+    }
+
+    my $coll = $self->_mongodb()->get_collection('auth_cookie');
+
+    my $res = $coll->find_one({session_token => $session});
+    if (!$res)
+    {
+	warn "No session found for $session\n";
+	return [503, ['Content-Type' => 'text/plain' ], ["Invalid session\n"]];
+    }
+    # print STDERR Dumper($res);
+    if ($res->{expiration_time} < time)
+    {
+	warn "Session token has expired\n";
+	return [503, ['Content-Type' => 'text/plain' ], ["Invalid session\n"]];
+    }
+    my $token = $res->{auth_token};
+    my $auth_token = P3AuthToken->new(token => $token, ignore_authrc => 1);
+
+    #
+    # We're coming in thru the REST API so we don't have a standard service context set up
+    #
+
+    my $doc = eval {
+	local $CallContext = new Bio::P3::Workspace::ServiceContext;
+	$CallContext->authenticated(1);
+	$CallContext->token($token);
+	$CallContext->user_id($auth_token->user_id);
+
+	$self->_lookup_ws_file_details($path, $token);
+    };
+    if ($@)
+    {
+	warn "Cannot find file details for $path\n";
+	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
+    }
+
+    $self->_send_ws_file($req, $doc, $token, 1);
 }
 
 sub _handle_archive_request
@@ -1496,25 +1817,107 @@ sub _handle_archive_request
 	$handle->{read_size} = 32768;
     }
 }
-     
+
+#
+# Dies on errors, use with eval.
+#
+sub _lookup_ws_file_details
+{
+    my($self, $ws_path, $token) = @_;
+
+    my $auth_token = P3AuthToken->new(token => $token, ignore_authrc => 1);
+
+    my ($user,$ws,$path,$name) = $self->_parse_ws_path($ws_path);
+    
+    if (!defined($ws) || length($ws) == 0) {
+	die("Path $ws_path does not include at least a top level directory!");
+    }
+
+    my $wsobj = $self->_wscache($user,$ws);
+    $self->_check_ws_permissions($wsobj,"r",1);
+
+    my $obj = $self->_get_db_object({
+	workspace_uuid => $wsobj->{uuid},
+	path => $path,
+	name => $name
+	});
+
+    if ($obj->{folder} == 1) {
+	die "Object is folder not a file";
+    }
+    elsif (!$obj->{wsobj})
+    {
+	die "No wsobj found";
+    }
+
+    my $doc = {
+	workspace_path => $ws_path,
+	name => $obj->{name},
+	size => $obj->{size},
+    };
+
+    if (!defined($obj->{shock}) || $obj->{shock} == 0) {
+	my $filename = $self->_db_path()."/".$obj->{wsobj}->{owner}."/".$obj->{wsobj}->{name}."/".$obj->{path}."/".$obj->{name};
+	$doc->{file_path} = $filename;
+    } else {
+	my $ua = LWP::UserAgent->new();
+
+	my $user = $auth_token->user_id;
+	#
+	# ACL change requires using the workspace owner token
+	#
+	my $res = $ua->put($obj->{shocknode}."/acl/read?users=$user", Authorization => "OAuth " . $self->_wsauth());
+	
+	$doc->{shock_node} = $obj->{shocknode};
+    }
+    return $doc;
+}
 
 sub _handle_dl_file_request
 {
     my($self, $req, $name, $dlid) = @_;
 
-    #
-    # Query mongo for the file details.
-    #
-
     my $coll = $self->_mongodb()->get_collection('downloads');
-
+	
     my $res = $coll->find_one({ download_key => $dlid });
-
+	
     if (!$res)
     {
 	return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
     }
 
+    $self->_send_ws_file($req, $res, $res->{user_token}, 0);
+}
+
+sub _send_ws_file
+{
+    my($self, $req, $ws_obj, $token, $inline) = @_;
+
+    my @resp_headers;
+    if ($inline)
+    {
+	my($ext) = $ws_obj->{name} =~ /\.([^.]+)$/;
+	my $mime_type;
+	if (my $ov = $mime_overrides{$ext})
+	{
+	    $mime_type = $ov;
+	}
+	else
+	{
+	    $mime_type = $mime_types->mimeTypeOf($ws_obj->{name}) // "text/plain";
+	}
+	
+	@resp_headers = ('Content-Disposition' => "inline",
+		    'Content-Type' => $mime_type,
+		   );
+    }
+    else
+    {
+	@resp_headers = ('Content-Disposition' => "attachment; filename=\"$ws_obj->{name}\"",
+			'Content-type' => 'application/octet-stream',
+			);
+
+    }
     #
     # Determine if we are being asked for a byte range.
     # Right now we will just support a single range.
@@ -1524,12 +1927,12 @@ sub _handle_dl_file_request
     
     my($range_beg, $range_end) = $range =~ /bytes=(\d+)-(\d*)\s*$/;
     
-    my $file_size = $res->{size};
+    my $file_size = $ws_obj->{size};
 
     my $have_range;
     if (defined($range_beg))
     {
-	$have_range++;
+	$have_range = 1;
 	if ($range_end eq '' || $range_end >= $file_size)
 	{
 	    $range_end = $file_size - 1;
@@ -1540,7 +1943,7 @@ sub _handle_dl_file_request
 
     # print STDERR Dumper($range, $hdrs, $file_size, $range_beg, $range_end, $range_len);
 
-    if ($res->{shock_node})
+    if ($ws_obj->{shock_node})
     {
 	#
 	# For shock, construct http request for file.
@@ -1560,57 +1963,128 @@ sub _handle_dl_file_request
 	    if ($have_range)
 	    {
 		$writer = $responder->([206,
-					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; filename=\"$res->{name}\"",
+					[@resp_headers,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
 		
-		$url = $res->{shock_node} . "?download&seek=$range_beg&length=$range_len";
+		$url = $ws_obj->{shock_node} . "?download&seek=$range_beg&length=$range_len";
 	    }
 	    else
 	    {
-		$writer = $responder->([200,
-					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; filename=\"$res->{name}\""]]);
-		$url = $res->{shock_node} . "?download";
+		$writer = $responder->([200, \@resp_headers]);
+		$url = $ws_obj->{shock_node} . "?download";
 	    }
 	    
-	    print STDERR "retrieve $url\n";
 	    my @headers;
-	    if ($res->{user_token})
+	    if ($token)
 	    {
-		@headers = (headers => {Authorization => "OAuth $res->{user_token}" });
+		@headers = (headers => {Authorization => "OAuth $token" });
 	    }
+	    #
+	    # Per-fetch instrumentation.
+	    #
+	    # This replaces a Data::Dumper of every response's headers. That
+	    # debug statement was accidentally load-bearing: during the
+	    # 2026-09-24 stall it was the only clock in the error log (via
+	    # Shock's HTTP 'date' header) and was how the stall was located.
+	    # It is also far too verbose -- ~20 lines per request -- and
+	    # serializing it costs the event loop on every fetch.
+	    #
+	    # What is kept is the timing, which is what the diagnosis actually
+	    # needed: how long the headers took to come back (ttfb), how long
+	    # the whole body took, how many bytes moved, and the status. One
+	    # line per fetch, emitted at completion.
+	    #
+	    my $t_start = gettimeofday();
+	    my $t_hdr;
+	    my $n_bytes = 0;
+	    my $status  = '?';
+	    my $client_gone = 0;
+	    my $client_ip = $self->_client_address($req);
+
 	    http_request(GET => $url,
 			 @headers,
 			 # handle_params => { max_read_size => 32768 },
-			 on_header => sub { print STDERR Dumper(@_); },
+			 on_header => sub {
+			     my($hdr) = @_;
+			     $t_hdr  = gettimeofday();
+			     $status = $hdr->{Status} // '?';
+			     return 1;
+			 },
 			 on_body => sub {
 			     my($data, $hdr) = @_;
-			     print STDERR Dumper($hdr);
 			     if ($data)
 			     {
-				 $writer->write($data);
-				 my $len = length($data);
+				 #
+				 # $writer->write is Twiggy::Writer::write, which is
+				 # push_write on the client's AnyEvent::Handle. If the
+				 # client has gone away that handle's _drain_wbuf hits
+				 # a write error and croaks "AnyEvent::Handle uncaught
+				 # error: Broken pipe" -- there is no on_error on the
+				 # Twiggy writer handle. The exception propagates out
+				 # of on_body into AnyEvent::HTTP's on_read callback
+				 # (HTTP.pm:1084), where EV catches and IGNORES it.
+				 #
+				 # Ignoring it is the problem: on_body never returns,
+				 # so it never returns 0, so $finish is never called
+				 # and the Shock fetch is never cancelled. The upstream
+				 # read callback stays installed and keeps firing for
+				 # every remaining byte of the response -- each one
+				 # throwing again. With a 253 MB body that is a very
+				 # large number of throw/catch cycles at full CPU,
+				 # which is the 100% spin seen during the 200-client
+				 # test. It ends only when the upstream body is
+				 # exhausted, which is why it "cleared itself".
+				 #
+				 # Catching the write error and returning 0 cancels the
+				 # fetch immediately: AnyEvent::HTTP finishes with 598
+				 # and tears the connection down.
+				 #
+				 my $ok = eval { $writer->write($data); 1 };
+				 if (!$ok)
+				 {
+				     # Client hung up mid-transfer. Normal, not an error.
+				     $client_gone = 1;
+				     return 0;
+				 }
+				 $n_bytes += length($data);
 				 return 1;
 			     }
 			     else
 			     {
-				 $writer->close();
+				 eval { $writer->close() };
 				 return 0;
 			     }
 			 },
-			 sub {});
+			 sub {
+			     my $now = gettimeofday();
+			     #
+			     # ttfb is the number to watch. During the stall the
+			     # gap was BETWEEN fetches rather than inside them,
+			     # so a large total with a small ttfb points at the
+			     # body transfer (slow client, no backpressure),
+			     # while a large ttfb points upstream.
+			     #
+			     printf STDERR "shock-fetch client=%s status=%s ttfb=%.3f total=%.3f bytes=%d%s%s url=%s\n",
+				    $client_ip,
+				    $status,
+				    (defined $t_hdr ? $t_hdr - $t_start : -1),
+				    $now - $t_start,
+				    $n_bytes,
+				    ($client_gone ? " client_gone=1" : ""),
+				    ($have_range ? " range=$range_beg-$range_end" : ""),
+				    $url;
+			 });
 	};
 		     
     }
     else
     {
 	my $fh;
-	if (!open($fh, "<", $res->{file_path}))
+	if (!open($fh, "<", $ws_obj->{file_path}))
 	{
-	    warn "Could not open $res->{file_path}: $!";
+	    warn "Could not open $ws_obj->{file_path}: $!";
 	    return [404, ['Content-Type' => 'text/plain' ], ["Invalid path\n"]];
 	}
 	my $stat = stat($fh);
@@ -1624,7 +2098,10 @@ sub _handle_dl_file_request
 	    seek($fh, $range_beg, SEEK_SET);
 	}
 
-	print STDERR "Opened $res->{file_path} fh=$fh\n";
+	my $client_ip = $self->_client_address($req);
+	my $t_start = gettimeofday();
+	my $n_bytes = 0;
+	my $client_gone = 0;
 
 	return sub {
 	    my($responder) = @_;
@@ -1634,26 +2111,50 @@ sub _handle_dl_file_request
 	    if ($have_range)
 	    {
 		$writer = $responder->([206,
-					['Content-type' => 'application/octet-stream',
-					 'Content-Disposition' => "attachment; \"filename=$res->{name}\"",
+					[@resp_headers,
 					 'Content-Range' => "bytes $range_beg-$range_end/$file_size",
 					 'Content-Length' => $range_len,
 					 ]]);
 	    }
 	    else
 	    {
-		$writer = $responder->([200,
-					['Content-type' => 'application/octet-stream',
-					'Content-Disposition' => "attachment; filename=\"$res->{name}\""]]);
+		$writer = $responder->([200, \@resp_headers]);
 	    }
 
-	    print STDERR "retrieve $res->{file_path}\n";
+	    #
+	    # Emitted once per transfer at completion, mirroring the shock-fetch
+	    # line so both backends are greppable the same way.
+	    #
+	    my $log_done = sub {
+		printf STDERR "file-fetch client=%s total=%.3f bytes=%d%s%s path=%s\n",
+		       $client_ip,
+		       gettimeofday() - $t_start,
+		       $n_bytes,
+		       ($client_gone ? " client_gone=1" : ""),
+		       ($have_range ? " range=$range_beg-$range_end" : ""),
+		       $ws_obj->{file_path};
+	    };
+
 	    my $ah;
 	    $ah = new AnyEvent::Handle(fh => $fh,
-				       on_error => sub { print STDERR "Error\n"; },
+				       #
+				       # Must tear the handle down, exactly as on_eof
+				       # does. The previous version only printed, so the
+				       # handle stayed alive with a dead descriptor and
+				       # the loop could re-poll it indefinitely.
+				       #
+				       on_error => sub {
+					   my($h, $fatal, $message) = @_;
+					   # Almost always the client hanging up mid-transfer.
+					   $client_gone = 1;
+					   eval { $writer->close() };
+					   undef $ah;
+					   $log_done->();
+				       },
 				       on_eof => sub {
 					   $writer->close();
 					   undef $ah;
+					   $log_done->();
 				       },
 				       on_read => sub {
 					   my($h) = @_;
@@ -1664,14 +2165,18 @@ sub _handle_dl_file_request
 
 					       if ($have_range && ($len > $range_len))
 					       {
-						   $writer->write(substr($h->{rbuf}, 0, $range_len));
+						   my $chunk = substr($h->{rbuf}, 0, $range_len);
+						   $n_bytes += length($chunk);
+						   $writer->write($chunk);
 						   $h->rbuf = '';
 						   $writer->close();
 						   undef $ah;
+						   $log_done->();
 					       }
 					       else
 					       {
 						   $range_len -= $len if $have_range;
+						   $n_bytes += $len;
 						   $writer->write($h->{rbuf});
 						   $h->rbuf = '';
 					       }
@@ -1680,12 +2185,13 @@ sub _handle_dl_file_request
 					   {
 					       $writer->close();
 					       undef $ah;
+					       $log_done->();
 					   }
 				       });
 	};
     }
 
-    [200, ['Content-Type' => 'text/plain'], [$dlid]];
+    [200, ['Content-Type' => 'text/plain'], []];
 }
 
 sub _autometadata_script_path_for_type
@@ -2402,6 +2908,125 @@ sub get
 }
 
 
+=head2 objects_exist
+
+  $output = $obj->objects_exist($input)
+
+=over 4
+
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+</pre>
+
+=end html
+
+=begin text
+
+$input is an objects_exist_params
+$output is a reference to a list where each element is an ObjectsExistResult
+objects_exist_params is a reference to a hash where the following keys are defined:
+	objects has a value which is a reference to a list where each element is a FullObjectPath
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+ObjectsExistResult is a reference to a list containing 3 items:
+	0: a FullObjectPath
+	1: (exists) a bool
+	2: (error) a string
+
+=end text
+
+
+
+=item Description
+
+
+=back
+
+=cut
+
+sub objects_exist
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	die $msg;
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN objects_exist
+    $output = [];
+    $input = $self->_validateargs($input, ["objects"], {
+        adminmode => 0,
+    });
+
+    for (my $i=0; $i < @{$input->{objects}}; $i++) {
+        my $fullpath = $input->{objects}->[$i];
+        my $result = [$fullpath, 0, ""];
+
+        eval {
+            my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
+
+            if (!defined($ws) || length($ws) == 0) {
+                $self->_error("Path ".$fullpath." does not include at least a top level directory!");
+            }
+
+            my $wsobj = $self->_wscache($user, $ws);
+            $self->_check_ws_permissions($wsobj, "r", 1);
+
+            if (length($path) == 0 && length($name) == 0) {
+                # Checking if workspace itself exists - if we got here, it does
+                $result->[1] = 1;
+            } else {
+                # Check if object exists in database
+                my $obj = $self->_get_db_object({
+                    workspace_uuid => $wsobj->{uuid},
+                    path => $path,
+                    name => $name
+                }, 0);  # 0 = don't throw error if not found
+
+                $result->[1] = defined($obj) ? 1 : 0;
+            }
+        };
+        if ($@) {
+            my $error = $@;
+            $error =~ s/_ERROR_(.*)_ERROR_.*/$1/s;
+            $result->[2] = $error;
+        }
+
+        push(@{$output}, $result);
+    }
+    #END objects_exist
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to objects_exist:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	die $msg;
+    }
+    return($output);
+}
+
+
 =head2 update_auto_meta
 
   $output = $obj->update_auto_meta($input)
@@ -2525,7 +3150,7 @@ sub update_auto_meta
 	    	});
 	    	if ($obj->{shock} == 0) {
 	    		$obj->{autometadata}->{inspection_started} = _format_datetime(DateTime->now());
-		    	$self->_compute_autometadata($obj,1);
+		    	$self->_compute_autometadata([$obj],1);
 	    		push(@{$output},$self->_generate_object_meta($obj)); 
 	    	} else {
 	    		$self->_update_shock_node($obj,1);
@@ -2695,7 +3320,7 @@ sub get_download_url
 	    $doc->{name} = $name;
 	    $doc->{size} = $size;
 	    $coll->insert($doc);
-	    $url = $self->{_params}->{'download-url-base'} . "/$dlid/" . uri_escape($name);
+	    $url = $self->{_params}->{'download-url-base'} . "/download/$dlid/" . uri_escape($name);
 	}
 	push(@$urls, $url);
     }    
@@ -2817,8 +3442,8 @@ sub get_archive_url
 	    name => $name
 	    });
 
-	print "$wsobj->{uuid} obj $obj->{path} $obj->{name} $obj->{folder}\n";
-	print Dumper($obj);
+	# print STDERR "$wsobj->{uuid} obj $obj->{path} $obj->{name} $obj->{folder}\n";
+	# print STDERR Dumper($obj);
 
 	#
 	# Check recursive if a folder or an entire workspace.
@@ -2831,28 +3456,29 @@ sub get_archive_url
 		next;
 	    }
 
-	    my @path_q;
+	    my $path_spec;
 	    if ($path ne '' || $name ne '')
 	    {
 		my $subpath = ($path eq '' && $name eq '') ? "" : ($path ? "$path/$name" : $name);
-		@path_q = (path => $self->_compute_mongo_regex_for_path($subpath));
+		$path_spec = $self->_compute_mongo_path_query($subpath, $wsobj->{uuid});
+		$path_spec->{folder} = 0;
+	    } else {
+		$path_spec = {
+		    workspace_uuid => $wsobj->{uuid},
+		    folder => 0,
+		};
 	    }
-	    my $path_spec = {
-		@path_q,
-		workspace_uuid => $wsobj->{uuid},
-		folder => 0,
-	    };
 
-	    my $res = $col->aggregate([
+	    my $res = $self->_aggregate_hint($col, [
 				   { '$match' => $path_spec },
 				   { '$group' => {
 				       _id => 0,
 				       total_size => { '$sum' => '$size' },
 				       file_count => { '$sum' => 1 },
 				   } },
-				       ]);
+				       ], 'workspace_uuid_1_path_1');
 
-	    print Dumper($path_spec, $res);
+	    # print STDERR Dumper($path_spec, $res);
 	    $total_size += $res->[0]->{total_size};
 	    $file_count += $res->[0]->{file_count};
 
@@ -2875,7 +3501,7 @@ sub get_archive_url
 	}
 	else
 	{
-	    print "add $obj->{size}\n";
+	    # print STDERR "add $obj->{size}\n";
 	    $total_size += $obj->{size};
 	    $file_count++;
 	}
@@ -2934,7 +3560,7 @@ sub get_archive_url
 	total_size => $total_size,
 	file_count => $file_count,
     };
-    print STDERR Dumper($doc);
+    # print STDERR Dumper($doc);
 
     my $coll = $self->_mongodb()->get_collection('downloads');
 
@@ -2950,6 +3576,154 @@ sub get_archive_url
 	die $msg;
     }
     return($url, $file_count, $total_size);
+}
+
+
+=head2 du
+
+  $output = $obj->du($input)
+
+=over 4
+
+
+=item Parameter and return types
+
+=begin html
+
+<pre>
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+</pre>
+
+=end html
+
+=begin text
+
+$input is a du_params
+$output is a reference to a list where each element is a DiskUsageResult
+du_params is a reference to a hash where the following keys are defined:
+	paths has a value which is a reference to a list where each element is a FullObjectPath
+	recursive has a value which is a bool
+	adminmode has a value which is a bool
+FullObjectPath is a string
+bool is an int
+DiskUsageResult is a reference to a list containing 5 items:
+	0: a FullObjectPath
+	1: (total_size) an int
+	2: (file_count) an int
+	3: (directory_count) an int
+	4: (error) a string
+
+=end text
+
+
+
+=item Description
+
+
+=back
+
+=cut
+
+sub du
+{
+    my $self = shift;
+    my($input) = @_;
+
+    my @_bad_arguments;
+    (ref($input) eq 'HASH') or push(@_bad_arguments, "Invalid type for argument \"input\" (value was \"$input\")");
+    if (@_bad_arguments) {
+	my $msg = "Invalid arguments passed to du:\n" . join("", map { "\t$_\n" } @_bad_arguments);
+	die $msg;
+    }
+
+    my $ctx = $Bio::P3::Workspace::Service::CallContext;
+    my($output);
+    #BEGIN du
+    $output = [];
+    $input = $self->_validateargs($input, ["paths"], {
+        recursive => 1,
+        adminmode => 0,
+    });
+
+    for my $fullpath (@{$input->{paths}}) {
+        my $result = [$fullpath, 0, 0, 0, ""];
+
+        eval {
+            # Handle root path case
+            if ($fullpath eq "" || $fullpath eq "/") {
+                $self->_error("Cannot compute du for root path");
+            }
+
+            # Handle user-level path (e.g., /user@example.org) - same pattern as ls
+            if ($fullpath =~ m/^\/([^\/]+)\/*$/) {
+                my $user = $1;
+                # This is a user-level path - sum up all workspaces for this user
+                my $workspaces = $self->_list_workspaces($user, $self->_formatQuery({}, 1));
+                my $total_size = 0;
+                my $file_count = 0;
+                my $dir_count = 0;
+
+                for my $wsobj (@$workspaces) {
+                    eval {
+                        $self->_check_ws_permissions($wsobj, "r", 0);
+                        my ($ws_size, $ws_files, $ws_dirs) =
+                            $self->_calculate_du($wsobj, "", "", $input->{recursive});
+                        $total_size += $ws_size;
+                        $file_count += $ws_files;
+                        $dir_count += $ws_dirs;
+                        # Count the workspace itself as a directory
+                        $dir_count++;
+                    };
+                    # Skip workspaces we can't read
+                }
+
+                $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
+            } else {
+                # Standard workspace path - parse it
+                my ($user, $ws, $path, $name) = $self->_parse_ws_path($fullpath);
+
+                if (!defined($ws) || length($ws) == 0) {
+                    $self->_error("Path $fullpath does not include at least a top level directory!");
+                }
+
+                my $wsobj = $self->_wscache($user, $ws);
+                $self->_check_ws_permissions($wsobj, "r", 1);
+
+                my ($total_size, $file_count, $dir_count) =
+                    $self->_calculate_du($wsobj, $path, $name, $input->{recursive});
+
+                $result = [$fullpath, $total_size, $file_count, $dir_count, ""];
+            }
+        };
+        if ($@) {
+            my $error = $@;
+            $error =~ s/_ERROR_//g;
+            $result->[4] = $error;
+        }
+
+        push(@{$output}, $result);
+    }
+    #END du
+    my @_bad_returns;
+    (ref($output) eq 'ARRAY') or push(@_bad_returns, "Invalid type for return variable \"output\" (value was \"$output\")");
+    if (@_bad_returns) {
+	my $msg = "Invalid returns passed to du:\n" . join("", map { "\t$_\n" } @_bad_returns);
+	die $msg;
+    }
+    return($output);
 }
 
 
@@ -4257,6 +5031,89 @@ adminmode has a value which is a bool
 
 
 
+=head2 objects_exist_params
+
+=over 4
+
+
+=item Description
+
+"objects_exist" command
+        Description:
+        This function checks whether objects exist in the workspace without
+        retrieving metadata or data. Useful for lightweight existence checks.
+
+        Parameters:
+        list<FullObjectPath> objects - list of full paths to objects to check
+        bool adminmode - run this command as an admin, meaning you can check anything anywhere
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+objects has a value which is a reference to a list where each element is a FullObjectPath
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 ObjectsExistResult
+
+=over 4
+
+
+=item Description
+
+ObjectsExistResult: tuple containing existence check result for a path
+
+       FullObjectPath - the path that was checked
+       bool exists - 1 if object exists, 0 if not
+       string error - set if there was an error checking this path (e.g., permission denied)
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 3 items:
+0: a FullObjectPath
+1: (exists) a bool
+2: (error) a string
+
+
+=end text
+
+=back
+
+
+
 =head2 update_auto_meta_params
 
 =over 4
@@ -4379,6 +5236,98 @@ objects has a value which is a reference to a list where each element is a FullO
 recursive has a value which is a bool
 archive_name has a value which is a string
 archive_type has a value which is a string
+
+
+=end text
+
+=back
+
+
+
+=head2 du_params
+
+=over 4
+
+
+=item Description
+
+"du" command
+        Description:
+        This function computes the disk usage (storage used in bytes) for all files
+        at and below the specified paths. Similar to the Unix du command.
+
+        Parameters:
+        list<FullObjectPath> paths - list of full paths for which disk usage should be computed
+        bool recursive - if true, include all files in subdirectories (default: true)
+        bool adminmode - run this command as an admin, meaning you can query anything anywhere
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a hash where the following keys are defined:
+paths has a value which is a reference to a list where each element is a FullObjectPath
+recursive has a value which is a bool
+adminmode has a value which is a bool
+
+
+=end text
+
+=back
+
+
+
+=head2 DiskUsageResult
+
+=over 4
+
+
+=item Description
+
+DiskUsageResult: tuple containing disk usage information for a path
+
+       FullObjectPath - the path that was queried
+       int total_size - total size in bytes of all files at and below this path
+       int file_count - number of files counted
+       int directory_count - number of directories at and below this path
+       string error - set if there was an error computing usage for this path
+
+=item Definition
+
+=begin html
+
+<pre>
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
+
+</pre>
+
+=end html
+
+=begin text
+
+a reference to a list containing 5 items:
+0: a FullObjectPath
+1: (total_size) an int
+2: (file_count) an int
+3: (directory_count) an int
+4: (error) a string
 
 
 =end text

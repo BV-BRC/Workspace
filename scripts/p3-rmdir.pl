@@ -24,6 +24,7 @@ my($opt, $usage) =
     describe_options("%c %o path [path...]",
 		     ["Remove one or more directories in the workspace"],
 		     [],
+		     ["administrator|A", "Run as administrator (if user has those privileges)"],
 		     ["help|h", "Show this help message"],
 		    );
 print($usage->text), exit 0 if $opt->help;
@@ -31,9 +32,11 @@ die($usage->text) if @ARGV == 0;
 
 my @paths = @ARGV;
 
+my @admin = $opt->administrator ? (adminmode => 1) : ();
+
 for my $path (@paths)
 {
-    my $cur = eval { $ws->get( { objects => [$path], metadata_only => 1 } ); };
+    my $cur = eval { $ws->get( { objects => [$path], metadata_only => 1, @admin } ); };
     if (!$cur || @$cur == 0)
     {
 	print STDERR "Not removing $path: directory does not exist\n";
@@ -49,8 +52,8 @@ for my $path (@paths)
     #
     # We do an ls here to both ensure this really is a folder and that it is empty.
     #
-     
-    my $cur = eval { $ws->ls( { paths => [$path] } ); };
+
+    my $cur = eval { $ws->ls( { paths => [$path], @admin } ); };
 
     my $meta = $cur->{$path};
     my $n = ref($meta) eq 'ARRAY' ? @$meta : 0;
@@ -60,7 +63,7 @@ for my $path (@paths)
 	next;
     }
     eval {
-	my $res = $ws->delete({ objects => [$path], deleteDirectories => 1 });
+	my $res = $ws->delete({ objects => [$path], deleteDirectories => 1, @admin });
     };
     if (my $err = $@)
     {
